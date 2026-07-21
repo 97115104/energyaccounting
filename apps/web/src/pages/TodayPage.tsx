@@ -127,6 +127,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [compensate, setCompensate] = useState("");
   const [listening, setListening] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
+  // Which column shows on small screens (segmented tab view).
+  const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
   const [justFreed, setJustFreed] = useState<number | undefined>();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dndBusy, setDndBusy] = useState(false);
@@ -601,12 +603,30 @@ export function TodayPage({ user }: { user: UserProfile }) {
         onDragStart={onDragStart}
         onDragEnd={(e) => void onDragEnd(e)}
       >
+        <div className="col-tabs" role="group" aria-label="Choose ledger column">
+          <button
+            type="button"
+            className={`col-tab${mobileCol === "withdrawal" ? " active" : ""}`}
+            aria-pressed={mobileCol === "withdrawal"}
+            onClick={() => setMobileCol("withdrawal")}
+          >
+            Withdrawals
+          </button>
+          <button
+            type="button"
+            className={`col-tab${mobileCol === "deposit" ? " active" : ""}`}
+            aria-pressed={mobileCol === "deposit"}
+            onClick={() => setMobileCol("deposit")}
+          >
+            Deposits
+          </button>
+        </div>
         <div className="grid-2 equal-cols" style={{ marginTop: "1rem" }}>
           <Column
             title="Withdrawals"
             side="withdrawal"
             droppableId="col-withdrawal"
-            className="withdraw-col"
+            className={`withdraw-col${mobileCol !== "withdrawal" ? " mobile-hidden" : ""}`}
             lines={withdrawals}
             suggestions={suggestions.filter((s) => s.side === "withdrawal")}
             closed={closed}
@@ -621,7 +641,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             title="Deposits"
             side="deposit"
             droppableId="col-deposit"
-            className="deposit-col"
+            className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
             suggestions={suggestions.filter((s) => s.side === "deposit")}
             playSuggestions={playSuggestions}

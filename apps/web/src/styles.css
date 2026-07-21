@@ -19,9 +19,11 @@ html[data-theme="day"] {
   --sun-face: #ffcf3d;
   --sun-halo: rgba(255, 200, 60, 0.4);
   --cloud-tint: rgba(255, 255, 255, 0.9);
-  --font: "Times New Roman", Times, serif;
-  --display: "Times New Roman", Times, serif;
-  --radius: 0;
+  /* Apple-style: SF Pro (system) for UI, New York-style serif for display. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --display: ui-serif, "New York", "Times New Roman", Georgia, serif;
+  --radius: 12px;
 }
 
 /* Golden hours: warm sunrise/sunset gradients over the day palette. */
@@ -74,6 +76,11 @@ body,
 body {
   margin: 0;
   font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   color: var(--ink);
   background:
     radial-gradient(ellipse 80% 50% at 10% -10%, var(--sky-glow) 0%, transparent 55%),
@@ -81,6 +88,19 @@ body {
     linear-gradient(165deg, var(--bg0), var(--bg1));
   background-attachment: fixed;
   transition: background 1.2s ease, color 0.8s ease;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Apple-style focus: soft accent ring instead of default outline. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(224, 122, 26, 0.35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 button,
@@ -359,11 +379,16 @@ html[data-weather="thunder"] .sky-layer {
   color: var(--ink);
   cursor: pointer;
   text-decoration: none;
+  transition: background 0.15s ease, transform 0.12s ease;
 }
 
 .icon-btn:hover {
-  background: var(--ink);
-  color: var(--accent-ink);
+  background: rgba(42, 34, 8, 0.08);
+  background: color-mix(in srgb, var(--ink) 10%, var(--panel));
+}
+
+.icon-btn:active {
+  transform: scale(0.94);
 }
 
 .brand {
@@ -399,27 +424,33 @@ html[data-weather="thunder"] .sky-layer {
   appearance: none;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--ink);
-  padding: 0.55rem 0.85rem;
+  color: var(--muted);
+  padding: 0.55rem 1rem;
   text-decoration: none;
   font-weight: 600;
   min-height: 44px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  border-radius: 999px !important;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.nav a.active,
 .nav a:hover {
-  border-color: var(--line);
+  color: var(--ink);
+}
+
+.nav a.active {
+  color: var(--ink);
   background: var(--panel);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  padding: 1rem;
+  padding: 1.25rem;
 }
 
 .panel + .panel {
@@ -439,12 +470,6 @@ html[data-weather="thunder"] .sky-layer {
   align-items: stretch;
 }
 
-/* Always two equal tracks so Withdrawals and Deposits share width and height
-   at every viewport; stretch + flex column keeps frames identical. */
-.grid-2.equal-cols {
-  grid-template-columns: 1fr 1fr;
-}
-
 .equal-cols > .column-panel {
   height: 100%;
   min-height: 280px;
@@ -453,9 +478,52 @@ html[data-weather="thunder"] .sky-layer {
   min-width: 0;
 }
 
+/* Segmented control (iOS-style) that swaps columns on small screens. */
+.col-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 1rem;
+  padding: 4px;
+  background: rgba(42, 34, 8, 0.08);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 999px !important;
+}
+
+.col-tab {
+  appearance: none;
+  border: none;
+  flex: 1;
+  min-height: 40px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 999px !important;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.col-tab.active {
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* Mobile: tabs pick one full-width column at a time. */
+@media (max-width: 719px) {
+  .column-panel.mobile-hidden {
+    display: none;
+  }
+}
+
+/* Desktop: both columns side by side, no tabs needed. */
 @media (min-width: 720px) {
   .grid-2 {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .col-tabs {
+    display: none;
   }
 }
 
@@ -491,14 +559,25 @@ html[data-weather="thunder"] .sky-layer {
 
 .btn {
   appearance: none;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   background: var(--ink);
   color: var(--accent-ink);
-  padding: 0.65rem 1rem;
-  font-weight: 700;
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   min-height: 44px;
   min-width: 44px;
   cursor: pointer;
+  transition: transform 0.12s ease, filter 0.15s ease, background 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -506,20 +585,27 @@ html[data-weather="thunder"] .sky-layer {
   cursor: not-allowed;
 }
 
+/* Secondary: quiet tinted fill, the way Apple does gray buttons. */
 .btn.secondary {
-  background: var(--panel);
+  background: rgba(42, 34, 8, 0.07);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
+}
+
+html[data-theme="night"] .btn.secondary {
+  background: rgba(232, 228, 248, 0.12);
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
 }
 
 .btn.accent {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--accent-ink);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
 
 .btn.danger {
   background: var(--danger);
-  border-color: var(--danger);
+  color: #fff;
 }
 
 .btn.plus {
@@ -546,8 +632,15 @@ html[data-weather="thunder"] .sky-layer {
   border: 1px solid var(--line);
   background: #fff;
   color: #14241f;
-  padding: 0.7rem 0.75rem;
+  padding: 0.7rem 0.85rem;
   min-height: 44px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input:focus-visible,
+.field textarea:focus-visible,
+.field select:focus-visible {
+  border-color: var(--accent);
 }
 
 html[data-theme="night"] .field input,
@@ -812,6 +905,25 @@ html[data-theme="night"] .weather-chip {
 .auth-card {
   max-width: 420px;
   margin: 2rem 0;
+  padding: 2rem;
+  border-radius: 20px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 20px 50px rgba(42, 34, 8, 0.16);
+}
+
+.auth-card h2 {
+  font-family: var(--display);
+  font-size: 1.9rem;
+  margin: 0 0 1.25rem;
+}
+
+.auth-card .field {
+  margin-bottom: 1rem;
+}
+
+/* Primary action spans the card, App-Store-sheet style. */
+.auth-card .btn.accent {
+  width: 100%;
+  font-size: 1.02rem;
 }
 
 .phase-bar {
@@ -960,19 +1072,23 @@ html[data-theme="night"] .tip-card {
   font-weight: 600;
 }
 
-/* Text-style buttons (quiet actions). */
+/* Text-style buttons (quiet actions) — Apple link style: colored, no underline. */
 .linkish {
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--ink);
+  color: var(--accent);
   font-weight: 600;
-  text-decoration: underline;
+  text-decoration: none;
   cursor: pointer;
   padding: 0;
   /* Keep inline in paragraphs; touch-friendly padding only when block-ish. */
   line-height: inherit;
   min-height: 0;
+}
+
+.linkish:hover {
+  text-decoration: underline;
 }
 
 .ob-quiet-actions .linkish {

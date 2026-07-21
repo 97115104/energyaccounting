@@ -303,8 +303,10 @@ export function App() {
       </Routes>
       <footer className="site-footer">
         <p>
-          Attested · collab · Cursor · auto ·{" "}
-          <a href="https://attest.97115104.com/s/zn6mxj9z">verify</a>
+          <a href="https://attest.97115104.com/s/zn6mxj9z" target="_blank" rel="noreferrer">
+            attested
+          </a>{" "}
+          · collab · Cursor · auto
         </p>
       </footer>
     </div>
