@@ -7,25 +7,30 @@
  * PNG, a print-quality profile, or a revocable public link.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
+import { DictatableField } from "../components/DictatableField";
+import { DictationControl } from "../components/DictationControl";
 import { IdentityMark } from "../components/IdentityMark";
+import { ProfileSections } from "../components/ProfileSections";
+import { SuggestionCard } from "../components/SuggestionCard";
+import { WingDetails, WingFamilyPicker } from "../components/IdentityPickers";
 import { api } from "../lib/api";
 import type { ButterflyState } from "../lib/butterflyState";
 import { effectiveBeatMs } from "../lib/butterflyState";
 import {
   suggestTraits,
-  type AcceptedTrait,
-  type CatalogEntry,
   type DayPoint,
   type TraitSuggestion,
 } from "../lib/butterflyTraits";
+import { normalizeWing, type WingConfig } from "../lib/butterflyGeometry";
 import { getSessionDek } from "../lib/crypto";
-import { fetchDecryptedCatalog } from "../lib/exportCorpus";
+import { useDictation } from "../lib/useDictation";
+import { loadPersonalData, type PersonalData } from "../lib/personalData";
+import { draftWorkWithYou, type DraftField, type DraftLine } from "../lib/youDraft";
 import {
-  ARCHETYPES,
   PALETTE_PRESETS,
   SYMBOLS,
   archetypeMeta,
@@ -37,6 +42,8 @@ import { buildSharePayload, downloadPng, downloadSvg } from "../lib/identityShar
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import {
   DEFAULT_SHARE_SECTIONS,
+  KIND_LABEL,
+  SLOT_LABEL,
   decryptYouProfile,
   emptyYouProfile,
   encryptYouProfile,
@@ -52,17 +59,10 @@ type Props = {
 
 type ShareRow = { id: string; createdAt: string; expiresAt: string; revoked: boolean };
 
-const KIND_LABEL: Record<AcceptedTrait["kind"], string> = {
-  interest: "Interest",
-  "energy-giver": "Adds energy",
-  "energy-taker": "Uses energy",
-  rhythm: "Rhythm",
-};
-
-const SLOT_LABEL: Record<"primary" | "secondary" | "accent", string> = {
-  primary: "Forewing",
-  secondary: "Hindwing",
-  accent: "Ink",
+const DRAFT_FIELD_LABEL: Record<DraftField, string> = {
+  about: "About you",
+  communication: "How to communicate with you",
+  support: "What helps on a hard day",
 };
 
 export function YouPage({ user, onUser, butterflyState }: Props) {
@@ -77,8 +77,9 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   const profileRef = useRef<YouProfile>(emptyYouProfile());
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [suggestions, setSuggestions] = useState<TraitSuggestion[]>([]);
-  // Catalog/stats are loaded once; suggestions are re-filtered locally.
-  const catalogRef = useRef<{ catalog: CatalogEntry[]; days: DayPoint[] } | null>(null);
+  const [drafts, setDrafts] = useState<DraftLine[]>([]);
+  // Personal data is decrypted once; suggestions and drafts re-filter locally.
+  const dataRef = useRef<PersonalData | null>(null);
   const [shares, setShares] = useState<ShareRow[]>([]);
   const [sections, setSections] = useState<ShareSections>(DEFAULT_SHARE_SECTIONS);
   const [ttl, setTtl] = useState<"day" | "month" | "quarter">("month");
@@ -90,22 +91,47 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   const [localPalette, setLocalPalette] = useState(identity.palette);
   const heroRef = useRef<HTMLDivElement | null>(null);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const pendingSaves = useRef(0);
+  // Latest identity, so rapid wing/palette edits chain instead of racing.
+  const identityRef = useRef(identity);
+  const identityChain = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
 
   useEffect(() => {
     setLocalPalette(identity.palette);
   }, [identity.palette]);
 
+  /** Recompute on-device suggestions and drafts from the loaded personal data. */
+  function recomputeIntel(next: YouProfile) {
+    const data = dataRef.current;
+    if (!data) return;
+    const days: DayPoint[] = data.days.map((d) => ({
+      date: d.date,
+      phase: d.phase,
+      attwoodNet: d.attwoodNet,
+      feelRating: d.feelRating,
+    }));
+    const dismissedTraits = new Set(next.dismissedTraitIds);
+    const acceptedTraits = new Set(next.traits.map((t) => t.id));
+    setSuggestions(
+      suggestTraits(data.catalog, days, dismissedTraits).filter((s) => !acceptedTraits.has(s.id)),
+    );
+    // Accepting a draft records its id in dismissedDraftIds, so drafts filter on
+    // that alone and an accepted line never returns.
+    setDrafts(
+      next.autoDraft
+        ? draftWorkWithYou(data, next.traits, new Set(next.dismissedDraftIds))
+        : [],
+    );
+  }
+
   function applyProfile(next: YouProfile) {
     profileRef.current = next;
     setProfile(next);
-    const data = catalogRef.current;
-    if (data) {
-      const dismissed = new Set(next.dismissedTraitIds);
-      const accepted = new Set(next.traits.map((t) => t.id));
-      setSuggestions(
-        suggestTraits(data.catalog, data.days, dismissed).filter((s) => !accepted.has(s.id)),
-      );
-    }
+    recomputeIntel(next);
   }
 
   // Load encrypted profile, share list, and trait suggestions once on entry.
@@ -134,22 +160,12 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         /* the share panel simply shows none */
       }
       try {
-        const [catalog, stats] = await Promise.all([
-          fetchDecryptedCatalog(),
-          api<{ series: DayPoint[] }>("/api/stats"),
-        ]);
+        const data = await loadPersonalData();
         if (cancelled) return;
-        catalogRef.current = { catalog: catalog as CatalogEntry[], days: stats.series };
-        const current = profileRef.current;
-        const dismissed = new Set(current.dismissedTraitIds);
-        const accepted = new Set(current.traits.map((t) => t.id));
-        setSuggestions(
-          suggestTraits(catalog as CatalogEntry[], stats.series, dismissed).filter(
-            (s) => !accepted.has(s.id),
-          ),
-        );
+        dataRef.current = data;
+        recomputeIntel(profileRef.current);
       } catch {
-        /* no suggestions without an unlocked catalog */
+        /* no suggestions or drafts without an unlocked catalog */
       }
     })();
     return () => {
@@ -157,17 +173,26 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
     };
   }, []);
 
-  async function saveIdentity(next: IdentityConfig) {
+  /**
+   * Merge a patch onto the latest identity and persist. Writes are serialized
+   * and always send identityRef.current, so a slower response cannot restore an
+   * older wing or palette (last-write-wins is by intent, not by chance).
+   */
+  function saveIdentity(patch: Partial<IdentityConfig>) {
+    const next: IdentityConfig = { ...identityRef.current, ...patch };
+    identityRef.current = next;
     setError(null);
-    try {
-      await api("/api/auth/profile", {
-        method: "PATCH",
-        body: JSON.stringify({ identity: next }),
+    onUser({ ...user, identity: next });
+    identityChain.current = identityChain.current
+      .then(() =>
+        api("/api/auth/profile", {
+          method: "PATCH",
+          body: JSON.stringify({ identity: identityRef.current }),
+        }).then(() => undefined),
+      )
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Could not save your identity.");
       });
-      onUser({ ...user, identity: next });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save your identity.");
-    }
   }
 
   /** Serialize profile writes so blur + accept cannot race last-write-wins. */
@@ -182,6 +207,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
     }
     setSaving(true);
     setError(null);
+    pendingSaves.current += 1;
     saveChain.current = saveChain.current
       .then(async () => {
         // Always encrypt the latest ref, not the snapshot from when the chain began.
@@ -196,7 +222,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
       .catch((e) => {
         setError(e instanceof Error ? e.message : "Could not save your profile.");
       })
-      .finally(() => setSaving(false));
+      .finally(() => {
+        // Only clear "Saving…" once the whole burst has drained.
+        pendingSaves.current -= 1;
+        if (pendingSaves.current === 0) setSaving(false);
+      });
   }
 
   function acceptSuggestion(s: TraitSuggestion) {
@@ -217,6 +247,37 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
     saveProfile((prev) => ({ ...prev, traits: prev.traits.filter((t) => t.id !== id) }));
   }
 
+  /** Fold a journal-drawn draft line into its field, then stop offering it. */
+  function acceptDraft(line: DraftLine) {
+    saveProfile((prev) => {
+      const existing = prev[line.field].trim();
+      const merged = existing ? `${existing}\n${line.text}` : line.text;
+      return {
+        ...prev,
+        [line.field]: merged,
+        dismissedDraftIds: [...prev.dismissedDraftIds, line.id],
+      };
+    });
+  }
+
+  function dismissDraft(line: DraftLine) {
+    saveProfile((prev) => ({
+      ...prev,
+      dismissedDraftIds: [...prev.dismissedDraftIds, line.id],
+    }));
+  }
+
+  function changeFamily(family: IdentityConfig["archetype"]) {
+    saveIdentity({
+      archetype: family,
+      wing: normalizeWing(family, identityRef.current.wing),
+    });
+  }
+
+  function changeWing(wing: WingConfig) {
+    saveIdentity({ archetype: wing.family, wing });
+  }
+
   function setColorMeaning(slot: "primary" | "secondary" | "accent", meaning: string) {
     saveProfile((prev) => {
       const rest = prev.colorMeanings.filter((m) => m.slot !== slot);
@@ -229,7 +290,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
 
   function commitPalette(palette: ButterflyPalette) {
     setLocalPalette(palette);
-    void saveIdentity({ ...identity, palette });
+    saveIdentity({ palette });
   }
 
   async function createShare() {
@@ -267,17 +328,16 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
     return heroRef.current?.querySelector("svg") ?? null;
   }
 
+  const anySectionSelected =
+    sections.about ||
+    sections.communication ||
+    sections.support ||
+    sections.traits ||
+    sections.colorMeanings;
+
   function printProfile() {
-    const any =
-      sections.about ||
-      sections.communication ||
-      sections.support ||
-      sections.traits ||
-      sections.colorMeanings;
-    if (!any) {
-      setError("Select at least one section before printing, or the PDF will be almost empty.");
-      return;
-    }
+    // Always printable: the butterfly and mark carry the page even with no
+    // sections. An inline note (below) nudges without blocking the dialog.
     setError(null);
     window.print();
   }
@@ -317,10 +377,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               id="you-motion"
               value={identity.motion}
               onChange={(e) =>
-                void saveIdentity({
-                  ...identity,
-                  motion: e.target.value as IdentityConfig["motion"],
-                })
+                saveIdentity({ motion: e.target.value as IdentityConfig["motion"] })
               }
             >
               <option value="auto">Follows my day</option>
@@ -356,10 +413,10 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
                 name="you-symbol"
                 value={s.id}
                 checked={identity.symbol === s.id}
-                onChange={() => void saveIdentity({ ...identity, symbol: s.id })}
+                onChange={() => saveIdentity({ symbol: s.id })}
               />
               <span className="you-symbol-art">
-                <IdentityMark identity={liveIdentity} symbol={s.id} size={44} />
+                <IdentityMark identity={liveIdentity} symbol={s.id} size={44} decorative />
               </span>
               <span className="you-symbol-name">{s.label}</span>
               <span className="you-symbol-blurb muted">{s.blurb}</span>
@@ -367,33 +424,19 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           ))}
         </div>
 
-        <h4>Wing base</h4>
-        <div className="you-symbol-grid" role="radiogroup" aria-label="Butterfly base">
-          {ARCHETYPES.map((a) => (
-            <label
-              key={a.id}
-              className={`you-symbol-card${identity.archetype === a.id ? " selected" : ""}`}
-            >
-              <input
-                type="radio"
-                name="you-archetype"
-                value={a.id}
-                checked={identity.archetype === a.id}
-                onChange={() => void saveIdentity({ ...identity, archetype: a.id })}
-              />
-              <span className="you-symbol-art">
-                <Butterfly
-                  identity={{ ...liveIdentity, archetype: a.id }}
-                  beatMs={null}
-                  size={56}
-                  title={a.label}
-                />
-              </span>
-              <span className="you-symbol-name">{a.label}</span>
-              <span className="you-symbol-blurb muted">{a.blurb}</span>
-            </label>
-          ))}
-        </div>
+        <h4>Wing family</h4>
+        <p className="muted">
+          Eight families to start from. Neurodivergent people are as varied as butterflies, so
+          pick the silhouette that feels like you, then shape the details.
+        </p>
+        <WingFamilyPicker
+          identity={liveIdentity}
+          value={identity.archetype}
+          onChange={changeFamily}
+        />
+
+        <h4>Wing details</h4>
+        <WingDetails wing={identity.wing} onChange={changeWing} />
 
         <h4>Wing colors and what they mean</h4>
         <p className="muted">
@@ -434,31 +477,21 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
                 }
                 onBlur={() => commitPalette(localPalette)}
               />
-              <label className="sr-only" htmlFor={`you-meaning-${slot}`}>
-                {SLOT_LABEL[slot]} meaning
-              </label>
-              <input
-                id={`you-meaning-${slot}`}
-                type="text"
-                className="you-color-meaning"
-                placeholder="What this color means to you"
-                maxLength={120}
-                aria-label={`${SLOT_LABEL[slot]} meaning`}
+              <ColorMeaningInput
+                slot={slot}
+                label={SLOT_LABEL[slot] ?? slot}
                 value={meaningFor(slot)}
                 disabled={!profileLoaded}
-                onChange={(e) => {
-                  const meaning = e.target.value;
-                  // Local-only until blur so typing does not thrash encryption.
+                onLocalChange={(meaning) => {
+                  // Local-only until commit so typing does not thrash encryption.
                   const prev = profileRef.current;
                   const rest = prev.colorMeanings.filter((m) => m.slot !== slot);
                   applyProfile({
                     ...prev,
-                    colorMeanings: meaning.trim()
-                      ? [...rest, { slot, meaning }]
-                      : rest,
+                    colorMeanings: meaning.trim() ? [...rest, { slot, meaning }] : rest,
                   });
                 }}
-                onBlur={(e) => setColorMeaning(slot, e.target.value)}
+                onCommit={(meaning) => setColorMeaning(slot, meaning)}
               />
             </div>
           ))}
@@ -479,21 +512,16 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         )}
         <ul className="you-suggestions">
           {suggestions.map((s) => (
-            <li key={s.id} className="you-suggestion">
-              <div>
-                <span className="you-trait-kind">{KIND_LABEL[s.kind]}</span>{" "}
-                <strong>{s.label}</strong>
-                <p className="muted you-suggestion-why">{s.because.join(" ")}</p>
-              </div>
-              <div className="you-suggestion-actions">
-                <button type="button" className="btn secondary" onClick={() => acceptSuggestion(s)}>
-                  Accept
-                </button>
-                <button type="button" className="linkish" onClick={() => dismissSuggestion(s)}>
-                  Dismiss
-                </button>
-              </div>
-            </li>
+            <SuggestionCard
+              key={s.id}
+              kindLabel={KIND_LABEL[s.kind]}
+              title={s.label}
+              because={s.because}
+              acceptAriaLabel={`Accept trait: ${s.label}`}
+              dismissAriaLabel={`Dismiss trait suggestion: ${s.label}`}
+              onAccept={() => acceptSuggestion(s)}
+              onDismiss={() => dismissSuggestion(s)}
+            />
           ))}
         </ul>
         {profile.traits.length > 0 && (
@@ -518,51 +546,82 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         )}
       </section>
 
-      {/* How to work with me: encrypted free text. */}
+      {/* How to work with me: encrypted free text, drafted from the journal. */}
       <section className="panel you-section" aria-labelledby="you-profile-title">
         <h3 id="you-profile-title">How to work with you</h3>
         <p className="muted">
-          Written in your own words and encrypted on this device before it is saved. Nothing
-          here is visible to anyone unless you share it below.
+          Written in your own words and encrypted on this device before it is saved. Let it draw
+          a first draft from your tasks and journal, or write it yourself. You can dictate any
+          field. Nothing here is visible to anyone unless you share it below.
         </p>
-        <div className="field">
-          <label htmlFor="you-about">About you</label>
-          <textarea
-            id="you-about"
-            rows={3}
-            maxLength={2000}
-            value={profile.about}
+        <label className="you-autodraft-toggle">
+          <input
+            type="checkbox"
+            checked={profile.autoDraft}
             disabled={!profileLoaded}
-            onChange={(e) => applyProfile({ ...profileRef.current, about: e.target.value })}
-            onBlur={(e) => saveProfile({ about: e.target.value })}
+            onChange={(e) => saveProfile({ autoDraft: e.target.checked })}
           />
-        </div>
-        <div className="field">
-          <label htmlFor="you-communication">How to communicate with you</label>
-          <textarea
-            id="you-communication"
-            rows={3}
-            maxLength={2000}
-            value={profile.communication}
-            disabled={!profileLoaded}
-            onChange={(e) =>
-              applyProfile({ ...profileRef.current, communication: e.target.value })
-            }
-            onBlur={(e) => saveProfile({ communication: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="you-support">What helps on a hard day</label>
-          <textarea
-            id="you-support"
-            rows={3}
-            maxLength={2000}
-            value={profile.support}
-            disabled={!profileLoaded}
-            onChange={(e) => applyProfile({ ...profileRef.current, support: e.target.value })}
-            onBlur={(e) => saveProfile({ support: e.target.value })}
-          />
-        </div>
+          Suggest lines from my journal and tasks
+        </label>
+
+        {profile.autoDraft && drafts.length === 0 && (
+          <p className="muted you-drafts-empty">
+            No new lines to suggest yet. They appear here as your journal and tasks grow, or after
+            you dismiss the current ones.
+          </p>
+        )}
+        {profile.autoDraft && drafts.length > 0 && (
+          <div className="you-drafts">
+            <h4>Suggested from your journal</h4>
+            <p className="muted">
+              Each line is drawn from your own history and says why. Add the ones that fit; edit
+              them afterward in your own voice.
+            </p>
+            <ul className="you-suggestions">
+              {drafts.map((line) => (
+                <SuggestionCard
+                  key={line.id}
+                  kindLabel={DRAFT_FIELD_LABEL[line.field]}
+                  title={line.text}
+                  because={line.because}
+                  acceptLabel="Add"
+                  acceptAriaLabel={`Add to ${DRAFT_FIELD_LABEL[line.field]}: ${line.text}`}
+                  dismissAriaLabel={`Dismiss suggestion: ${line.text}`}
+                  onAccept={() => acceptDraft(line)}
+                  onDismiss={() => dismissDraft(line)}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <DictatableField
+          label="About you"
+          multiline
+          value={profile.about}
+          maxLength={2000}
+          disabled={!profileLoaded}
+          onChange={(v) => applyProfile({ ...profileRef.current, about: v })}
+          onCommit={(v) => saveProfile({ about: v })}
+        />
+        <DictatableField
+          label="How to communicate with you"
+          multiline
+          value={profile.communication}
+          maxLength={2000}
+          disabled={!profileLoaded}
+          onChange={(v) => applyProfile({ ...profileRef.current, communication: v })}
+          onCommit={(v) => saveProfile({ communication: v })}
+        />
+        <DictatableField
+          label="What helps on a hard day"
+          multiline
+          value={profile.support}
+          maxLength={2000}
+          disabled={!profileLoaded}
+          onChange={(v) => applyProfile({ ...profileRef.current, support: v })}
+          onCommit={(v) => saveProfile({ support: v })}
+        />
         <p className="muted you-save-note" aria-live="polite">
           {saving ? "Saving…" : savedAt ? "Saved." : ""}
         </p>
@@ -607,6 +666,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         <p className="muted you-print-note">
           The printed profile includes your butterfly, your mark, and the sections selected
           below. Today&apos;s energy state is not included.
+          {!anySectionSelected && " No sections are selected yet, so only your butterfly prints."}
         </p>
 
         <h4>Sections to include</h4>
@@ -707,54 +767,66 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
             <IdentityMark identity={liveIdentity} size={36} />
           </div>
         </div>
-        {sections.about && profile.about.trim() && (
-          <div className="you-print-block">
-            <h2>About</h2>
-            <p>{profile.about}</p>
-          </div>
-        )}
-        {sections.communication && profile.communication.trim() && (
-          <div className="you-print-block">
-            <h2>How to communicate with me</h2>
-            <p>{profile.communication}</p>
-          </div>
-        )}
-        {sections.support && profile.support.trim() && (
-          <div className="you-print-block">
-            <h2>What helps on a hard day</h2>
-            <p>{profile.support}</p>
-          </div>
-        )}
-        {sections.traits && profile.traits.length > 0 && (
-          <div className="you-print-block">
-            <h2>Traits</h2>
-            <ul>
-              {profile.traits.map((t) => (
-                <li key={t.id}>
-                  {KIND_LABEL[t.kind]}: {t.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {sections.colorMeanings && profile.colorMeanings.length > 0 && (
-          <div className="you-print-block">
-            <h2>Wing colors</h2>
-            <ul>
-              {profile.colorMeanings.map((m) => (
-                <li key={m.slot}>
-                  <span
-                    className="you-print-swatch"
-                    style={{ background: liveIdentity.palette[m.slot] }}
-                  />
-                  {SLOT_LABEL[m.slot]}: {m.meaning}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <ProfileSections
+          variant="print"
+          palette={liveIdentity.palette}
+          name={user.displayName}
+          about={sections.about ? profile.about : undefined}
+          communication={sections.communication ? profile.communication : undefined}
+          support={sections.support ? profile.support : undefined}
+          traits={sections.traits ? profile.traits : undefined}
+          colorMeanings={sections.colorMeanings ? profile.colorMeanings : undefined}
+        />
         <p className="you-print-foot">Made with EAJ · Your Energy Matters</p>
       </section>
+    </div>
+  );
+}
+
+/**
+ * The wing-color meaning field: a short text input with dictation, kept inline
+ * with its color swatch. Commits to the encrypted profile on blur or when a
+ * dictation session ends.
+ */
+function ColorMeaningInput({
+  slot,
+  label,
+  value,
+  disabled,
+  onLocalChange,
+  onCommit,
+}: {
+  slot: "primary" | "secondary" | "accent";
+  label: string;
+  value: string;
+  disabled: boolean;
+  onLocalChange: (meaning: string) => void;
+  onCommit: (meaning: string) => void;
+}) {
+  const getValue = useCallback(() => value, [value]);
+  const dictation = useDictation({
+    getValue,
+    onChange: onLocalChange,
+    onCommit,
+    maxLength: 120,
+  });
+  return (
+    <div className="you-color-meaning-wrap">
+      <label className="sr-only" htmlFor={`you-meaning-${slot}`}>
+        {label} meaning
+      </label>
+      <input
+        id={`you-meaning-${slot}`}
+        type="text"
+        className="you-color-meaning"
+        placeholder="What this color means to you"
+        maxLength={120}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onLocalChange(e.target.value)}
+        onBlur={(e) => onCommit(e.target.value)}
+      />
+      <DictationControl dictation={dictation} label={`${label} meaning`} disabled={disabled} hidePill />
     </div>
   );
 }

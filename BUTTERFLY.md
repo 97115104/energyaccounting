@@ -14,9 +14,22 @@ locked in, and becoming.
 ## The pieces
 
 - **Butterfly** ([apps/web/src/components/Butterfly.tsx](apps/web/src/components/Butterfly.tsx)):
-  one SVG body plan with three archetypes (swallowtail, monarch, morpho),
-  a three-color palette, and deterministic per-person wing variation derived
-  from a seed. The same identity draws the same butterfly on every device.
+  one SVG body plan that composes flat render layers produced by the wing
+  grammar. The component holds no shape logic, so onboarding previews, the You
+  hero, exports, and the compact seal all share it.
+- **Wing grammar** ([apps/web/src/lib/butterflyGeometry.ts](apps/web/src/lib/butterflyGeometry.ts)):
+  eight wing families (monarch, morpho, swallowtail, glasswing, longwing, owl,
+  sulphur, peacock) crossed with independent traits, so identity comes from
+  combination rather than a fixed menu:
+  - **edge**: smooth, scalloped, angular
+  - **tail**: none, short, long, twin
+  - **pattern**: veined, banded, spotted, eyespots, clear panels
+  - **complexity**: 0 to 4, visual richness only and never a measure of the
+    person. `compatibleTraits` keeps combinations plausible per family (for
+    example, glasswing has no tails or eyespots), and `normalizeWing` repairs
+    anything out of range. A three-color palette and deterministic per-person
+    variation from a seed finish the look, so the same identity draws the same
+    butterfly on every device.
 - **NeuroMe seal** ([apps/web/src/components/IdentityMark.tsx](apps/web/src/components/IdentityMark.tsx)):
   the compact circular mark used on the header and welcome surfaces. It wraps
   the person's chosen symbol in a vitality ring showing today's remaining
@@ -37,14 +50,28 @@ locked in, and becoming.
 - **You profile** ([apps/web/src/lib/youProfile.ts](apps/web/src/lib/youProfile.ts)):
   about, communication, support notes, accepted traits, and personal color
   meanings, encrypted client-side under the person's DEK like journal text.
+- **How-to-work-with-me drafting** ([apps/web/src/lib/youDraft.ts](apps/web/src/lib/youDraft.ts)):
+  a pure, on-device drafter over the decrypted personal-data model
+  ([apps/web/src/lib/personalData.ts](apps/web/src/lib/personalData.ts)). It
+  turns recurring givers, hard tasks, draining weekdays, and reflective habits
+  into evidence-backed draft lines the person can add, edit in their own voice,
+  or dismiss. Drafting can be turned off entirely to write from scratch.
+- **Dictation** ([apps/web/src/lib/useDictation.ts](apps/web/src/lib/useDictation.ts),
+  [apps/web/src/components/DictatableField.tsx](apps/web/src/components/DictatableField.tsx)):
+  one Web Speech capability behind every free-text field. Typing is hard
+  sometimes, so any field can be spoken; only one microphone is live at a time.
 
 ## Privacy boundaries
 
 Three tiers, from most open to most protected:
 
-1. **Identity config** (symbol, archetype, palette, seed, motion) is
-   render-only and stored as plaintext JSON on the user row, so the sign-in
-   screen can welcome a returning person before anything decrypts.
+1. **Identity config** (symbol, wing family and traits, palette, seed, motion)
+   is render-only and stored as plaintext JSON on the user row, allowlisted by
+   [apps/server/src/lib/identity.ts](apps/server/src/lib/identity.ts) so it can
+   never carry a covert channel. It is also cached locally
+   ([apps/web/src/lib/identityCache.ts](apps/web/src/lib/identityCache.ts)) so
+   the full sign-in screen can welcome a returning person before anything
+   decrypts.
 2. **Daily numbers** stay plaintext as they always have; the butterfly state is
    computed from them on the device.
 3. **You profile content** crosses the wire only as AES-GCM ciphertext. The
@@ -81,6 +108,7 @@ profile, and every share snapshot.
 
 The exported corpus now carries the identity config and decrypted You profile
 alongside days and catalog, so a future personal model can learn how its person
-works as well as what they did. The trait suggester is the first, deliberately
-transparent step: everything it believes is visible, explained, and correctable
-on the You page.
+works as well as what they did. The trait suggester and the how-to-work-with-me
+drafter are the first, deliberately transparent steps: both read only the
+on-device personal-data model, everything they believe is visible with its
+evidence, and every line is the person's to accept, edit, or dismiss.

@@ -1,6 +1,7 @@
 import { decryptText, getSessionDek } from "./crypto";
 import { api } from "./api";
 import type { CatalogEntry } from "./butterflyTraits";
+import { loadPersonalData } from "./personalData";
 import { decryptYouProfile, type YouProfile } from "./youProfile";
 
 type ExportLine = {
@@ -61,30 +62,11 @@ type ExportPayload = {
 
 /**
  * Decrypted activity catalog for on-device intelligence (trait suggestions).
- * Uses the same export endpoint as the corpus so there is one source of truth.
+ * Delegates to the shared personal-data loader so there is one decrypt path.
  */
 export async function fetchDecryptedCatalog(): Promise<CatalogEntry[]> {
-  const dek = getSessionDek();
-  if (!dek) throw new Error("Unlock your journal key first.");
-  const raw = await api<ExportPayload>("/api/export/days");
-  const out: CatalogEntry[] = [];
-  for (const c of raw.catalog) {
-    let label = "";
-    try {
-      label = await decryptText(dek, c.labelCiphertext, c.labelIv, "eaj-label");
-    } catch {
-      label = "";
-    }
-    if (!label) continue;
-    out.push({
-      side: c.side as CatalogEntry["side"],
-      label,
-      useCount: c.useCount,
-      typicalDifficulty: c.typicalDifficulty,
-      difficultyCount: c.difficultyCount,
-    });
-  }
-  return out;
+  const data = await loadPersonalData();
+  return data.catalog;
 }
 
 /** Decrypted You profile for the corpus; null when none is saved yet. */

@@ -13,13 +13,24 @@
  * how they see their own neurodivergence.
  */
 
+import {
+  WING_FAMILIES,
+  compatibleTraits,
+  defaultWingFor,
+  normalizeWing,
+  type WingConfig,
+  type WingFamily,
+  type WingVariation,
+} from "./butterflyGeometry";
+
 export type IdentitySymbol =
   | "butterfly"
   | "rainbow-infinity"
   | "gold-infinity"
   | "rainbow-pride";
 
-export type ButterflyArchetype = "swallowtail" | "monarch" | "morpho";
+/** A butterfly's wing family. Kept as an alias so existing call sites read well. */
+export type ButterflyArchetype = WingFamily;
 
 export type MotionPreference = "auto" | "calm" | "still";
 
@@ -37,8 +48,10 @@ export type IdentityConfig = {
   version: 1;
   /** External mark shown on profile, login return, and public shares. */
   symbol: IdentitySymbol;
-  /** Butterfly body plan used everywhere inside You. */
+  /** Wing family; kept in sync with wing.family for readable call sites. */
   archetype: ButterflyArchetype;
+  /** Composable wing morphology: family, edge, tail, pattern, complexity. */
+  wing: WingConfig;
   palette: ButterflyPalette;
   /** Stable string that seeds deterministic per-person wing variation. */
   seed: string;
@@ -91,24 +104,59 @@ export type ArchetypeMeta = {
   palette: ButterflyPalette;
 };
 
+/**
+ * Wing families offered in onboarding and You. Species names describe the
+ * visual inspiration, not a claim that the generated mark is biologically
+ * exact. Order leads with the most familiar silhouettes.
+ */
 export const ARCHETYPES: ArchetypeMeta[] = [
-  {
-    id: "swallowtail",
-    label: "Swallowtail",
-    blurb: "Long tailed hindwings and a steady, gliding beat.",
-    palette: { primary: "#f4b942", secondary: "#2f6b6b", accent: "#2a2208" },
-  },
   {
     id: "monarch",
     label: "Monarch",
-    blurb: "Swept, pointed forewings with bold veins and a resilient beat.",
+    blurb: "Broad upper wings, bold veins, and a resilient, gliding beat.",
     palette: { primary: "#e07a1a", secondary: "#9a3d28", accent: "#2a1608" },
   },
   {
     id: "morpho",
     label: "Morpho",
-    blurb: "Broad rounded wings and a bright structural shimmer.",
+    blurb: "Wide, rounded wings with a bright structural shimmer.",
     palette: { primary: "#3f7bd6", secondary: "#7b5bd6", accent: "#141a2e" },
+  },
+  {
+    id: "swallowtail",
+    label: "Swallowtail",
+    blurb: "Angular forewings and long hindwing tails, made for gliding.",
+    palette: { primary: "#f4b942", secondary: "#2f6b6b", accent: "#2a2208" },
+  },
+  {
+    id: "glasswing",
+    label: "Glasswing",
+    blurb: "Slim wings with calm, translucent central panels.",
+    palette: { primary: "#8fb7c9", secondary: "#5a7d8c", accent: "#20323a" },
+  },
+  {
+    id: "longwing",
+    label: "Longwing",
+    blurb: "Long, slim forewings and a compact, unhurried shape.",
+    palette: { primary: "#e2542f", secondary: "#2a2a2a", accent: "#141414" },
+  },
+  {
+    id: "owl",
+    label: "Owl",
+    blurb: "Deep, tall hindwings built to carry watchful eyespots.",
+    palette: { primary: "#8a5a2b", secondary: "#40301f", accent: "#1c140a" },
+  },
+  {
+    id: "sulphur",
+    label: "Sulphur",
+    blurb: "Compact, leaf-like wings with a soft, quick flutter.",
+    palette: { primary: "#f0c419", secondary: "#c98a1a", accent: "#3a2a08" },
+  },
+  {
+    id: "peacock",
+    label: "Peacock",
+    blurb: "Scalloped edges and layered eyespots, quietly striking.",
+    palette: { primary: "#8a2f4a", secondary: "#2f4b8a", accent: "#1a1226" },
   },
 ];
 
@@ -148,6 +196,7 @@ export function defaultIdentity(seed: string): IdentityConfig {
     version: 1,
     symbol: "butterfly",
     archetype: archetype.id,
+    wing: defaultWingFor(archetype.id),
     palette: { ...archetype.palette },
     seed: seed || "eaj",
     motion: "auto",
@@ -157,6 +206,7 @@ export function defaultIdentity(seed: string): IdentityConfig {
 /**
  * Coerce untrusted stored/config input into a valid IdentityConfig, falling
  * back field by field so a corrupt palette never blanks the whole mark.
+ * Legacy configs without a wing block migrate to the family's default wing.
  */
 export function normalizeIdentity(input: unknown, seed: string): IdentityConfig {
   const base = defaultIdentity(seed);
@@ -168,10 +218,14 @@ export function normalizeIdentity(input: unknown, seed: string): IdentityConfig 
     raw.palette && typeof raw.palette === "object"
       ? (raw.palette as Record<string, unknown>)
       : {};
+  const wingRaw =
+    raw.wing && typeof raw.wing === "object" ? (raw.wing as Partial<WingConfig>) : undefined;
   return {
     version: 1,
     symbol: isIdentitySymbol(raw.symbol) ? raw.symbol : base.symbol,
     archetype,
+    // Family is authoritative from archetype; wing carries the rest of the shape.
+    wing: normalizeWing(archetype, wingRaw),
     palette: {
       primary: isHexColor(paletteRaw.primary) ? paletteRaw.primary : preset.primary,
       secondary: isHexColor(paletteRaw.secondary) ? paletteRaw.secondary : preset.secondary,
@@ -184,6 +238,10 @@ export function normalizeIdentity(input: unknown, seed: string): IdentityConfig 
         : base.motion,
   };
 }
+
+/** Compatibility helpers re-exported for pickers and validators. */
+export { WING_FAMILIES, compatibleTraits, defaultWingFor };
+export type { WingConfig };
 
 /**
  * A tiny deterministic hash (cyrb53-lite) used to derive stable per-person wing
@@ -203,28 +261,25 @@ export function seedHash(seed: string): number {
   return (h2 >>> 0) * 4294967296 + (h1 >>> 0);
 }
 
-export type WingVariation = {
-  /** 0..1: overall wing spread; higher is broader. */
-  spread: number;
-  /** 0..1: tail length for swallowtail-style hindwings. */
-  tail: number;
-  /** 0..3: number of eyespots per hindwing. */
-  eyespots: number;
-  /** 0..1: pattern-band thickness. */
-  band: number;
-};
+export type { WingVariation };
 
-/** Deterministic wing variation from the seed, stable across renders. */
+/**
+ * Deterministic wing variation from the seed, stable across renders. This
+ * personalizes a butterfly within its chosen grammar; it never overrides an
+ * explicit family, edge, tail, pattern, or complexity choice.
+ */
 export function wingVariation(seed: string): WingVariation {
   const h = seedHash(seed);
   const a = (h % 1000) / 1000;
   const b = ((h >>> 3) % 1000) / 1000;
   const c = ((h >>> 7) % 1000) / 1000;
   const d = ((h >>> 11) % 1000) / 1000;
+  const e = ((h >>> 15) % 1000) / 1000;
   return {
     spread: 0.35 + a * 0.5,
-    tail: b,
-    eyespots: Math.floor(c * 3.99),
-    band: 0.3 + d * 0.6,
+    aspect: b,
+    veinFan: c,
+    jitter: 0.2 + d * 0.6,
+    band: 0.3 + e * 0.6,
   };
 }

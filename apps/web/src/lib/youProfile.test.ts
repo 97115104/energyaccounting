@@ -17,8 +17,24 @@ describe("normalizeYouProfile", () => {
       traits: [{ id: "interest:trains", kind: "interest", label: "Trains" }],
       dismissedTraitIds: ["rhythm:monday"],
       colorMeanings: [{ slot: "primary", meaning: "Trains at dusk" }],
+      autoDraft: true,
+      dismissedDraftIds: ["about:interests"],
     };
     expect(normalizeYouProfile(profile)).toEqual(profile as never);
+  });
+
+  test("legacy profile without draft fields defaults autoDraft on", () => {
+    const out = normalizeYouProfile({
+      version: 1,
+      about: "",
+      communication: "",
+      support: "",
+      traits: [],
+      dismissedTraitIds: [],
+      colorMeanings: [],
+    });
+    expect(out.autoDraft).toBe(true);
+    expect(out.dismissedDraftIds).toEqual([]);
   });
 
   test("junk collapses to an empty profile instead of crashing", () => {

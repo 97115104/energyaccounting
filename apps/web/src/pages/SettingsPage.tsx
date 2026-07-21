@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
+import { DictatableField } from "../components/DictatableField";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
@@ -199,15 +200,14 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
     <div>
       <div className="panel">
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Profile</h2>
-        <div className="field">
-          <label htmlFor="display-name">Name or alias (greetings)</label>
-          <input
-            id="display-name"
-            value={displayName}
-            maxLength={80}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </div>
+        <DictatableField
+          label="Name or alias (greetings)"
+          value={displayName}
+          maxLength={80}
+          autoComplete="nickname"
+          onChange={setDisplayName}
+          dictateLabel="your name"
+        />
         <div className="field">
           <label htmlFor="tz">Timezone</label>
           <input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />

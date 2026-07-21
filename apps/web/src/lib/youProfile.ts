@@ -13,6 +13,20 @@ import { decryptText, encryptText } from "./crypto";
 
 export const YOU_PROFILE_AAD = "eaj-you-v1";
 
+/** Shared vocabulary so every surface labels traits and colors identically. */
+export const KIND_LABEL: Record<string, string> = {
+  interest: "Interest",
+  "energy-giver": "Adds energy",
+  "energy-taker": "Uses energy",
+  rhythm: "Rhythm",
+};
+
+export const SLOT_LABEL: Record<string, string> = {
+  primary: "Forewing",
+  secondary: "Hindwing",
+  accent: "Ink",
+};
+
 export type ColorMeaning = {
   /** Which palette slot the meaning belongs to. */
   slot: "primary" | "secondary" | "accent";
@@ -34,6 +48,10 @@ export type YouProfile = {
   dismissedTraitIds: string[];
   /** Personal color meanings for the wing palette. */
   colorMeanings: ColorMeaning[];
+  /** Show journal-drawn draft lines under the profile fields. Default on. */
+  autoDraft: boolean;
+  /** Draft line ids the person dismissed, so they stay dismissed. */
+  dismissedDraftIds: string[];
 };
 
 export function emptyYouProfile(): YouProfile {
@@ -45,6 +63,8 @@ export function emptyYouProfile(): YouProfile {
     traits: [],
     dismissedTraitIds: [],
     colorMeanings: [],
+    autoDraft: true,
+    dismissedDraftIds: [],
   };
 }
 
@@ -102,6 +122,11 @@ export function normalizeYouProfile(input: unknown): YouProfile {
       ? raw.dismissedTraitIds.filter((x): x is string => typeof x === "string")
       : [],
     colorMeanings,
+    // Default on so returning profiles that predate this field still auto-draft.
+    autoDraft: typeof raw.autoDraft === "boolean" ? raw.autoDraft : true,
+    dismissedDraftIds: Array.isArray(raw.dismissedDraftIds)
+      ? raw.dismissedDraftIds.filter((x): x is string => typeof x === "string")
+      : [],
   };
 }
 

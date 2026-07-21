@@ -9,23 +9,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Butterfly } from "../components/Butterfly";
 import { IdentityMark } from "../components/IdentityMark";
+import { ProfileSections } from "../components/ProfileSections";
 import { api } from "../lib/api";
 import { parseSharePayload, type SharePayload } from "../lib/identityShare";
 import { archetypeMeta, symbolMeta } from "../lib/identity";
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
-
-const KIND_LABEL: Record<string, string> = {
-  interest: "Interest",
-  "energy-giver": "Adds energy",
-  "energy-taker": "Uses energy",
-  rhythm: "Rhythm",
-};
-
-const SLOT_LABEL: Record<string, string> = {
-  primary: "Forewing",
-  secondary: "Hindwing",
-  accent: "Ink",
-};
 
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
@@ -94,59 +82,22 @@ export function SharePage() {
         />
         <h2>{payload.name ? `${payload.name}'s butterfly` : "A shared butterfly"}</h2>
         <p className="muted share-mark-line">
-          <IdentityMark identity={identity} size={28} />
+          <IdentityMark identity={identity} size={28} decorative />
           <span>
             {symbolMeta(identity.symbol).label} · {archetypeMeta(identity.archetype).label}
           </span>
         </p>
       </div>
-      {payload.about && (
-        <div className="share-block">
-          <h3>About</h3>
-          <p>{payload.about}</p>
-        </div>
-      )}
-      {payload.communication && (
-        <div className="share-block">
-          <h3>How to communicate with {payload.name || "them"}</h3>
-          <p>{payload.communication}</p>
-        </div>
-      )}
-      {payload.support && (
-        <div className="share-block">
-          <h3>What helps on a hard day</h3>
-          <p>{payload.support}</p>
-        </div>
-      )}
-      {payload.traits && payload.traits.length > 0 && (
-        <div className="share-block">
-          <h3>Traits</h3>
-          <ul className="share-traits">
-            {payload.traits.map((t) => (
-              <li key={t.id}>
-                <span className="you-trait-kind">{KIND_LABEL[t.kind] ?? t.kind}</span> {t.label}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {payload.colorMeanings && payload.colorMeanings.length > 0 && (
-        <div className="share-block">
-          <h3>Wing colors</h3>
-          <ul className="share-colors">
-            {payload.colorMeanings.map((m) => (
-              <li key={m.slot}>
-                <span
-                  className="you-print-swatch"
-                  style={{ background: identity.palette[m.slot] }}
-                  aria-hidden="true"
-                />
-                {SLOT_LABEL[m.slot] ?? m.slot}: {m.meaning}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ProfileSections
+        variant="share"
+        palette={identity.palette}
+        name={payload.name}
+        about={payload.about}
+        communication={payload.communication}
+        support={payload.support}
+        traits={payload.traits}
+        colorMeanings={payload.colorMeanings}
+      />
       <p className="muted share-foot">
         Shared with EAJ, an energy accounting journal for neurodivergent people. The butterfly
         is a symbol of becoming; every one is unique to its person.

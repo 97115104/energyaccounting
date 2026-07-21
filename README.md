@@ -12,7 +12,7 @@ EAJ is for neurodivergent productivity and pride. An open-source, end-to-end enc
 
 EAJ is for neurodivergent productivity and pride. You start an energy day when you're ready and work against a finite 100 points of daily energy: restorative activities add points, demanding ones use them, completing tasks frees their reserved capacity, and the day closes when you decide it is done, and not when the clock hits midnight. Calendar midnight is not a reliable personal day boundary for many neurodivergent people; there is no missed-day penalty and energy never carries to the next day. Closed energy days appear under **Previous days** on the Dashboard and open read-only. You can explicitly amend a record without reopening its lifecycle, or request permanent deletion and confirm the irreversible action. Activity labels, journal text, and task details stay encrypted on the device before they reach the server.
 
-EAJ is also a social tool. Every person has a butterfly, the app's symbol of becoming: it starts from a base chosen in onboarding, its wings beat with the day's energy, and its colors mean whatever their person says they mean. The **You** page holds the butterfly, an explainable view of what the journal shows, and an encrypted "how to work with me" profile that can be exported as an image or print-quality document, or published as a revocable share link. See [BUTTERFLY.md](BUTTERFLY.md) for the full design.
+EAJ is also a social tool. Every person has a butterfly, the app's symbol of becoming: it starts from one of eight wing families chosen in onboarding, its wings beat with the day's energy, and its colors mean whatever their person says they mean. On the **You** page each butterfly is personalized further through composable wing traits (edge, tail, pattern, and visual detail), because neurodivergent people are as varied as butterflies. The You page also holds an explainable view of what the journal shows and an encrypted "how to work with me" profile. That profile can draft itself from your own tasks and journal (each line explained and yours to accept, edit, or dismiss) or be written from scratch, and every free-text field can be dictated. It exports as an image or print-quality document, or as a revocable share link. See [BUTTERFLY.md](BUTTERFLY.md) for the full design.
 
 Host target `eaj.97115104.com` (see [host.txt](host.txt)).
 
@@ -22,7 +22,7 @@ Energy Accounting as described by Maja Toudal and Dr. Tony Attwood ([energyaccou
 
 ## Stack
 
-Bun, Elysia, React, Drizzle, `bun:sqlite`. One self-hosted SQLite file under `DATA_DIR`. Optional TOTP. Browser speech recognition dictates journals and task details as text, so no audio is ever stored. In-browser Transformers.js embeddings suggest costs from your personal catalog when available.
+Bun, Elysia, React, Drizzle, `bun:sqlite`. One self-hosted SQLite file under `DATA_DIR`. Optional TOTP. Browser speech recognition dictates every free-text field as text, so no audio is ever stored. In-browser Transformers.js embeddings suggest costs from your personal catalog when available. The day/dawn/dusk/night sky theme follows the device's current timezone (and coordinates when granted), so it matches where you actually are.
 
 ## Local development
 

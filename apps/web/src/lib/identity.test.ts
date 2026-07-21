@@ -21,11 +21,50 @@ describe("identity config", () => {
       version: 1,
       symbol: "rainbow-pride",
       archetype: "morpho",
+      wing: {
+        family: "morpho",
+        edge: "smooth",
+        tail: "none",
+        pattern: "banded",
+        complexity: 3,
+      },
       palette: { primary: "#112233", secondary: "#445566", accent: "#778899" },
       seed: "abc",
       motion: "calm",
     };
     expect(normalizeIdentity(config, "fallback")).toEqual(config as never);
+  });
+
+  test("legacy config without a wing block migrates to the family default", () => {
+    const out = normalizeIdentity(
+      {
+        version: 1,
+        symbol: "butterfly",
+        archetype: "swallowtail",
+        palette: { primary: "#112233", secondary: "#445566", accent: "#778899" },
+        seed: "abc",
+        motion: "auto",
+      },
+      "fallback",
+    );
+    expect(out.wing.family).toBe("swallowtail");
+    expect(out.wing.tail).toBe("long");
+    expect(out.wing.complexity).toBeGreaterThanOrEqual(0);
+  });
+
+  test("wing traits incompatible with the family are repaired", () => {
+    const out = normalizeIdentity(
+      {
+        archetype: "glasswing",
+        // Glasswing has no room for eyespots or tails; both must coerce.
+        wing: { family: "glasswing", edge: "smooth", tail: "long", pattern: "eyespots", complexity: 9 },
+      },
+      "seed-x",
+    );
+    expect(out.wing.family).toBe("glasswing");
+    expect(out.wing.tail).toBe("none");
+    expect(out.wing.pattern).not.toBe("eyespots");
+    expect(out.wing.complexity).toBe(4);
   });
 
   test("normalize repairs junk field by field", () => {
@@ -82,10 +121,12 @@ describe("deterministic variation", () => {
       const v = wingVariation(seed);
       expect(v.spread).toBeGreaterThanOrEqual(0.35);
       expect(v.spread).toBeLessThanOrEqual(0.85);
-      expect(v.tail).toBeGreaterThanOrEqual(0);
-      expect(v.tail).toBeLessThanOrEqual(1);
-      expect(v.eyespots).toBeGreaterThanOrEqual(0);
-      expect(v.eyespots).toBeLessThanOrEqual(3);
+      expect(v.aspect).toBeGreaterThanOrEqual(0);
+      expect(v.aspect).toBeLessThanOrEqual(1);
+      expect(v.veinFan).toBeGreaterThanOrEqual(0);
+      expect(v.veinFan).toBeLessThanOrEqual(1);
+      expect(v.jitter).toBeGreaterThanOrEqual(0.2);
+      expect(v.jitter).toBeLessThanOrEqual(0.8);
       expect(v.band).toBeGreaterThanOrEqual(0.3);
       expect(v.band).toBeLessThanOrEqual(0.9);
     }

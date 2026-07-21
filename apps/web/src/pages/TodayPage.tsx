@@ -698,7 +698,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const currentSkyPeriod = skyPeriod(
     user.lat,
     user.lon,
-    user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // Match the shell: the live sky uses the device's current timezone so a
+    // UTC-defaulted profile does not read as night during a local afternoon.
+    Intl.DateTimeFormat().resolvedOptions().timeZone || user.timezone || "UTC",
   );
 
   // Trend hint while planning; recovery only at close (never during audit,

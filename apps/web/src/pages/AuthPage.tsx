@@ -8,6 +8,7 @@ import {
 } from "../lib/crypto";
 import { hasReturningFlag } from "../lib/returning";
 import { normalizeIdentity } from "../lib/identity";
+import { readCachedIdentity } from "../lib/identityCache";
 import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
 
@@ -260,8 +261,18 @@ export function AuthPage({
     );
   }
 
+  // On a returning device, greet the person with their own butterfly before
+  // they sign in. Identity is render-only and cached locally, so it needs no key.
+  const returningMark =
+    !needsTotp && mode === "login" && hasReturningFlag() ? readCachedIdentity() : null;
+
   return (
     <div className="panel auth-card">
+      {returningMark && (
+        <div className="auth-welcome-mark">
+          <IdentityMark identity={returningMark} size={64} decorative />
+        </div>
+      )}
       <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
         {needsTotp ? "Authenticator" : mode === "login" ? "Sign in" : "Create account"}
       </h2>

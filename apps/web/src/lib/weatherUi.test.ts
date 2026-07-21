@@ -44,4 +44,12 @@ describe("skyPeriod / sunTimes", () => {
     const late = new Date("2026-07-21T05:00:00Z"); // 22:00 PDT
     expect(skyPeriod(null, null, "America/Los_Angeles", late)).toBe("night");
   });
+
+  test("a US afternoon is day under the local zone but night under UTC", () => {
+    // Regression: the live theme must pass the device zone. 20:00 UTC is 1pm
+    // PDT (day) but reads as night when a UTC-defaulted profile leaks through.
+    const onePmPacific = new Date("2026-07-21T20:00:00Z");
+    expect(skyPeriod(null, null, "America/Los_Angeles", onePmPacific)).toBe("day");
+    expect(skyPeriod(null, null, "UTC", onePmPacific)).toBe("night");
+  });
 });

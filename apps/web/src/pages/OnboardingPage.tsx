@@ -2,8 +2,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
+import { DictatableField } from "../components/DictatableField";
 import { IdentityMark } from "../components/IdentityMark";
 import { api } from "../lib/api";
+import { normalizeWing } from "../lib/butterflyGeometry";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
 import {
   ARCHETYPES,
@@ -130,7 +132,7 @@ const STEPS: Step[] = [
     eyebrow: "Your butterfly",
     thesis: "Meet your butterfly.",
     whisper:
-      "The butterfly is this app's symbol of becoming: change that looks like struggle from the inside. Yours starts from a base you choose and grows with your days. Its wings beat with your energy, and its colors mean whatever you decide they mean.",
+      "The butterfly is this app's symbol of becoming: change that looks like struggle from the inside. Pick a wing family to start from; there are eight, because neurodivergent people are as varied as butterflies. Its wings beat with your energy, and its colors mean whatever you decide. Shape the edges, tails, and patterns any time on the You page.",
     glyph: <PersonGlyph />,
     identity: "butterfly",
   },
@@ -293,7 +295,7 @@ export function OnboardingPage({ user, onUser }: Props) {
                     onChange={() => setIdentity({ ...identity, symbol: s.id })}
                   />
                   <span className="ob-symbol-art">
-                    <IdentityMark identity={identity} symbol={s.id} size={40} />
+                    <IdentityMark identity={identity} symbol={s.id} size={40} decorative />
                   </span>
                   <span className="ob-symbol-copy">
                     <strong>{s.label}</strong>
@@ -305,7 +307,7 @@ export function OnboardingPage({ user, onUser }: Props) {
           )}
           {current.identity === "butterfly" && (
             <div className="ob-setup ob-identity">
-              <div role="radiogroup" aria-label="Butterfly base" className="ob-archetypes">
+              <div role="radiogroup" aria-label="Wing family" className="ob-archetypes">
                 {ARCHETYPES.map((a) => (
                   <label
                     key={a.id}
@@ -320,16 +322,23 @@ export function OnboardingPage({ user, onUser }: Props) {
                         setIdentity({
                           ...identity,
                           archetype: a.id,
+                          // Keep the wing family in step with the chosen base.
+                          wing: normalizeWing(a.id, identity.wing),
                           palette: { ...a.palette },
                         })
                       }
                     />
                     <span className="ob-symbol-art">
                       <Butterfly
-                        identity={{ ...identity, archetype: a.id, palette: a.palette }}
+                        identity={{
+                          ...identity,
+                          archetype: a.id,
+                          wing: normalizeWing(a.id, identity.wing),
+                          palette: a.palette,
+                        }}
                         beatMs={null}
                         size={52}
-                        title={a.label}
+                        decorative
                       />
                     </span>
                     <span className="ob-symbol-copy">
@@ -365,16 +374,14 @@ export function OnboardingPage({ user, onUser }: Props) {
           )}
           {current.setup && (
             <div className="ob-setup">
-              <div className="field">
-                <label htmlFor="ob-name">Name or alias</label>
-                <input
-                  id="ob-name"
-                  value={name}
-                  maxLength={80}
-                  autoComplete="nickname"
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
+              <DictatableField
+                label="Name or alias"
+                value={name}
+                maxLength={80}
+                autoComplete="nickname"
+                onChange={setName}
+                dictateLabel="your name"
+              />
               <div className="ob-location-fields">
                 <div className="field">
                   <label htmlFor="ob-lat">Latitude</label>

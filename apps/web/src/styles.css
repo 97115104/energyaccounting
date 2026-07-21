@@ -715,9 +715,10 @@ html[data-theme="night"] .btn.secondary {
   font-size: 0.9rem;
 }
 
-.field input,
+.field input:not([type="range"]),
 .field textarea,
-.field select {
+.field select,
+.you-color-meaning {
   border: 1px solid var(--line);
   background: #fff;
   color: #14241f;
@@ -726,17 +727,26 @@ html[data-theme="night"] .btn.secondary {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.field input:focus-visible,
+.field input:not([type="range"]):focus-visible,
 .field textarea:focus-visible,
-.field select:focus-visible {
+.field select:focus-visible,
+.you-color-meaning:focus-visible {
   border-color: var(--accent);
 }
 
-html[data-theme="night"] .field input,
+html[data-theme="night"] .field input:not([type="range"]),
 html[data-theme="night"] .field textarea,
-html[data-theme="night"] .field select {
+html[data-theme="night"] .field select,
+html[data-theme="night"] .you-color-meaning {
   background: #0e1428;
   color: var(--ink);
+}
+
+/* Range inputs (wing detail) keep native chrome, just spaced from the label. */
+.field input[type="range"] {
+  width: 100%;
+  margin-top: 0.35rem;
+  accent-color: var(--accent);
 }
 
 .field textarea {
@@ -1818,8 +1828,24 @@ html[data-theme="night"] .tip-card {
   color: var(--danger);
 }
 
+/* Non-error dictation status (e.g. limit reached) stays calm, not alarming. */
+.dictation-status {
+  margin: 0.35rem 0 0;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .detail-dictate-row {
   margin-top: 0.5rem;
+}
+
+/* Reusable dictation row under any DictatableField. */
+.dictate-row {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 /* Dictation control. */
@@ -2461,9 +2487,23 @@ html[data-theme="night"] .tip-card {
   cursor: pointer;
 }
 
-.you-color-meaning {
+.you-color-meaning-wrap {
   flex: 1;
   min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.you-color-meaning {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* The inline color-meaning dictate button stays compact next to the input. */
+.you-color-meaning-wrap .dictate-row {
+  margin-top: 0;
 }
 
 .you-suggestions,
@@ -2554,6 +2594,57 @@ html[data-theme="night"] .tip-card {
   align-items: end;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* The lifetime field carries a label, so drop its bottom margin to keep the
+   select and the Create button sharing one baseline. */
+.you-share-create .field {
+  margin: 0;
+}
+
+.you-share-create .field select {
+  min-width: 9rem;
+}
+
+/* Auto-draft toggle and journal-drawn draft cards. */
+.you-autodraft-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.you-drafts {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius);
+}
+
+.you-drafts h4 {
+  margin-top: 0;
+}
+
+/* Advanced wing morphology controls. */
+.wing-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.5rem;
+}
+
+.wing-detail-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+/* Greeting text column: keep the source link aligned under the state. */
+.greeting-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .you-new-link {

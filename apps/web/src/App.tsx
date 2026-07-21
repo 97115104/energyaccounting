@@ -15,6 +15,7 @@ import { greetingDetailFor, type GreetingStyle } from "./lib/greeting";
 import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
+import { cacheIdentity, forgetCachedIdentity } from "./lib/identityCache";
 import { NeuroMe } from "./components/IdentityMark";
 import { useButterflyDay } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
@@ -140,8 +141,12 @@ export function App() {
 
   // Sky theme follows the real sun when we know where the user is:
   // dawn/dusk golden hours around sunrise/sunset, otherwise day or night.
+  // The live theme uses the device's current timezone, not the stored profile
+  // one: a profile saved as UTC (the default) would otherwise flip a US
+  // afternoon into night. The profile timezone still drives dated summaries.
   useEffect(() => {
-    const tz = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tz =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || user?.timezone || "UTC";
     const apply = () => {
       const period = skyPeriod(user?.lat, user?.lon, tz);
       document.documentElement.dataset.theme = period;
@@ -162,6 +167,12 @@ export function App() {
     const id = window.setInterval(apply, 60_000);
     return () => window.clearInterval(id);
   }, [user?.timezone, user?.lat, user?.lon]);
+
+  // Keep the last identity cached so the sign-in screen can show the butterfly
+  // before any session or key exists. Identity is render-only, no journal data.
+  useEffect(() => {
+    if (user) cacheIdentity(normalizeIdentity(user.identity, user.id));
+  }, [user]);
 
   // Ask for location once after unlock when profile has no coords.
   useEffect(() => {
@@ -240,6 +251,9 @@ export function App() {
       // A failed network revoke must not leave decrypted data open locally.
       if (userId) forgetRememberedSessionDek(userId);
       else forgetAllRememberedSessionDeks();
+      // Drop the cached mark on an explicit logout so a shared device does not
+      // show the prior person's butterfly. Session-expiry returns keep it.
+      forgetCachedIdentity();
       setSessionDek(null);
       setUser(null);
       setUnlockInfo(null);
@@ -280,7 +294,6 @@ export function App() {
         <div className="top-bar-brand">
           {authed ? (
             <>
-              <p className="wordmark">Your Energy Matters</p>
               <div className="greeting-row">
                 {identity && (
                   <Link
@@ -292,12 +305,15 @@ export function App() {
                     <NeuroMe
                       identity={identity}
                       state={butterflyState}
-                      size={52}
+                      size={65}
                       decorative
                     />
                   </Link>
                 )}
-                <div>
+                <div className="greeting-text">
+                  {/* Wordmark lives in the text column so it aligns over the
+                      greeting, leaving the seal alone on the left. */}
+                  <p className="wordmark">Your Energy Matters</p>
                   <h1
                     className="brand greeting"
                     key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
@@ -307,19 +323,19 @@ export function App() {
                   {(loc.pathname === "/" || loc.pathname.startsWith("/you")) && (
                     <p className="greeting-state muted">{butterflyState.label}</p>
                   )}
+                  {greeting?.factSource && (
+                    <a
+                      className="greeting-source"
+                      href={greeting.factSource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Source: {greeting.factSource.label}
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  )}
                 </div>
               </div>
-              {greeting?.factSource && (
-                <a
-                  className="greeting-source"
-                  href={greeting.factSource.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Source: {greeting.factSource.label}
-                  <span aria-hidden="true"> ↗</span>
-                </a>
-              )}
             </>
           ) : hasReturningFlag() ? (
             <>
