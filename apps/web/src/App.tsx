@@ -15,9 +15,9 @@ import { greetingDetailFor, type GreetingStyle } from "./lib/greeting";
 import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
-import { cacheIdentity, forgetCachedIdentity } from "./lib/identityCache";
+import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
 import { NeuroMe } from "./components/IdentityMark";
-import { useButterflyDay } from "./lib/useButterflyDay";
+import { useButterflyDay, usePrefersReducedMotion } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
@@ -89,6 +89,11 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [dekReady, setDekReady] = useState(!!getSessionDek());
   const [unlockInfo, setUnlockInfo] = useState<UnlockInfo | null>(null);
+  // Mirrors AuthPage's card (sign in vs create account) so the header greeting
+  // and tagline can follow along.
+  const [authMode, setAuthMode] = useState<"login" | "register">(() =>
+    hasReturningFlag() ? "login" : "register",
+  );
   const loc = useLocation();
   const navigate = useNavigate();
   const butterflyState = useButterflyDay(!!user && dekReady && !needsTotp);
@@ -168,10 +173,10 @@ export function App() {
     return () => window.clearInterval(id);
   }, [user?.timezone, user?.lat, user?.lon]);
 
-  // Keep the last identity cached so the sign-in screen can show the butterfly
-  // before any session or key exists. Identity is render-only, no journal data.
+  // Keep the last identity and display name cached so the sign-in screen can
+  // greet the person before any session or key exists. Both are render-only.
   useEffect(() => {
-    if (user) cacheIdentity(normalizeIdentity(user.identity, user.id));
+    if (user) cacheIdentity(normalizeIdentity(user.identity, user.id), user.displayName);
   }, [user]);
 
   // Ask for location once after unlock when profile has no coords.
@@ -251,9 +256,8 @@ export function App() {
       // A failed network revoke must not leave decrypted data open locally.
       if (userId) forgetRememberedSessionDek(userId);
       else forgetAllRememberedSessionDeks();
-      // Drop the cached mark on an explicit logout so a shared device does not
-      // show the prior person's butterfly. Session-expiry returns keep it.
-      forgetCachedIdentity();
+      // The cached mark and name survive logout on purpose so the sign-back-in
+      // screen can greet the person. Account deletion clears them below.
       setSessionDek(null);
       setUser(null);
       setUnlockInfo(null);
@@ -281,6 +285,9 @@ export function App() {
       })
     : null;
   const identity = user ? normalizeIdentity(user.identity, user.id) : null;
+  // Name for the signed-out welcome: the live session's user when unlocking,
+  // else the locally cached name from the last sign-in on this device.
+  const welcomeName = unlockInfo?.user.displayName ?? readCachedName();
 
   return (
     <div className={`app-shell${authed ? "" : " app-shell-auth"}`}>
@@ -337,22 +344,23 @@ export function App() {
                 </div>
               </div>
             </>
-          ) : hasReturningFlag() ? (
+          ) : authMode === "register" ? (
             <>
-              <h1 className="brand">Welcome back</h1>
+              <h1 className="brand">
+                <TypedText text="Your Energy Matters" />
+              </h1>
               <p className="tagline">
-                EAJ is for neurodivergent productivity and pride. Track your energy, grow your
-                butterfly, and share how to work with you when you choose.
+                <span>EAJ is for neurodivergent productivity and pride.</span>
+                <span>
+                  Track your energy, grow your butterfly, and share how to work with you when
+                  you choose.
+                </span>
               </p>
             </>
           ) : (
-            <>
-              <h1 className="brand">Your Energy Matters</h1>
-              <p className="tagline">
-                EAJ is for neurodivergent productivity and pride. Track your energy, grow your
-                butterfly, and share how to work with you when you choose.
-              </p>
-            </>
+            <h1 className="brand brand-welcome">
+              <TypedText text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"} />
+            </h1>
           )}
         </div>
         {authed && (
@@ -401,6 +409,7 @@ export function App() {
               <AuthPage
                 needsTotp={needsTotp}
                 unlockInfo={unlockInfo}
+                onModeChange={setAuthMode}
                 onLogout={() => void logout()}
                 onAuthed={async (u, salt, wrapped, password, sessionExpiresAt) => {
                   setUser(u);
@@ -485,7 +494,16 @@ export function App() {
             !authed ? (
               <Navigate to="/auth" replace />
             ) : (
-              <SettingsPage user={user!} onUser={setUser} onDeleted={() => void logout()} />
+              <SettingsPage
+                user={user!}
+                onUser={setUser}
+                onDeleted={() => {
+                  // The profile is gone, so no trace of it should greet the
+                  // next person on this device.
+                  forgetCachedIdentity();
+                  void logout();
+                }}
+              />
             )
           }
         />
@@ -495,12 +513,65 @@ export function App() {
       </Routes>
       <footer className="site-footer">
         <p>
+          <a
+            href="https://github.com/97115104/energyaccounting"
+            target="_blank"
+            rel="noreferrer"
+          >
+            free &amp; open source
+          </a>
+          <span className="site-footer-sep" aria-hidden="true">
+            |
+          </span>
           <a href="https://attest.97115104.com/s/zn6mxj9z" target="_blank" rel="noreferrer">
             attested
           </a>{" "}
           · collab · cursor (auto)
+          <span className="site-footer-sep" aria-hidden="true">
+            |
+          </span>
+          built for the neurodivergent community
         </p>
       </footer>
     </div>
+  );
+}
+
+/**
+ * Types text out character by character for the signed-out headings. The
+ * animated copy is aria-hidden with the full text alongside for screen
+ * readers, and reduced motion renders everything at once.
+ */
+function TypedText({ text }: { text: string }) {
+  const prefersReduced = usePrefersReducedMotion();
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    if (prefersReduced) {
+      setShown(text.length);
+      return;
+    }
+    setShown(0);
+    const id = window.setInterval(() => {
+      setShown((n) => {
+        if (n >= text.length) {
+          window.clearInterval(id);
+          return n;
+        }
+        return n + 1;
+      });
+    }, 45);
+    return () => window.clearInterval(id);
+  }, [text, prefersReduced]);
+
+  const done = shown >= text.length;
+  return (
+    <span className="typed-text">
+      <span aria-hidden="true">
+        {text.slice(0, shown)}
+        {!done && <span className="typed-caret" />}
+      </span>
+      <span className="sr-only">{text}</span>
+    </span>
   );
 }

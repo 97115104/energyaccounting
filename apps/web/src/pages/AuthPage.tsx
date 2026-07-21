@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import {
   deriveKek,
@@ -30,6 +30,8 @@ type Props = {
   onUnlocked: (password: string) => Promise<void>;
   onLogout: () => void;
   onNeedsTotp: () => void;
+  /** Lets the app header follow the visible card (welcome vs tagline). */
+  onModeChange?: (mode: "login" | "register") => void;
 };
 
 export function AuthPage({
@@ -39,6 +41,7 @@ export function AuthPage({
   onUnlocked,
   onLogout,
   onNeedsTotp,
+  onModeChange,
 }: Props) {
   // Returning devices default to sign-in; a fresh device leads with sign-up.
   const [mode, setMode] = useState<"login" | "register">(
@@ -53,13 +56,37 @@ export function AuthPage({
   const [inviteVerified, setInviteVerified] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   // Bumped on every check and on mode switches so a stale in-flight preflight
   // can never verify an edited/cleared code or splash its error on another card.
   const inviteReqSeq = useRef(0);
 
+  // The privacy modal is informational: focus the dialog on open, close on
+  // Escape, and hand focus back to the trigger afterwards.
+  useEffect(() => {
+    if (!privacyOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const focusId = window.requestAnimationFrame(() =>
+      document
+        .getElementById("privacy-modal")
+        ?.querySelector<HTMLElement>("button")
+        ?.focus(),
+    );
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPrivacyOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [privacyOpen]);
+
   function switchMode(next: "login" | "register") {
     inviteReqSeq.current++;
     setMode(next);
+    onModeChange?.(next);
     setError(null);
     setInviteCode("");
     setInviteVerified(false);
@@ -394,11 +421,41 @@ export function AuthPage({
               </>
             )}
           </p>
-          <p className="muted" style={{ fontSize: "0.85rem" }}>
-            Journal labels and notes are encrypted on your device before they reach the server. The
-            server stores ciphertext and cannot read those fields without your password-derived key.
+          <p className="muted auth-privacy-line">
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => setPrivacyOpen(true)}
+              title="How your journal is protected"
+            >
+              We value privacy
+            </button>
           </p>
         </>
+      )}
+      {privacyOpen && (
+        <div className="insight-scrim" role="presentation" onClick={() => setPrivacyOpen(false)}>
+          <div
+            id="privacy-modal"
+            className="panel insight-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="privacy-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="privacy-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              We value privacy
+            </h2>
+            <p className="muted">
+              Journal labels and notes are encrypted on your device before they reach the server.
+              The server stores ciphertext and cannot read those fields without your
+              password-derived key.
+            </p>
+            <button type="button" className="btn secondary" onClick={() => setPrivacyOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

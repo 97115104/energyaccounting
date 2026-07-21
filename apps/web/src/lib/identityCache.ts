@@ -12,22 +12,40 @@ import { normalizeIdentity, type IdentityConfig } from "./identity";
 
 const KEY = "eaj-last-identity-v1";
 
-export function cacheIdentity(identity: IdentityConfig): void {
+export function cacheIdentity(identity: IdentityConfig, name?: string | null): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(identity));
+    localStorage.setItem(KEY, JSON.stringify({ identity, name: name?.trim() || null }));
   } catch {
     // A butterfly on the sign-in screen is a nicety, not a requirement.
   }
 }
 
-export function readCachedIdentity(): IdentityConfig | null {
+function readEntry(): { identity: unknown; name: string | null } | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return normalizeIdentity(JSON.parse(raw), "returning");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Older entries stored the identity config bare, without the wrapper.
+    if (parsed && typeof parsed === "object" && "identity" in parsed) {
+      return {
+        identity: parsed.identity,
+        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : null,
+      };
+    }
+    return { identity: parsed, name: null };
   } catch {
     return null;
   }
+}
+
+export function readCachedIdentity(): IdentityConfig | null {
+  const entry = readEntry();
+  return entry ? normalizeIdentity(entry.identity, "returning") : null;
+}
+
+/** The last person's display name, for "Welcome back, NAME" before sign-in. */
+export function readCachedName(): string | null {
+  return readEntry()?.name ?? null;
 }
 
 export function forgetCachedIdentity(): void {

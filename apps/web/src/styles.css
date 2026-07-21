@@ -387,18 +387,46 @@ html[data-weather="thunder"] .sky-layer {
 
 /* Signed-out shell: stack brand + card and center the group vertically, so the
    sign-in view sits mid-screen on any viewport instead of hugging the top. */
-.app-shell-auth {
+/* Signed out, the root becomes the centering context so the frame floats in
+   the middle of the viewport instead of hanging from the top. */
+#root:has(> .app-shell-auth) {
   min-height: 100vh;
   min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+
+.app-shell-auth {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 1.5rem 1rem;
+  padding: 2rem 1.5rem;
+  /* A light frame around the signed-out view: narrower than the app shell,
+     sized by its content, and centered by the #root grid above. */
+  width: min(720px, calc(100vw - 2rem));
+  margin: 1.5rem auto;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in srgb, var(--panel) 18%, transparent);
 }
 
 .top-bar-centered .tagline {
   margin-left: auto;
   margin-right: auto;
+}
+
+/* Returning welcome: handwritten and left-aligned so it reads like a note,
+   not a billboard. Sized up because Caveat runs small for its em box. */
+.top-bar-centered .brand-welcome {
+  font-family: "Caveat", "Snell Roundhand", "Bradley Hand", cursive;
+  font-size: clamp(2.4rem, 6vw, 3.2rem);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.1;
+  /* Warmed toward the accent and softened so it reads like a friendly note. */
+  color: color-mix(in srgb, var(--accent) 65%, var(--ink));
+  opacity: 0.82;
 }
 
 .top-bar-actions {
@@ -450,6 +478,28 @@ html[data-weather="thunder"] .sky-layer {
   color: var(--muted);
   margin: 0.35rem 0 0;
   max-width: 36rem;
+}
+
+/* Each tagline sentence sits on its own line for a cleaner centered lockup. */
+.tagline > span {
+  display: block;
+}
+
+/* Typewriter headline on the signed-out screens. */
+.typed-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.85em;
+  margin-left: 3px;
+  vertical-align: -0.06em;
+  background: currentColor;
+  animation: typed-blink 0.9s step-end infinite;
+}
+
+@keyframes typed-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 /* Signed-in header: small wordmark above a time-of-day greeting headline. */
@@ -1391,7 +1441,9 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 }
 
 .auth-card {
-  max-width: 420px;
+  /* Explicit width: as a flex item with auto margins the card would otherwise
+     shrink-wrap its content and come out skinny. */
+  width: min(420px, 100%);
   margin: 2rem auto;
   padding: 2rem;
   border-radius: 20px !important;
@@ -1760,12 +1812,24 @@ html[data-theme="night"] .tip-card {
   margin: 0.35rem 0 0;
 }
 
+/* Quiet colophon: small and translucent so it never competes with the day.
+   Signed in it sits left-aligned in the flow; signed out it is re-anchored
+   to the viewport bottom and centered by the auth override below. */
 .site-footer {
   margin-top: 3rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  text-align: left;
+  opacity: 0.55;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer-sep {
+  margin: 0 0.6rem;
+  opacity: 0.55;
 }
 
 /* Signed out, the attestation reads as a caption under the auth card rather
@@ -1774,10 +1838,15 @@ html[data-theme="night"] .tip-card {
   margin-bottom: 0.75rem;
 }
 
+/* Signed out, the footer leaves the framed container and settles quietly at
+   the bottom of the viewport. */
 .app-shell-auth .site-footer {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0.75rem;
+  margin: 0;
+  padding: 0 1rem;
   text-align: center;
 }
 
@@ -2377,8 +2446,15 @@ html[data-theme="night"] .tip-card {
 
 .auth-welcome-mark {
   display: flex;
-  justify-content: center;
+  /* Sits flush left, in line with the card's heading and fields. */
+  justify-content: flex-start;
   margin-bottom: 0.5rem;
+}
+
+/* Small privacy reassurance under the auth form; the detail lives in a modal. */
+.auth-privacy-line {
+  font-size: 0.85rem;
+  margin-bottom: 0;
 }
 
 /* ------------------------------- You page ------------------------------- */
