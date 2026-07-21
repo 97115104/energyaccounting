@@ -3,7 +3,7 @@ import { skyPeriod, sunTimesForUtcDay } from "./weatherUi.ts";
 
 describe("skyPeriod / sunTimes", () => {
   test("Tokyo morning (06:00 JST) is day, not night", () => {
-    // 2026-07-20 21:00 UTC = 2026-07-21 06:00 JST — UTC calendar day still 20th.
+    // 2026-07-20 21:00 UTC equals 2026-07-21 06:00 JST, while the UTC calendar day remains the 20th.
     const now = new Date("2026-07-20T21:00:00Z");
     expect(skyPeriod(35.68, 139.65, "Asia/Tokyo", now)).toBe("day");
   });
@@ -30,7 +30,7 @@ describe("skyPeriod / sunTimes", () => {
   });
 
   test("polar day returns alwaysUp", () => {
-    // Tromsø midsummer — sun never sets.
+    // The sun never sets during Tromsø's midsummer.
     const midsummer = new Date("2026-06-21T12:00:00Z");
     const result = sunTimesForUtcDay(69.65, 18.96, midsummer);
     expect(result.kind).toBe("polar");

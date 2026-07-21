@@ -82,7 +82,7 @@ body,
 }
 
 /* Overscroll (rubber-band) reveals the html canvas behind the fixed body
-   gradient — paint it the theme's sky color so it never flashes white. */
+   gradient, so paint it the theme's sky color and prevent a white flash. */
 html {
   background-color: var(--bg0);
   transition: background-color 1.2s ease;
@@ -93,7 +93,7 @@ body {
   font-family: var(--font);
   font-size: 16px;
   line-height: 1.5;
-  /* Atkinson is designed with its own spacing — don't tighten it. */
+  /* Atkinson is designed with its own spacing, so do not tighten it. */
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -149,7 +149,7 @@ a {
   overflow: hidden;
 }
 
-/* Children do not inherit pointer-events — pin them closed so the full-viewport
+/* Children do not inherit pointer-events, so pin them closed and let the full-viewport
    layers never steal clicks from the app chrome. */
 .sky-layer .sky-clouds,
 .sky-layer .sky-precip {
@@ -163,7 +163,7 @@ a {
    rain/snow streaks · ::after = stars (night only).
 --------------------------------------------------------------------------- */
 
-/* Sun: a simple flat disc with a soft halo — same visual language as the moon. */
+/* The sun uses a simple flat disc with a soft halo, matching the moon's visual language. */
 .sky-layer::before {
   content: "";
   position: absolute;
@@ -1334,7 +1334,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   height: 56px;
   border-radius: 50% !important;
   border: 1px solid rgba(128, 128, 160, 0.45);
-  /* Solid fallback first — color-mix is progressive enhancement. */
+  /* The solid fallback comes first because color-mix is progressive enhancement. */
   background: rgba(255, 253, 243, 0.82);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   backdrop-filter: blur(14px) saturate(1.4);
@@ -1667,7 +1667,7 @@ html[data-theme="night"] .tip-card {
   font-weight: 700;
 }
 
-/* Text-style buttons (quiet actions) — Apple link style: colored, no underline. */
+/* Text-style buttons use an Apple-like link treatment with color and no underline. */
 .linkish {
   appearance: none;
   border: none;
@@ -2045,18 +2045,6 @@ html[data-theme="night"] .tip-card {
 
 .insight-modal .btn {
   margin-top: 0.5rem;
-}
-
-.insight-celebrate {
-  border-left: 4px solid var(--deposit);
-}
-
-.insight-notice {
-  border-left: 4px solid var(--accent);
-}
-
-.insight-gentle {
-  border-left: 4px solid var(--muted);
 }
 
 @keyframes scrim-in {

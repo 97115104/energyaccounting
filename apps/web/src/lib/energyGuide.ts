@@ -121,7 +121,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       id: "event:freed",
       kind: "event",
       title: "Capacity opened up",
-      body: `You freed ${ctx.justFreed} points. Spend them on something restorative, or leave them open — either is valid.`,
+      body: `You freed ${ctx.justFreed} points. Spend them on something restorative, or leave them open; either choice is valid.`,
       because: [`You just completed a task that reserved ${ctx.justFreed} points.`],
       personalized: true,
       score: 100,
@@ -182,7 +182,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
         id: `play:${play.label}`,
         kind: "play",
         title: `Play deposit · ${playCategoryTitle(play.category)}`,
-        body: `${play.label} — a ${playCategoryTitle(play.category).toLowerCase()}-style way to tilt the ledger back.`,
+        body: `${play.label} is a ${playCategoryTitle(play.category).toLowerCase()}-style way to tilt the ledger back.`,
         because: [
           `Withdrawals (${ctx.withdrawalTotal}) are ahead of deposits (${ctx.depositTotal}) right now.`,
         ],
@@ -352,7 +352,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
       id: `recovery:${ctx.dayId}`,
       kind: "recovery",
       title: "Start your next ledger gently",
-      body: `When you start your next ledger, open with “${pick.label}” (${pick.typicalCost} points) — a familiar deposit that fits a fresh ${DAILY_ENERGY} points.`,
+      body: `When you start your next ledger, open with “${pick.label}” (${pick.typicalCost} points), a familiar deposit that fits a fresh ${DAILY_ENERGY} points.`,
       because: [
         ...because,
         `Each new ledger starts at ${DAILY_ENERGY}; energy does not carry over.`,

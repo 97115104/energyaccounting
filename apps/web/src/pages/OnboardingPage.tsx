@@ -82,7 +82,7 @@ const STEPS: Step[] = [
     eyebrow: "The idea",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Each ledger starts with 100 points of energy. Deposits add capacity back; withdrawals and tasks spend it. Completing a task frees its reserved points.",
+      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Each energy day starts with 100 points. Deposits add energy, withdrawals spend it, and planned tasks reserve capacity until they are completed.",
     glyph: <SunGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
   },
@@ -90,21 +90,21 @@ const STEPS: Step[] = [
     eyebrow: "Your day, your boundary",
     thesis: "Close it when you're done.",
     whisper:
-      "Your day ends when you close it — not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open ledger stays active across calendar days with no penalty. When you're ready, close it and start the next ledger fresh at 100.",
+      "Your day ends when you close it, and not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open ledger stays active across calendar days with no penalty. When you're ready, close it and start the next ledger fresh at 100.",
     glyph: <LedgerGlyph />,
   },
   {
     eyebrow: "The rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Plan deposits and withdrawals, audit how it actually felt, then close the ledger to lock the sheet. The little ? marks on Today explain every number as you go.",
+      "Plan deposits and withdrawals, audit how it actually felt, then close the energy day. Closed days appear under Previous days on the Dashboard: open one to review it, explicitly edit the record, or permanently delete it. Editing updates the record without reopening the day.",
     glyph: <LedgerGlyph />,
   },
   {
     eyebrow: "The boundary",
     thesis: "Private by architecture.",
     whisper:
-      "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions — every one explains itself, and every one can be dismissed.",
+      "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions, with an explanation and a dismiss control available for every suggestion.",
     glyph: <CheckGlyph />,
   },
   {
@@ -342,7 +342,7 @@ export function OnboardingPage({ user, onUser }: Props) {
             )}
             {!last && !replay && (
               <button type="button" className="linkish" onClick={() => void finish()}>
-                Skip — the ledger explains itself as you go
+                Skip for now
               </button>
             )}
             {replay && (

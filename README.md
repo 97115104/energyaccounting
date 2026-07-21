@@ -10,7 +10,7 @@ EAJ is for neurodivergent productivity 💖 An open-source, end-to-end encrypted
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Attested](https://img.shields.io/badge/attested-verify-brightgreen?logo=npm&logoColor=white)](https://attest.97115104.com/s/zn6mxj9z)
 
-EAJ is for neurodivergent productivity 💖 You start a ledger when you're ready, plan deposits and withdrawals against a finite 100 points of daily energy, complete tasks to free reserved capacity, audit how the day actually felt, and close the ledger when your day is actually done — not when the clock hits midnight. Calendar midnight is not a reliable personal day boundary for many neurodivergent people; there is no missed-day penalty and energy never carries to the next ledger. Activity labels, journal text, and task details stay encrypted on the device before they reach the server.
+EAJ is for neurodivergent productivity 💖 You start an energy day when you're ready, plan deposits and withdrawals against a finite 100 points of daily energy, complete tasks to free reserved capacity, audit how the day actually felt, and close it when your day is actually done, and not when the clock hits midnight. Calendar midnight is not a reliable personal day boundary for many neurodivergent people; there is no missed-day penalty and energy never carries to the next day. Closed energy days appear under **Previous days** on the Dashboard, where you can review them, explicitly amend the record without reopening the day, or permanently delete them. Activity labels, journal text, and task details stay encrypted on the device before they reach the server.
 
 Host target `eaj.97115104.com` (see [host.txt](host.txt)).
 

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 /**
  * Progressive-disclosure help: a small "?" button that reveals a short
- * explanation in place. HIG-style — the primary UI stays terse and the
+ * explanation in place. The HIG-style treatment keeps the primary UI terse, and the
  * verbose "what does this mean, how is it computed" copy hides until asked.
  * Works for touch and keyboard (hover-only title= tooltips do not).
  */

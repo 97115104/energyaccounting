@@ -338,7 +338,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         return { error: "Unauthorized" };
       }
       const patch = {
-        // Only write fields the client sent — rewriting omitted columns from a
+        // Only write fields the client sent because rewriting omitted columns from a
         // stale session snapshot races with concurrent profile PATCHes (geo vs
         // onboarding) and can clobber a just-saved displayName / coords.
         ...(body.displayName !== undefined

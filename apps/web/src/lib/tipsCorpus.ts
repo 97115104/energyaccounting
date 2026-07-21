@@ -3,8 +3,8 @@
  *
  * Each entry stores its trigger conditions alongside a short note on the
  * research it draws from, so the selection logic (and any future
- * embedding-based ranking) works from stored knowledge rather than
- * hardcoded strings scattered through the UI.
+ * embedding-based ranking) works from stored knowledge, with no hardcoded
+ * strings scattered through the UI.
  */
 
 import type { WeatherKind } from "./weatherUi";
@@ -25,7 +25,7 @@ export type CorpusEntry = {
   id: string;
   title: string;
   body: string;
-  /** Why this suggestion exists — kept with the data, shown nowhere (yet). */
+  /** Why this suggestion exists, kept with the data and not shown yet. */
   research: string;
   /** Higher wins when more tips match than fit. */
   priority: number;
@@ -52,7 +52,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "uv-moderate-outside",
     title: "Outdoor window is open",
-    body: "Today's UV peaks in the moderate range — outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which can make the next ledger's 100 points easier to protect.",
+    body: "Today's UV peaks in the moderate range, so outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which can make the next ledger's 100 points easier to protect.",
     research:
       "Morning/afternoon daylight advances circadian phase and improves sleep quality (Wright et al. 2013); moderate UV (3–5) is safe with basic shade.",
     priority: 6,
@@ -67,7 +67,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "uv-high-shift",
     title: "Sun is spicy today",
-    body: "Today's UV max is high. If you want outdoor time, lean toward early morning or evening, or pick a shaded route — same deposit, lower burn tax.",
+    body: "Today's UV max is high. If you want outdoor time, lean toward early morning or evening, or pick a shaded route for the same deposit with a lower burn tax.",
     research:
       "WHO UV index guidance recommends limiting midday exposure above UV 6; timing shifts preserve the mood benefit of outdoor activity.",
     priority: 7,
@@ -77,7 +77,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "rain-indoor",
     title: "Rainy day rhythm",
-    body: "Outdoor withdrawals cost extra in the rain. Indoor play deposits — music, a fiction chapter, a slow stretch — refill without fighting the weather.",
+    body: "Outdoor withdrawals cost extra in the rain. Indoor play deposits, including music, a fiction chapter, and a slow stretch, refill without fighting the weather.",
     research:
       "Weather–mood studies show rain modestly raises perceived effort for outdoor tasks; substituting indoor restorative activity avoids the penalty.",
     priority: 6,
@@ -86,7 +86,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "snow-gentle",
     title: "Snow day economics",
-    body: "Snow makes everything cost a little more — travel, errands, even getting dressed. Budget generously for withdrawals and let one thing slide guilt-free.",
+    body: "Snow makes everything cost a little more, including travel, errands, and even getting dressed. Budget generously for withdrawals and let one thing slide guilt-free.",
     research:
       "Energy Accounting practice (Toudal & Attwood) recommends inflating withdrawal estimates under adverse conditions to avoid end-of-day deficit surprises.",
     priority: 6,
@@ -104,7 +104,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "rebalance-play",
     title: "Withdrawals are ahead",
-    body: "The ledger is tilting toward withdrawals. A play deposit isn't slacking — it helps you finish the day with more energy remaining.",
+    body: "The ledger is tilting toward withdrawals. A play deposit is useful work because it helps you finish the day with more energy remaining.",
     research:
       "Attwood's Energy Accounting frames deliberate deposits as the corrective for withdrawal-heavy days; play styles follow Stuart Brown's taxonomy.",
     priority: 7,
@@ -113,7 +113,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "boundaries",
     title: "Protect the remaining pool",
-    body: "Several withdrawals are still open. Finishing one frees capacity — and saying no to a brand-new drain counts as a deposit of boundary energy.",
+    body: "Several withdrawals are still open. Finishing one frees capacity, and saying no to a brand-new drain counts as a deposit of boundary energy.",
     research:
       "Task-switching and open-loop tasks carry attentional residue (Leroy 2009); closing loops returns capacity faster than starting new ones.",
     priority: 6,
@@ -122,7 +122,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "deposit-window",
     title: "Room for a deposit",
-    body: "There's meaningful capacity left today. A short restorative deposit now often steadies the whole rest of the day — compounding interest, but for energy.",
+    body: "There's meaningful capacity left today. A short restorative deposit now often steadies the rest of the day, with an effect that resembles compounding interest for energy.",
     research:
       "Micro-break research (Albulescu et al. 2022) shows breaks as short as 10 minutes measurably reduce fatigue and boost vigor.",
     priority: 5,

@@ -96,6 +96,30 @@ port_in_use() {
   fi
 }
 
+listeners_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+  fi
+}
+
+# A pre-day-lifecycle API returns 404 for /api/days/active; 401 means the route exists.
+stale_api_listener() {
+  local code
+  code="$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/days/active" 2>/dev/null || echo "000")"
+  [[ "$code" == "404" ]]
+}
+
+stop_port_listeners() {
+  local port="$1"
+  local pid
+  for pid in $(listeners_on_port "$port"); do
+    info "Stopping stale listener on :$port (pid $pid)"
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
+
 start_services() {
   cd "$REPO_ROOT"
 
@@ -112,7 +136,13 @@ start_services() {
   mkdir -p "$DATA_DIR"
 
   if port_in_use "$PORT"; then
-    warn "Port $PORT already in use; will health-check existing listener"
+    if stale_api_listener; then
+      warn "Port $PORT is serving an outdated API (missing /api/days/active); restarting"
+      stop_port_listeners "$PORT"
+      start_background "cd \"$REPO_ROOT\" && bun run --filter @eaj/server dev"
+    else
+      warn "Port $PORT already in use; will health-check existing listener"
+    fi
   else
     start_background "cd \"$REPO_ROOT\" && bun run --filter @eaj/server dev"
   fi

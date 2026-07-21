@@ -77,7 +77,22 @@ async function linesForDay(dayId: string) {
     .orderBy(taskLineTable.sort);
 }
 
-/** Plaintext stat row for one ledger — shared by /stats and export. */
+/** Closed ledgers accept amendments; keep the stored closing balance honest after each one. */
+async function refreshClosedBalance(day: typeof dayTable.$inferSelect) {
+  if (day.phase !== "closed") return;
+  const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, day.id));
+  const tasks: TaskCosts[] = lines.map((l) => ({
+    side: l.side as TaskCosts["side"],
+    planned: l.plannedCost,
+    actual: l.actualCost,
+  }));
+  await db
+    .update(dayTable)
+    .set({ closingBalance: closingBalance(day.openingBalance, tasks) })
+    .where(eq(dayTable.id, day.id));
+}
+
+/** Plaintext stat row for one ledger, shared by /stats and export. */
 async function statPointForDay(d: typeof dayTable.$inferSelect) {
   const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
   const tasks: AllocatableTask[] = lines.map((l) => ({
@@ -371,10 +386,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         set.status = 404;
         return { error: "Day not found." };
       }
-      if (day.phase === "closed") {
-        set.status = 400;
-        return { error: "Day is closed." };
-      }
       const planned = clampCost(body.plannedCost);
       const actual =
         body.actualCost === undefined || body.actualCost === null
@@ -391,8 +402,10 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         actual: l.actualCost,
         completed: l.completed,
       }));
+      // Amendments to a closed ledger record what actually happened, so the
+      // live capacity guard does not apply to them.
       const avail = availableCapacity(day.openingBalance, allocatable);
-      if (planned > avail) {
+      if (day.phase !== "closed" && planned > avail) {
         set.status = 400;
         return {
           error: `That uses ${planned} points, and only ${avail} remain available to allocate.`,
@@ -457,6 +470,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           lastUsed: day.date,
         });
       }
+      await refreshClosedBalance(day);
       return { id };
     },
     {
@@ -485,10 +499,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       if (!day) {
         set.status = 404;
         return { error: "Day not found." };
-      }
-      if (day.phase === "closed") {
-        set.status = 400;
-        return { error: "Day is closed." };
       }
       const line = await db.query.taskLineTable.findFirst({
         where: and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)),
@@ -560,7 +570,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           completed: nextCompleted,
         };
       });
-      if (reservedCapacity(projected) > day.openingBalance) {
+      if (day.phase !== "closed" && reservedCapacity(projected) > day.openingBalance) {
         set.status = 400;
         return { error: "That change would reserve more points than remain available." };
       }
@@ -605,6 +615,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           sort: body.sort === undefined ? line.sort : body.sort,
         })
         .where(eq(taskLineTable.id, line.id));
+      await refreshClosedBalance(day);
       return { ok: true };
     },
     {
@@ -634,10 +645,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 404;
       return { error: "Day not found." };
     }
-    if (day.phase === "closed") {
-      set.status = 400;
-      return { error: "Day is closed." };
-    }
     const line = await db.query.taskLineTable.findFirst({
       where: and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)),
     });
@@ -651,6 +658,26 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     await db
       .delete(taskLineTable)
       .where(and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)));
+    await refreshClosedBalance(day);
+    return { ok: true };
+  })
+  .delete("/days/:dayId", async ({ params, request, set }) => {
+    const user = await requireFullUser(request);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
+    }
+    if (day.phase !== "closed") {
+      set.status = 400;
+      return { error: "Only a closed day can be deleted from Previous days." };
+    }
+    // Foreign-key cascading removes the encrypted lines with the ledger.
+    await db.delete(dayTable).where(eq(dayTable.id, day.id));
     return { ok: true };
   })
   .patch(
@@ -666,9 +693,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         set.status = 404;
         return { error: "Day not found." };
       }
-      if (day.phase === "closed") {
+      // A closed ledger accepts amendments to its reflections but never
+      // returns to the plan/audit lifecycle: one active ledger at a time.
+      if (day.phase === "closed" && body.phase !== undefined) {
         set.status = 400;
-        return { error: "Day is closed." };
+        return { error: "A closed ledger cannot be reopened." };
       }
       await db
         .update(dayTable)

@@ -3,7 +3,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-# systemd does not load ~/.bashrc — expose Bun for hosting-site@
+# systemd does not load ~/.bashrc, so expose Bun for hosting-site@
 export PATH="${HOME}/.bun/bin:${PATH}"
 
 # Load .env if it exists (set +e so invalid lines don't kill startup)
@@ -26,7 +26,7 @@ mkdir -p "$DATA_DIR"
 export COOKIE_SECURE="${COOKIE_SECURE:-1}"
 
 if ! command -v bun >/dev/null 2>&1; then
-  echo "▸ bun is required — install from https://bun.sh" >&2
+  echo "▸ bun is required; install it from https://bun.sh" >&2
   exit 1
 fi
 

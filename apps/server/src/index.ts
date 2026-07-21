@@ -25,7 +25,7 @@ const app = new Elysia()
 
 if (existsSync(webDist)) {
   const indexHtml = () => Bun.file(join(webDist, "index.html"));
-  // Bare "/" and client routes — @elysiajs/static indexHTML misses these in production
+  // Handle "/" and client routes because @elysiajs/static indexHTML misses them in production.
   for (const path of ["/", "/auth", "/onboarding", "/dashboard", "/settings"]) {
     app.get(path, indexHtml);
   }

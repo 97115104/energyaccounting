@@ -18,7 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
 import { api } from "../lib/api";
@@ -170,6 +170,7 @@ function LightbulbIcon() {
 
 export function TodayPage({ user }: { user: UserProfile }) {
   const [params, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const historyDayId = params.get("day");
   const isHistoryView = !!historyDayId;
   const [day, setDay] = useState<DayPayload | null>(null);
@@ -189,7 +190,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Non-error status for the details dialog, e.g. dictation hit the cap.
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [dismissedGuideIds, setDismissedGuideIds] = useState<Set<string>>(() => new Set());
-  // The welcome walkthrough dismisses once, forever — not per day.
+  // The welcome walkthrough dismisses once, forever, and not once per day.
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
     try {
       return localStorage.getItem("eaj-guide-welcome-dismissed") === "1";
@@ -204,6 +205,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [dndBusy, setDndBusy] = useState(false);
   // Swallow the click that browsers fire immediately after a drag ends.
   const suppressOpenRef = useRef(false);
+  // Explicit edit mode for a closed ledger opened from history: amendments
+  // correct the record without reopening the day's lifecycle.
+  const [amending, setAmending] = useState(false);
+  const [deletingDay, setDeletingDay] = useState(false);
+  // In-app confirmation for deleting a previous day (styled like other dialogs).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // End-of-day insights modal, populated when the day closes.
   const [closeCelebration, setCloseCelebration] = useState<{
     closingBalance: number;
@@ -227,6 +234,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setJustFreed(undefined);
     setStatSeries([]);
     setDetailLineId(null);
+    setAmending(false);
     if (day?.id) setDismissedGuideIds(loadDismissedGuideIds(day.id));
   }, [day?.id, historyDayId]);
 
@@ -263,8 +271,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setNoActive(false);
     } else if (historyDayId) {
       d = await api<DayPayload>(`/api/days/${historyDayId}`);
-      // History deep-links are read-only by contract; a still-open ledger
-      // belongs on the active view instead.
+      // History deep-links open read-only (with an explicit edit toggle);
+      // a still-open ledger belongs on the active view instead.
       if (d && d.phase !== "closed") {
         setSearchParams({}, { replace: true });
         setLoading(false);
@@ -351,6 +359,16 @@ export function TodayPage({ user }: { user: UserProfile }) {
       cancelled = true;
     };
   }, [dayPhase, day?.id]);
+
+  // Escape dismisses the delete confirmation unless a request is in flight.
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !deletingDay) setConfirmingDelete(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmingDelete, deletingDay]);
 
   // Escape closes the celebration modal; Tab stays inside it.
   useEffect(() => {
@@ -667,7 +685,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const dek = getSessionDek();
     const ledgerId = dayId ?? day?.id;
     if (!dek || !ledgerId) return false;
-    if (!dayId && day && cost > day.availableCapacity) {
+    // Closed-ledger amendments record what happened; capacity only limits live planning.
+    if (!dayId && day && day.phase !== "closed" && cost > day.availableCapacity) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
       );
@@ -712,6 +731,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
       return null;
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function deletePreviousDay() {
+    if (!day || day.phase !== "closed") return;
+    setDeletingDay(true);
+    setError(null);
+    try {
+      await api(`/api/days/${day.id}`, { method: "DELETE" });
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete this previous day.");
+      setConfirmingDelete(false);
+      setDeletingDay(false);
     }
   }
 
@@ -1097,7 +1130,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
           ))}
           {closeCelebration.insights.length === 0 && (
-            <p className="muted">The sheet is locked. Rest is also productive.</p>
+            <p className="muted">The day is closed. Rest is also productive.</p>
           )}
           {closeCelebration.recovery && (
             <GuideCard
@@ -1153,7 +1186,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Start when you&apos;re ready</h2>
         <p className="muted">
           Your energy day follows you, not the clock. Irregular sleep, long focus stretches, shift
-          work, and time blindness are all normal here — there is no missed-day penalty. Start a
+          work, and time blindness are all normal here, and there is no missed-day penalty. Start a
           ledger when you want to plan; it stays open until you close it, even across midnight.
         </p>
         {error && <p className="error">{error}</p>}
@@ -1194,14 +1227,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   const closed = day?.phase === "closed";
-  const readOnly = !!day && day.phase === "closed";
+  const readOnly = !!day && day.phase === "closed" && !amending;
   const activeLine = activeDragId ? day.lines.find((l) => l.id === activeDragId) : null;
 
   return (
     <div className="today-root">
       <div
         aria-hidden={
-          closeCelebration || detailLineId || guideOpen || (draftSide && !readOnly)
+          closeCelebration || confirmingDelete || detailLineId || guideOpen || (draftSide && !readOnly)
             ? true
             : undefined
         }
@@ -1210,31 +1243,44 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <p className="ob-eyebrow">Energy ledger · started {ledgerDate}</p>
         {spansMidnight && (
           <p className="muted ledger-span-note">
-            Still your active energy day — close it when your day is actually done.
+            This is still your active energy day; close it when your day is actually done.
           </p>
         )}
         {isHistoryView && closed && (
           <div style={{ marginBottom: "0.75rem" }}>
-            <p className="muted">Viewing a closed ledger from history.</p>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => setSearchParams({}, { replace: true })}
-            >
-              Back to active ledger
-            </button>
-          </div>
-        )}
-        {isHistoryView && day && !closed && (
-          <div style={{ marginBottom: "0.75rem" }}>
-            <p className="muted">Viewing your active ledger from the dashboard.</p>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => setSearchParams({}, { replace: true })}
-            >
-              Open on Today
-            </button>
+            <p className="muted">
+              {amending
+                ? "Editing a closed ledger. Changes update its recorded balance."
+                : "Viewing a closed ledger from history."}
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setSearchParams({}, { replace: true })}
+              >
+                Back to active ledger
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setAmending((v) => !v)}
+              >
+                {amending ? "Done editing" : "Edit this ledger"}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={deletingDay}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete this day
+              </button>
+              <HelpTip label="deleting a previous day">
+                Deleting removes this closed day and all of its entries from your history and
+                Dashboard trends. Your active day is never affected. This cannot be undone.
+              </HelpTip>
+            </div>
           </div>
         )}
         <p className="muted" style={{ marginTop: "0.75rem" }}>
@@ -1312,7 +1358,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className={`btn secondary${day.phase === "plan" ? " phase-active" : ""}`}
             aria-pressed={day.phase === "plan"}
-            disabled={readOnly}
+            disabled={closed}
             onClick={() => void setPhase("plan")}
           >
             Morning plan
@@ -1321,7 +1367,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className={`btn secondary${day.phase === "audit" ? " phase-active" : ""}`}
             aria-pressed={day.phase === "audit"}
-            disabled={readOnly}
+            disabled={closed}
             onClick={() => void setPhase("audit")}
           >
             Evening audit
@@ -1330,17 +1376,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className="btn accent"
             aria-pressed={closed}
-            disabled={readOnly}
+            disabled={closed}
             onClick={() => void setPhase("closed")}
           >
             {closed ? "Ledger closed" : "Close ledger"}
           </button>
           <HelpTip label="the daily rhythm">
-            Plan deposits and withdrawals, audit real costs and how it felt, then close to lock the
-            sheet. Your next ledger starts fresh at 100 when you choose to start it.
+            Plan deposits and withdrawals, audit real costs and how it felt, then close the energy
+            day. Previous days stay available on the Dashboard to review, edit, or delete. Your next
+            ledger starts fresh at 100 when you choose to start it.
           </HelpTip>
         </div>
-        {guide.primary && !readOnly && (
+        {guide.primary && !closed && (
           <GuideCard
             item={guide.primary}
             closed={readOnly}
@@ -1753,6 +1800,49 @@ export function TodayPage({ user }: { user: UserProfile }) {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {confirmingDelete && day && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deletingDay) setConfirmingDelete(false);
+          }}
+        >
+          <div
+            className="panel insight-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-day-title"
+            aria-describedby="delete-day-body"
+          >
+            <h2 id="delete-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Delete this day?
+            </h2>
+            <p id="delete-day-body" className="muted">
+              The ledger from {day.date} and all of its entries will be removed from your history
+              and Dashboard trends. This cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={deletingDay}
+                onClick={() => void deletePreviousDay()}
+              >
+                {deletingDay ? "Deleting…" : "Delete this day"}
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={deletingDay}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Keep it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

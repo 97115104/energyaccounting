@@ -120,6 +120,10 @@ export function DashboardPage({ user }: { user: UserProfile }) {
   }, []);
 
   const displayed = useMemo(() => bucketSeries(series), [series]);
+  const previousDays = useMemo(
+    () => series.filter((point) => point.phase === "closed"),
+    [series],
+  );
   const maxAbs = useMemo(() => {
     let m = 1;
     for (const p of displayed) m = Math.max(m, Math.abs(p.closingBalance), Math.abs(p.attwoodNet));
@@ -185,7 +189,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         {loading && <p className="muted">Reading the ledger…</p>}
         <div className="dashboard-primary">
           <div>
-            <span className="dashboard-value">{latest?.closingBalance ?? "—"}</span>
+            <span className="dashboard-value">{latest?.closingBalance ?? "Unavailable"}</span>
             <span className="muted">latest energy remaining</span>
           </div>
           <p>{completionRate}% of planned lines completed in this period.</p>
@@ -266,7 +270,12 @@ export function DashboardPage({ user }: { user: UserProfile }) {
 
       <section className="panel dashboard-days">
         <div className="dashboard-heading">
-          <h2>All ledgers</h2>
+          <div>
+            <h2>Previous days</h2>
+            <p className="muted">
+              Open a closed energy day to review it, edit the record, or delete it.
+            </p>
+          </div>
           <button type="button" className="btn secondary" onClick={() => setDetailsOpen((open) => !open)}>
             {detailsOpen ? "Hide details" : "Show details"}
           </button>
@@ -291,7 +300,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               </tr>
             </thead>
             <tbody>
-              {series.map((p) => (
+              {previousDays.map((p) => (
                 <tr
                   key={p.id}
                   className="dashboard-day-row"
@@ -330,6 +339,9 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               ))}
             </tbody>
           </table>
+          {!previousDays.length && (
+            <p className="muted">Closed energy days will appear here.</p>
+          )}
         </div>
         )}
       </section>

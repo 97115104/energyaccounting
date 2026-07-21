@@ -1,6 +1,6 @@
 // Local heuristics over the user's own numeric history ("machine intelligence"
 // without any external calls). Works entirely on the plaintext fields the
-// server can aggregate — balances, costs, completion flags, feel ratings —
+// server can aggregate, including balances, costs, completion flags, and feel ratings,
 // so encrypted labels and journals never leave the device's trust boundary.
 //
 // Tone guardrail: rules fire as celebration, neutral observation, or gentle
