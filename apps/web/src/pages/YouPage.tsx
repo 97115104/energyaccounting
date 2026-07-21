@@ -14,6 +14,7 @@ import { Butterfly } from "../components/Butterfly";
 import { DictatableField } from "../components/DictatableField";
 import { DictationControl } from "../components/DictationControl";
 import { IdentityMark } from "../components/IdentityMark";
+import { IntelligenceOverview, type IntelligenceStatus } from "../components/IntelligenceOverview";
 import { ProfileSections } from "../components/ProfileSections";
 import { SuggestionCard } from "../components/SuggestionCard";
 import { WingDetails, WingFamilyPicker } from "../components/IdentityPickers";
@@ -29,6 +30,10 @@ import { normalizeWing, type WingConfig } from "../lib/butterflyGeometry";
 import { getSessionDek } from "../lib/crypto";
 import { useDictation } from "../lib/useDictation";
 import { loadPersonalData, type PersonalData } from "../lib/personalData";
+import {
+  buildPersonalIntelligence,
+  type PersonalIntelligence,
+} from "../lib/personalIntelligence";
 import { draftWorkWithYou, type DraftField, type DraftLine } from "../lib/youDraft";
 import {
   PALETTE_PRESETS,
@@ -80,6 +85,8 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [suggestions, setSuggestions] = useState<TraitSuggestion[]>([]);
   const [drafts, setDrafts] = useState<DraftLine[]>([]);
+  const [personalIntel, setPersonalIntel] = useState<PersonalIntelligence | null>(null);
+  const [intelStatus, setIntelStatus] = useState<IntelligenceStatus>("loading");
   // Personal data is decrypted once; suggestions and drafts re-filter locally.
   const dataRef = useRef<PersonalData | null>(null);
   const [shares, setShares] = useState<ShareRow[]>([]);
@@ -117,6 +124,13 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
       attwoodNet: d.attwoodNet,
       feelRating: d.feelRating,
     }));
+    setPersonalIntel(
+      buildPersonalIntelligence({
+        catalog: data.catalog,
+        days: data.days,
+        journalDays: data.days.filter((day) => !!day.journal?.trim()).length,
+      }),
+    );
     const dismissedTraits = new Set(next.dismissedTraitIds);
     const acceptedTraits = new Set(next.traits.map((t) => t.id));
     setSuggestions(
@@ -167,8 +181,13 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         if (cancelled) return;
         dataRef.current = data;
         recomputeIntel(profileRef.current);
+        setIntelStatus("ready");
       } catch {
-        /* no suggestions or drafts without an unlocked catalog */
+        if (!cancelled) {
+          dataRef.current = null;
+          setPersonalIntel(null);
+          setIntelStatus("error");
+        }
       }
     })();
     return () => {
@@ -305,6 +324,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         user.displayName ?? null,
         profileRef.current,
         sections,
+        personalIntel?.overview ?? [],
       );
       const res = await api<{ token: string; share: ShareRow }>("/api/you/shares", {
         method: "POST",
@@ -333,6 +353,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   }
 
   const anySectionSelected =
+    (sections.overview && (personalIntel?.overview.length ?? 0) > 0) ||
     sections.about ||
     sections.communication ||
     sections.support ||
@@ -398,6 +419,8 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
       </section>
 
       {error && <p className="error">{error}</p>}
+
+      <IntelligenceOverview intelligence={personalIntel} status={intelStatus} />
 
       {/* Identity: symbol, base, palette. */}
       <section className="panel you-section" aria-labelledby="you-identity-title">
@@ -554,10 +577,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
       <section className="panel you-section" aria-labelledby="you-profile-title">
         <h3 id="you-profile-title">How to work with you</h3>
         <p className="muted">
-          Written in your own words and encrypted on this device before it is saved. Let it draw
-          a first draft from your tasks and journal, or write it yourself. You can dictate any
-          field. Nothing here is visible to anyone unless you share it below.
+          Your own words for people you choose to share with. Optional draft lines come from
+          your history; edit them in your voice. Nothing here is visible to anyone unless you
+          share it below.
         </p>
+
         <label className="you-autodraft-toggle">
           <input
             type="checkbox"
@@ -568,18 +592,39 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           Suggest lines from my journal and tasks
         </label>
 
+        {(profile.about.trim() || profile.communication.trim() || profile.support.trim()) && (
+          <div className="you-profile-summary">
+            {profile.about.trim() && (
+              <div>
+                <h4>About you</h4>
+                <p>{profile.about}</p>
+              </div>
+            )}
+            {profile.communication.trim() && (
+              <div>
+                <h4>How to communicate with you</h4>
+                <p>{profile.communication}</p>
+              </div>
+            )}
+            {profile.support.trim() && (
+              <div>
+                <h4>What helps on a hard day</h4>
+                <p>{profile.support}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {profile.autoDraft && drafts.length === 0 && (
           <p className="muted you-drafts-empty">
-            No new lines to suggest yet. They appear here as your journal and tasks grow, or after
-            you dismiss the current ones.
+            No new lines to suggest yet. Suggestions appear as your days and tasks grow.
           </p>
         )}
         {profile.autoDraft && drafts.length > 0 && (
           <div className="you-drafts">
             <h4>Suggested from your journal</h4>
             <p className="muted">
-              Each line is drawn from your own history and says why. Add the ones that fit; edit
-              them afterward in your own voice.
+              Add what feels true. Each line explains the history behind it.
             </p>
             <ul className="you-suggestions">
               {drafts.map((line) => (
@@ -599,33 +644,40 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           </div>
         )}
 
-        <DictatableField
-          label="About you"
-          multiline
-          value={profile.about}
-          maxLength={2000}
-          disabled={!profileLoaded}
-          onChange={(v) => applyProfile({ ...profileRef.current, about: v })}
-          onCommit={(v) => saveProfile({ about: v })}
-        />
-        <DictatableField
-          label="How to communicate with you"
-          multiline
-          value={profile.communication}
-          maxLength={2000}
-          disabled={!profileLoaded}
-          onChange={(v) => applyProfile({ ...profileRef.current, communication: v })}
-          onCommit={(v) => saveProfile({ communication: v })}
-        />
-        <DictatableField
-          label="What helps on a hard day"
-          multiline
-          value={profile.support}
-          maxLength={2000}
-          disabled={!profileLoaded}
-          onChange={(v) => applyProfile({ ...profileRef.current, support: v })}
-          onCommit={(v) => saveProfile({ support: v })}
-        />
+        <details className="you-manual-flow">
+          <summary>Add or edit details manually</summary>
+          <p className="muted">
+            Optional details add your own voice to the perspective. They are encrypted on this
+            device before being saved, and you can dictate any field.
+          </p>
+          <DictatableField
+            label="About you"
+            multiline
+            value={profile.about}
+            maxLength={2000}
+            disabled={!profileLoaded}
+            onChange={(v) => applyProfile({ ...profileRef.current, about: v })}
+            onCommit={(v) => saveProfile({ about: v })}
+          />
+          <DictatableField
+            label="How to communicate with you"
+            multiline
+            value={profile.communication}
+            maxLength={2000}
+            disabled={!profileLoaded}
+            onChange={(v) => applyProfile({ ...profileRef.current, communication: v })}
+            onCommit={(v) => saveProfile({ communication: v })}
+          />
+          <DictatableField
+            label="What helps on a hard day"
+            multiline
+            value={profile.support}
+            maxLength={2000}
+            disabled={!profileLoaded}
+            onChange={(v) => applyProfile({ ...profileRef.current, support: v })}
+            onCommit={(v) => saveProfile({ support: v })}
+          />
+        </details>
         <p className="muted you-save-note" aria-live="polite">
           {saving ? "Saving…" : savedAt ? "Saved." : ""}
         </p>
@@ -677,6 +729,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         <div className="you-share-sections">
           {(
             [
+              ["overview", "Energy intelligence overview"],
               ["about", "About you"],
               ["communication", "How to communicate with you"],
               ["support", "What helps on a hard day"],
@@ -688,6 +741,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               <input
                 type="checkbox"
                 checked={sections[key]}
+                disabled={key === "overview" && (personalIntel?.overview.length ?? 0) === 0}
                 onChange={(e) => setSections({ ...sections, [key]: e.target.checked })}
               />
               {label}
@@ -788,6 +842,14 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           variant="print"
           palette={liveIdentity.palette}
           name={user.displayName}
+          overview={
+            sections.overview
+              ? personalIntel?.overview.map((line) => ({
+                  text: line.text,
+                  because: line.because,
+                }))
+              : undefined
+          }
           about={sections.about ? profile.about : undefined}
           communication={sections.communication ? profile.communication : undefined}
           support={sections.support ? profile.support : undefined}

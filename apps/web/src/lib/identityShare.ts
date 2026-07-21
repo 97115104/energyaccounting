@@ -9,13 +9,19 @@
 
 import type { AcceptedTrait } from "./butterflyTraits";
 import { normalizeIdentity, type IdentityConfig } from "./identity";
-import type { ColorMeaning, ShareSections, YouProfile } from "./youProfile";
+import type {
+  ColorMeaning,
+  ShareSections,
+  SharedOverviewLine,
+  YouProfile,
+} from "./youProfile";
 import { selectShareContent } from "./youProfile";
 
 export type SharePayload = {
   version: 1;
   name: string | null;
   identity: IdentityConfig;
+  overview?: SharedOverviewLine[];
   about?: string;
   communication?: string;
   support?: string;
@@ -28,12 +34,13 @@ export function buildSharePayload(
   name: string | null,
   profile: YouProfile,
   sections: ShareSections,
+  overview: SharedOverviewLine[] = [],
 ): SharePayload {
   return {
     version: 1,
     name: name?.trim() || null,
     identity,
-    ...selectShareContent(profile, sections),
+    ...selectShareContent(profile, sections, overview),
   };
 }
 
@@ -78,10 +85,31 @@ export function parseSharePayload(input: unknown): SharePayload | null {
         return [];
       })
     : undefined;
+  const overview = Array.isArray(raw.overview)
+    ? raw.overview
+        .flatMap((line): SharedOverviewLine[] => {
+          if (typeof line === "string" && line.trim()) {
+            return [{ text: line.trim().slice(0, 400), because: [] }];
+          }
+          if (!line || typeof line !== "object") return [];
+          const r = line as Record<string, unknown>;
+          if (typeof r.text !== "string" || !r.text.trim()) return [];
+          const because = Array.isArray(r.because)
+            ? r.because
+                .filter((reason): reason is string => typeof reason === "string")
+                .map((reason) => reason.trim().slice(0, 240))
+                .filter(Boolean)
+                .slice(0, 4)
+            : [];
+          return [{ text: r.text.trim().slice(0, 400), because }];
+        })
+        .slice(0, 8)
+    : undefined;
   return {
     version: 1,
     name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : null,
     identity,
+    ...(overview?.length ? { overview } : {}),
     ...(str(raw.about) ? { about: str(raw.about) } : {}),
     ...(str(raw.communication) ? { communication: str(raw.communication) } : {}),
     ...(str(raw.support) ? { support: str(raw.support) } : {}),

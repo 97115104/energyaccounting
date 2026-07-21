@@ -148,6 +148,7 @@ export async function decryptYouProfile(
 
 /** Sections a person can include in a share or export, each opt-in. */
 export type ShareSections = {
+  overview: boolean;
   about: boolean;
   communication: boolean;
   support: boolean;
@@ -156,6 +157,7 @@ export type ShareSections = {
 };
 
 export const DEFAULT_SHARE_SECTIONS: ShareSections = {
+  overview: false,
   about: false,
   communication: false,
   support: false,
@@ -168,11 +170,32 @@ export const DEFAULT_SHARE_SECTIONS: ShareSections = {
  * the sections the person turned on. Never include dismissed ids or anything
  * the person did not choose.
  */
+export type SharedOverviewLine = {
+  text: string;
+  because: string[];
+};
+
 export function selectShareContent(
   profile: YouProfile,
   sections: ShareSections,
-): Partial<Pick<YouProfile, "about" | "communication" | "support" | "traits" | "colorMeanings">> {
+  overview: SharedOverviewLine[] = [],
+): Partial<
+  Pick<YouProfile, "about" | "communication" | "support" | "traits" | "colorMeanings"> & {
+    overview: SharedOverviewLine[];
+  }
+> {
+  const sharedOverview = overview
+    .map((line) => ({
+      text: line.text.trim().slice(0, 400),
+      because: line.because
+        .map((reason) => reason.trim().slice(0, 240))
+        .filter(Boolean)
+        .slice(0, 4),
+    }))
+    .filter((line) => line.text)
+    .slice(0, 8);
   return {
+    ...(sections.overview && sharedOverview.length ? { overview: sharedOverview } : {}),
     ...(sections.about && profile.about.trim() ? { about: profile.about.trim() } : {}),
     ...(sections.communication && profile.communication.trim()
       ? { communication: profile.communication.trim() }

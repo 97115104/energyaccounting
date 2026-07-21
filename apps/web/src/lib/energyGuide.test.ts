@@ -155,6 +155,38 @@ describe("buildGuide", () => {
     }
   });
 
+  test("personal state selects a named, research-backed nourishment tip", () => {
+    const guide = buildGuide(
+      guideContext({
+        firstName: "Alex",
+        recentLowFeel: true,
+        recentRatedSample: 3,
+        weatherKind: "cloud",
+        uvMax: null,
+        isDaylight: false,
+      }),
+    );
+    const item = guide.items.find((entry) => entry.id === "context:low-feel-nourish");
+    expect(item?.body).toContain("Alex");
+    expect(item?.personalized).toBe(true);
+    expect(item?.research).toBeTruthy();
+    expect(item?.because[0]).toContain("3 most recently rated");
+  });
+
+  test("heavy weekday personal tip uses the shared signal", () => {
+    const guide = buildGuide(
+      guideContext({
+        heavyWeekday: "Monday",
+        weatherKind: "cloud",
+        uvMax: null,
+        isDaylight: false,
+      }),
+    );
+    const item = guide.items.find((entry) => entry.id === "context:heavy-weekday");
+    expect(item?.body).toContain("Monday");
+    expect(item?.personalized).toBe(true);
+  });
+
   test("next day capacity is always 100", () => {
     const plan = recoveryPlan(
       recoveryContext({

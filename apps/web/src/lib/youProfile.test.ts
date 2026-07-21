@@ -86,6 +86,18 @@ describe("selectShareContent", () => {
     });
     expect(out).toEqual({});
   });
+
+  test("learned overview is shared only when explicitly selected", () => {
+    const overview = [{ text: "Quiet walks often add energy.", because: ["Logged 7 times."] }];
+    expect(selectShareContent(profile, DEFAULT_SHARE_SECTIONS, overview)).toEqual({});
+    expect(
+      selectShareContent(
+        profile,
+        { ...DEFAULT_SHARE_SECTIONS, overview: true },
+        overview,
+      ),
+    ).toEqual({ overview });
+  });
 });
 
 describe("parseSharePayload", () => {
@@ -102,11 +114,15 @@ describe("parseSharePayload", () => {
         motion: "auto",
       },
       about: "Hello.",
+      overview: [{ text: "Quiet walks often add energy.", because: ["Logged 7 times."] }],
       traits: [{ id: "t", kind: "interest", label: "Maps" }],
     });
     expect(out?.name).toBe("Alex");
     expect(out?.identity.symbol).toBe("gold-infinity");
     expect(out?.about).toBe("Hello.");
+    expect(out?.overview).toEqual([
+      { text: "Quiet walks often add energy.", because: ["Logged 7 times."] },
+    ]);
     expect(out?.traits?.[0]?.label).toBe("Maps");
   });
 

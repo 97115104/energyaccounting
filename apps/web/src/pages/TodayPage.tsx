@@ -39,6 +39,12 @@ import {
   type Insight,
   type StatPoint,
 } from "../lib/insights";
+import {
+  buildPersonalIntelligence,
+  type IntelligenceCatalogItem,
+  type IntelligenceDay,
+} from "../lib/personalIntelligence";
+import { loadPersonalData } from "../lib/personalData";
 import { recentDisabledReason, repeatActionVisible } from "../lib/planShortcuts";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
@@ -308,6 +314,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
   } | null>(null);
   // Numeric history, feeding the planning hint and the recovery plan.
   const [statSeries, setStatSeries] = useState<StatPoint[]>([]);
+  // Full decrypted history for tipSignals — same corpus as You, not the
+  // day-filtered suggestions list used for add-to-day ranking.
+  const [intelCatalog, setIntelCatalog] = useState<IntelligenceCatalogItem[]>([]);
+  const [intelDays, setIntelDays] = useState<IntelligenceDay[]>([]);
   // The Trends stat card's detail dialog.
   const [trendsOpen, setTrendsOpen] = useState(false);
   const speechRef = useRef<SpeechRec | null>(null);
@@ -484,6 +494,43 @@ export function TodayPage({ user }: { user: UserProfile }) {
       })
       .catch(() => {
         if (!cancelled) setStatSeries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [day?.id]);
+
+  // Tip personalization needs the full catalog and closed-day feel history,
+  // which the suggestions endpoint deliberately truncates and weekday-filters.
+  useEffect(() => {
+    if (!getSessionDek()) return;
+    let cancelled = false;
+    void loadPersonalData()
+      .then((data) => {
+        if (cancelled) return;
+        setIntelCatalog(
+          data.catalog.map((item) => ({
+            side: item.side,
+            label: item.label,
+            useCount: item.useCount,
+          })),
+        );
+        setIntelDays(
+          data.days.map((d) => ({
+            date: d.date,
+            phase: d.phase,
+            closingBalance: d.closingBalance,
+            attwoodNet: d.attwoodNet,
+            depositTotal: d.depositTotal,
+            withdrawalTotal: d.withdrawalTotal,
+            feelRating: d.feelRating,
+          })),
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIntelCatalog([]);
+        setIntelDays([]);
       });
     return () => {
       cancelled = true;
@@ -777,6 +824,16 @@ export function TodayPage({ user }: { user: UserProfile }) {
     [dayPhase, statSeries, day],
   );
 
+  const personalIntel = useMemo(
+    () =>
+      buildPersonalIntelligence({
+        catalog: intelCatalog,
+        days: intelDays,
+        forDate: dayDate,
+      }),
+    [intelCatalog, intelDays, dayDate],
+  );
+
   // Closed days in date order power the Trends card and its detail dialog.
   const closedStats = useMemo(
     () =>
@@ -842,6 +899,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
         withdrawalHeavy: playHeavy,
         existingLabels: day.lines.map((line) => line.label ?? ""),
         candidates: suggestions,
+        firstName: user.displayName?.trim().split(/\s+/)[0],
+        recentLowFeel: personalIntel.tipSignals.recentLowFeel,
+        recentRatedSample: personalIntel.tipSignals.recentRatedSample,
+        timeOfDay:
+          new Date().getHours() < 12
+            ? "morning"
+            : new Date().getHours() < 17
+              ? "afternoon"
+              : "evening",
+        familiarRestorer: personalIntel.tipSignals.familiarRestorer,
+        heavyWeekday: personalIntel.tipSignals.heavyWeekday,
         justFreed,
         planningHint: hint,
         dismissedIds: dismissedGuideIds,
@@ -856,6 +924,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
     currentSkyPeriod,
     playHeavy,
     suggestions,
+    user.displayName,
+    personalIntel,
     justFreed,
     hint,
     dismissedGuideIds,
@@ -2318,12 +2388,26 @@ function GuideCard(props: {
     <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
       <div className="guide-card-head">
         <strong>{item.title}</strong>
-        {/* Research items link straight to their citation; personalized and
-            custom-provenance items keep their plain-text label. */}
-        {item.provenance != null || item.personalized || !item.sourceUrl ? (
+        {/* Prefer an honest dual label when history timed the tip and research
+            exists: history provenance stays visible, citation stays one tap. */}
+        {item.provenance != null ? (
+          <span className="guide-provenance">{item.provenance}</span>
+        ) : item.personalized && item.sourceUrl ? (
+          <span className="guide-provenance guide-provenance-split">
+            From your history
+            <a
+              className="guide-provenance-link"
+              href={item.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Reference
+              <span aria-hidden="true"> ↗</span>
+            </a>
+          </span>
+        ) : item.personalized || !item.sourceUrl ? (
           <span className="guide-provenance">
-            {item.provenance ??
-              (item.personalized ? "From your history, on this device" : "Research-backed")}
+            {item.personalized ? "From your history, on this device" : "Research-backed"}
           </span>
         ) : (
           <a

@@ -92,6 +92,7 @@ export function SharePage() {
         variant="share"
         palette={identity.palette}
         name={payload.name}
+        overview={payload.overview}
         about={payload.about}
         communication={payload.communication}
         support={payload.support}

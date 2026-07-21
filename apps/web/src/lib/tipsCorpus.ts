@@ -19,6 +19,13 @@ export type CorpusContext = {
   depositTotal: number;
   withdrawalTotal: number;
   incompleteWithdrawals: number;
+  firstName?: string;
+  recentLowFeel?: boolean;
+  /** Count of recent rated days inspected for the low-feel signal (0–3). */
+  recentRatedSample?: number;
+  timeOfDay?: "morning" | "afternoon" | "evening";
+  familiarRestorer?: string | null;
+  heavyWeekday?: string | null;
 };
 
 export type CorpusEntry = {
@@ -31,12 +38,61 @@ export type CorpusEntry = {
   sourceUrl: string;
   /** Higher wins when more tips match than fit. */
   priority: number;
+  /** True only when matching depends on the person's own history. */
+  personalized?: boolean;
   matches: (ctx: CorpusContext) => boolean;
 };
 
 const DRY_KINDS: WeatherKind[] = ["sun", "cloud"];
 
 export const TIPS_CORPUS: CorpusEntry[] = [
+  {
+    id: "low-feel-nourish",
+    title: "A steadier next step",
+    body: "A little tired lately{firstName}? Before another push, pause for water and something simple with a fruit or vegetable plus protein. This is ordinary care, not a cure for a hard stretch of days.",
+    research:
+      "CDC healthy-eating guidance recommends varied fruits, vegetables, and protein foods as part of an eating pattern that supports health and well-being. It does not claim food will change how recent days felt.",
+    sourceUrl: "https://www.cdc.gov/healthy-weight-growth/healthy-eating/index.html",
+    priority: 11,
+    // Personal history times the tip; the research is general nutrition, not mood causation.
+    personalized: true,
+    matches: (c) => !!c.recentLowFeel && c.available >= 5,
+  },
+  {
+    id: "afternoon-microbreak",
+    title: "Interrupt the afternoon drain",
+    body: "Your day is using more energy than it is adding{firstName}. A short, screen-free pause now can reduce fatigue before you decide what deserves the next points.",
+    research:
+      "A 2022 meta-analysis found that micro-breaks improve vigor and reduce fatigue, with longer breaks tending to produce larger effects.",
+    sourceUrl: "https://doi.org/10.1371/journal.pone.0272460",
+    priority: 10,
+    matches: (c) =>
+      c.timeOfDay === "afternoon" &&
+      c.withdrawalTotal > c.depositTotal &&
+      c.available >= 5,
+  },
+  {
+    id: "personal-restorer",
+    title: "Use what already works for you",
+    body: "Your history keeps returning to “{familiarRestorer}” as a way to add energy. A small version may fit the day you have now.",
+    research:
+      "Energy Accounting emphasizes deliberately scheduling personally restorative activities rather than relying on generic recommendations.",
+    sourceUrl: "https://energyaccounting.com/",
+    priority: 10,
+    personalized: true,
+    matches: (c) => !!c.familiarRestorer && c.available >= 5,
+  },
+  {
+    id: "heavy-weekday",
+    title: "Plan the heavier weekday gently",
+    body: "{heavyWeekday}s usually cost you more than they give{firstName}. Leave a little room in today’s 100, or schedule one small way to add energy early.",
+    research:
+      "Energy Accounting practice recommends planning restorative activity on historically depleting weekdays before the day overruns.",
+    sourceUrl: "https://energyaccounting.com/",
+    priority: 10,
+    personalized: true,
+    matches: (c) => !!c.heavyWeekday && c.available >= 5,
+  },
   {
     id: "uv-low-walk",
     title: "Green light for the outdoors",

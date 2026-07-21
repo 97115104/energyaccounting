@@ -7,12 +7,18 @@
 
 import type { AcceptedTrait } from "../lib/butterflyTraits";
 import type { ButterflyPalette } from "../lib/identity";
-import { KIND_LABEL, SLOT_LABEL, type ColorMeaning } from "../lib/youProfile";
+import {
+  KIND_LABEL,
+  SLOT_LABEL,
+  type ColorMeaning,
+  type SharedOverviewLine,
+} from "../lib/youProfile";
 
 type Props = {
   variant: "share" | "print";
   palette: ButterflyPalette;
   name?: string | null;
+  overview?: SharedOverviewLine[];
   about?: string;
   communication?: string;
   support?: string;
@@ -24,6 +30,7 @@ export function ProfileSections({
   variant,
   palette,
   name,
+  overview,
   about,
   communication,
   support,
@@ -36,6 +43,25 @@ export function ProfileSections({
 
   return (
     <>
+      {overview && overview.length > 0 && (
+        <div className={blockClass}>
+          <Heading>Energy intelligence</Heading>
+          <ul className={variant === "share" ? "share-overview" : "you-print-overview"}>
+            {overview.map((line) => (
+              <li key={line.text}>
+                <p>{line.text}</p>
+                {line.because.length > 0 && (
+                  <ul className="muted">
+                    {line.because.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {about?.trim() && (
         <div className={blockClass}>
           <Heading>About</Heading>

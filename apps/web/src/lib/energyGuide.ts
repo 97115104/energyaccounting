@@ -59,6 +59,12 @@ export type GuideContext = {
   withdrawalHeavy: boolean;
   existingLabels: string[];
   candidates: ActivityCandidate[];
+  firstName?: string;
+  recentLowFeel?: boolean;
+  recentRatedSample?: number;
+  timeOfDay?: "morning" | "afternoon" | "evening";
+  familiarRestorer?: string | null;
+  heavyWeekday?: string | null;
   /** Points just freed by completing a task; produces the event item. */
   justFreed?: number;
   /** Weekday trend hint from the numeric insight engine, when it fired. */
@@ -103,10 +109,35 @@ function corpusBecause(entry: CorpusEntry, ctx: GuideContext): string[] {
   if (entry.id === "deposit-window") {
     out.push(`${ctx.available} points remain available today.`);
   }
+  if (entry.id === "low-feel-nourish") {
+    const sample = ctx.recentRatedSample && ctx.recentRatedSample > 0 ? ctx.recentRatedSample : 3;
+    out.push(
+      `At least two of your ${sample} most recently rated days felt 4/10 or lower.`,
+    );
+  }
+  if (entry.id === "afternoon-microbreak") {
+    out.push(
+      `It is afternoon, with ${ctx.withdrawalTotal} points used and ${ctx.depositTotal} added.`,
+    );
+  }
+  if (entry.id === "personal-restorer" && ctx.familiarRestorer) {
+    out.push(`“${ctx.familiarRestorer}” is your most frequently logged energy-adding activity.`);
+  }
+  if (entry.id === "heavy-weekday" && ctx.heavyWeekday) {
+    out.push(`${ctx.heavyWeekday}s tend to take more energy than they add in your closed history.`);
+  }
   if (out.length === 0) {
     out.push(`${ctx.withdrawalTotal} points used, ${ctx.depositTotal} added, and ${ctx.available} still available.`);
   }
   return out;
+}
+
+function corpusBody(entry: CorpusEntry, ctx: GuideContext): string {
+  const named = ctx.firstName?.trim() ? `, ${ctx.firstName.trim()}` : "";
+  return entry.body
+    .replaceAll("{firstName}", named)
+    .replaceAll("{familiarRestorer}", ctx.familiarRestorer ?? "a familiar restorative activity")
+    .replaceAll("{heavyWeekday}", ctx.heavyWeekday ?? "This weekday");
 }
 
 /**
@@ -205,17 +236,23 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     depositTotal: ctx.depositTotal,
     withdrawalTotal: ctx.withdrawalTotal,
     incompleteWithdrawals: ctx.incompleteWithdrawals,
+    firstName: ctx.firstName,
+    recentLowFeel: ctx.recentLowFeel,
+    recentRatedSample: ctx.recentRatedSample,
+    timeOfDay: ctx.timeOfDay,
+    familiarRestorer: ctx.familiarRestorer,
+    heavyWeekday: ctx.heavyWeekday,
   };
   for (const entry of selectFromCorpus(corpusCtx, 3)) {
     items.push({
       id: `context:${entry.id}`,
       kind: "context",
       title: entry.title,
-      body: entry.body,
+      body: corpusBody(entry, ctx),
       because: corpusBecause(entry, ctx),
       research: entry.research,
       sourceUrl: entry.sourceUrl,
-      personalized: false,
+      personalized: !!entry.personalized,
       score: entry.priority * 4,
     });
   }

@@ -1736,6 +1736,14 @@ html[data-theme="night"] .guide-card {
   white-space: nowrap;
 }
 
+.guide-provenance-split {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
 /* Citation link variant: same quiet chip, but clearly clickable. */
 .guide-provenance-link {
   text-decoration: none;
@@ -2934,6 +2942,140 @@ html[data-theme="night"] .tip-card {
   font-size: 0.85rem;
 }
 
+/* The intelligence reads like a concise system summary; evidence stays one
+   tap away so the page is useful before it becomes analytical. */
+.intel-panel {
+  background:
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 36%),
+    var(--panel);
+}
+
+.intel-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.intel-eyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intel-coverage {
+  flex: none;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.intel-lines {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.intel-line {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 5%);
+}
+
+.intel-line p,
+.intel-line details ul {
+  margin: 0;
+}
+
+.intel-line summary,
+.you-manual-flow > summary {
+  margin-top: 0.35rem;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.intel-line details ul {
+  padding: 0.45rem 0 0 1.1rem;
+  font-size: 0.84rem;
+}
+
+.intel-confidence {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.intel-lines-compact {
+  gap: 0.45rem;
+}
+
+.intel-lines-compact .intel-line {
+  padding: 0.65rem 0.8rem;
+}
+
+.intel-meaning {
+  margin-top: 1.25rem;
+  padding-top: 0.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.intel-empty {
+  margin: 1rem 0 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent) 5%);
+}
+
+.you-profile-summary {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.you-profile-summary > div {
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.you-profile-summary h4,
+.you-profile-summary p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.you-manual-flow {
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.you-manual-flow > summary {
+  margin: 0;
+}
+
+.you-manual-flow[open] > summary {
+  margin-bottom: 0.65rem;
+}
+
 .you-export-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -3092,12 +3234,24 @@ html[data-theme="night"] .tip-card {
 }
 
 .share-traits,
-.share-colors {
+.share-colors,
+.share-overview {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 0.4rem;
+}
+
+.share-overview p,
+.you-print-overview p {
+  margin: 0;
+}
+
+.share-overview ul,
+.you-print-overview ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
 }
 
 .share-foot {
