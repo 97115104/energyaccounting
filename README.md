@@ -49,6 +49,21 @@ DATA_DIR=/var/lib/eaj PORT=3000 COOKIE_SECURE=1 bun run start
 
 Serve behind TLS at `eaj.97115104.com`. The server serves `apps/web/dist` when present.
 
+## Invite codes
+
+Account creation requires a one-time invite code. Generate more with:
+
+```bash
+bun run generate-more-invite-codes        # 50 codes (default)
+bun run generate-more-invite-codes 10     # custom count
+```
+
+Codes are 128-bit random values. The database (resolved via `DATA_DIR`, same as
+the server) stores only SHA-256 hashes; the plaintext codes are appended — never
+replaced — to a gitignored `invite-codes.md` checklist so you can check them off
+as they are handed out or used. Registration consumes a code atomically, so each
+code admits exactly one account.
+
 ## Security model
 
 Password verified with Argon2id on the server. A data encryption key (DEK) is generated in the browser, wrapped with a password-derived KEK, and stored as ciphertext. Activity labels, journal text, and task details are AES-GCM encrypted client-side. Dictation converts speech to text in the browser, so no audio leaves the device. Numeric energy costs and balances stay clear so dashboards can chart without reading activity names. A SHA-256 of the normalized label is stored so recurring suggestions can dedupe without decrypting. It is a correlation handle, and not plaintext.
@@ -70,3 +85,4 @@ MIT. See [LICENSE](LICENSE).
 - `bun test` runs shared balance math tests
 - `bun run typecheck` runs TypeScript checks across packages
 - `bun run build` builds the production web app
+- `bun run generate-more-invite-codes [count]` mints signup invite codes (see above)

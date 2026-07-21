@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../lib/api";
 import {
   deriveKek,
@@ -44,8 +44,46 @@ export function AuthPage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  // Signup is invite-only: the code must pass a server preflight before the
+  // account form appears, and it is sent again with register (the real check).
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteVerified, setInviteVerified] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Bumped on every check and on mode switches so a stale in-flight preflight
+  // can never verify an edited/cleared code or splash its error on another card.
+  const inviteReqSeq = useRef(0);
+
+  function switchMode(next: "login" | "register") {
+    inviteReqSeq.current++;
+    setMode(next);
+    setError(null);
+    setInviteCode("");
+    setInviteVerified(false);
+  }
+
+  async function checkInvite() {
+    const code = inviteCode.trim();
+    if (busy || !code) return;
+    const seq = ++inviteReqSeq.current;
+    setBusy(true);
+    setError(null);
+    try {
+      await api<{ valid: boolean }>("/api/auth/invite/check", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      if (inviteReqSeq.current !== seq) return;
+      // Freeze exactly what the server approved for the register call.
+      setInviteCode(code);
+      setInviteVerified(true);
+    } catch (e) {
+      if (inviteReqSeq.current !== seq) return;
+      setError(e instanceof Error ? e.message : "Invite check failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function register() {
     setBusy(true);
@@ -67,6 +105,7 @@ export function AuthPage({
           password,
           kekSalt: salt,
           wrappedDek,
+          inviteCode,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
@@ -78,7 +117,15 @@ export function AuthPage({
         res.sessionExpiresAt ? Date.parse(res.sessionExpiresAt) : undefined,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Registration failed.");
+      const message = e instanceof Error ? e.message : "Registration failed.";
+      // The code can be spent between preflight and register (another signup
+      // won it). Send the user back to the invite step instead of stranding
+      // them on a form that can never succeed.
+      if (message.toLowerCase().includes("invite")) {
+        setInviteVerified(false);
+        setInviteCode("");
+      }
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -237,6 +284,41 @@ export function AuthPage({
             Continue
           </button>
         </>
+      ) : mode === "register" && !inviteVerified ? (
+        <>
+          <p className="muted">
+            EAJ is invite-only right now. Enter your invite code to create an account.
+          </p>
+          <div className="field">
+            <label htmlFor="invite-code">Invite code</label>
+            <input
+              id="invite-code"
+              autoComplete="off"
+              disabled={busy}
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void checkInvite();
+              }}
+              autoFocus
+            />
+          </div>
+          {error && <p className="error">{error}</p>}
+          <button
+            type="button"
+            className="btn accent"
+            disabled={busy || !inviteCode.trim()}
+            onClick={() => void checkInvite()}
+          >
+            Continue
+          </button>
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            Already have an account?{" "}
+            <button type="button" className="linkish" onClick={() => switchMode("login")}>
+              Sign in
+            </button>
+          </p>
+        </>
       ) : (
         <>
           <div className="field">
@@ -247,6 +329,7 @@ export function AuthPage({
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoFocus
             />
           </div>
           <div className="field">
@@ -257,6 +340,11 @@ export function AuthPage({
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !busy) {
+                  void (mode === "login" ? login() : register());
+                }
+              }}
             />
           </div>
           {error && <p className="error">{error}</p>}
@@ -272,14 +360,14 @@ export function AuthPage({
             {mode === "login" ? (
               <>
                 New here?{" "}
-                <button type="button" className="linkish" onClick={() => setMode("register")}>
+                <button type="button" className="linkish" onClick={() => switchMode("register")}>
                   Create an account
                 </button>
               </>
             ) : (
               <>
                 Already have an account?{" "}
-                <button type="button" className="linkish" onClick={() => setMode("login")}>
+                <button type="button" className="linkish" onClick={() => switchMode("login")}>
                   Sign in
                 </button>
               </>

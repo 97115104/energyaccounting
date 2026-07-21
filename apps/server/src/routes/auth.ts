@@ -1,8 +1,9 @@
 import { Elysia, t } from "elysia";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { db } from "../db/index.ts";
-import { sessionTable, userTable } from "../db/schema.ts";
+import { inviteCodeTable, sessionTable, userTable } from "../db/schema.ts";
+import { hashInviteCode, isWellFormedInviteCode } from "../lib/inviteCodes.ts";
 import {
   SESSION_COOKIE,
   clearCookieHeader,
@@ -39,7 +40,31 @@ function tokenFromRequest(request: Request): string | undefined {
 }
 
 
+// One generic message for malformed, unknown, and spent codes — no oracle for
+// guessing which codes exist.
+const INVITE_ERROR = "Invite code is invalid or already used.";
+
+async function findUnusedInvite(codeHash: string) {
+  return db.query.inviteCodeTable.findFirst({
+    where: and(eq(inviteCodeTable.codeHash, codeHash), isNull(inviteCodeTable.usedAt)),
+  });
+}
+
 export const authRoutes = new Elysia({ prefix: "/api/auth" })
+  .post(
+    // Preflight so the UI can gate the signup form; register re-checks and is
+    // the only place a code is actually consumed.
+    "/invite/check",
+    async ({ body, set }) => {
+      if (isWellFormedInviteCode(body.code)) {
+        const invite = await findUnusedInvite(hashInviteCode(body.code));
+        if (invite) return { valid: true };
+      }
+      set.status = 403;
+      return { valid: false, error: INVITE_ERROR };
+    },
+    { body: t.Object({ code: t.String() }) },
+  )
   .post(
     "/register",
     async ({ body, set }) => {
@@ -52,6 +77,11 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         set.status = 400;
         return { error: "Client must supply wrappedDek and kekSalt." };
       }
+      if (!isWellFormedInviteCode(body.inviteCode)) {
+        set.status = 403;
+        return { error: INVITE_ERROR };
+      }
+      const inviteHash = hashInviteCode(body.inviteCode);
       const existing = await db.query.userTable.findFirst({
         where: eq(userTable.email, email),
       });
@@ -69,17 +99,48 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         typeof body.timezone === "string" && body.timezone.trim()
           ? body.timezone.trim()
           : "UTC";
-      await db.insert(userTable).values({
-        id,
-        email,
-        passwordHash,
-        kekSalt: body.kekSalt,
-        wrappedDek: body.wrappedDek,
-        timezone,
-        onboardingCompleted: false,
-        locationPrompted: false,
-        createdAt: new Date(),
-      });
+      // One transaction so an invite can never be burned without its account
+      // existing: the `used_at IS NULL` guard lets exactly one concurrent
+      // register flip the row, the re-read confirms we were that winner, and
+      // any failure (loser, email unique race, crash) rolls the claim back.
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .update(inviteCodeTable)
+            .set({ usedAt: new Date(), usedByUserId: id })
+            .where(and(eq(inviteCodeTable.codeHash, inviteHash), isNull(inviteCodeTable.usedAt)));
+          const [claimed] = await tx
+            .select()
+            .from(inviteCodeTable)
+            .where(eq(inviteCodeTable.codeHash, inviteHash));
+          if (!claimed || claimed.usedByUserId !== id) {
+            throw new Error("invite-not-claimed");
+          }
+          await tx.insert(userTable).values({
+            id,
+            email,
+            passwordHash,
+            kekSalt: body.kekSalt,
+            wrappedDek: body.wrappedDek,
+            timezone,
+            onboardingCompleted: false,
+            locationPrompted: false,
+            createdAt: new Date(),
+          });
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === "invite-not-claimed") {
+          set.status = 403;
+          return { error: INVITE_ERROR };
+        }
+        if (msg.includes("UNIQUE")) {
+          // Email race past the earlier existence check; rollback kept the invite.
+          set.status = 409;
+          return { error: "An account with that email already exists." };
+        }
+        throw e;
+      }
       const { token, expiresAt } = await createSession(id, false);
       set.headers["Set-Cookie"] = cookieHeader(token, expiresAt);
       return {
@@ -108,6 +169,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         password: t.String(),
         kekSalt: t.String(),
         wrappedDek: t.String(),
+        inviteCode: t.String(),
         timezone: t.Optional(t.String()),
       }),
     },

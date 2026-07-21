@@ -123,6 +123,14 @@ CREATE TABLE IF NOT EXISTS user_table (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS invite_code_table (
+  id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  used_at INTEGER,
+  used_by_user_id TEXT
+);
+
 CREATE TABLE IF NOT EXISTS session_table (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES user_table(id) ON DELETE CASCADE,

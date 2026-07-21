@@ -8,7 +8,8 @@
     "start": "bun run --filter @eaj/server start",
     "typecheck": "bun run --filter @eaj/shared typecheck && bun run --filter @eaj/server typecheck && bun run --filter @eaj/web typecheck",
     "test": "bun test packages/shared apps/server apps/web/src/lib",
-    "icons": "bun scripts/generate-icons.ts"
+    "icons": "bun scripts/generate-icons.ts",
+    "generate-more-invite-codes": "bun scripts/generate-more-invite-codes.ts"
   },
   "workspaces": ["apps/*", "packages/*"],
   "devDependencies": {

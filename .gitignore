@@ -5,6 +5,7 @@ data/
 *.db-*
 .env
 .env.local
+invite-codes.md
 .DS_Store
 apps/web/dist/
 apps/server/dist/

@@ -1758,6 +1758,19 @@ html[data-theme="night"] .tip-card {
   font-size: 0.9rem;
 }
 
+/* Signed out, the attestation reads as a caption under the auth card rather
+   than a page footer: pulled up tight, centered, no full-width rule. */
+.app-shell-auth .auth-card {
+  margin-bottom: 0.75rem;
+}
+
+.app-shell-auth .site-footer {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  text-align: center;
+}
+
 .site-footer a {
   color: var(--ink);
   font-weight: 700;

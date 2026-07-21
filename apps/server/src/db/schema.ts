@@ -25,6 +25,18 @@ export const userTable = sqliteTable("user_table", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+// One-time signup invites. Only the SHA-256 of the normalized code is stored;
+// the plaintext lives solely in the operator's local invite-codes.md.
+export const inviteCodeTable = sqliteTable("invite_code_table", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull().unique(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  usedAt: integer("used_at", { mode: "timestamp" }),
+  // Audit-only, deliberately no FK: the code is claimed atomically just before
+  // its user row is inserted, so the referenced id may not exist yet.
+  usedByUserId: text("used_by_user_id"),
+});
+
 export const sessionTable = sqliteTable("session_table", {
   id: text("id").primaryKey(),
   userId: text("user_id")
