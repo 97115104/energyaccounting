@@ -343,3 +343,13 @@ export function greetingFor(
 export function resetGreetingStateForTests(): void {
   frozenSlot = null;
 }
+
+/**
+ * An anonymous fun fact for surfaces without a signed-in profile, like the
+ * sign-in screen. Draws fresh per call; callers memoize per visit.
+ */
+export function randomFact(): { text: string; source: FactSource } {
+  const index = Math.floor(Math.random() * FACTS.length);
+  const entry = FACTS[index] ?? FACTS[0]!;
+  return { text: entry.anonymous, source: entry.source };
+}

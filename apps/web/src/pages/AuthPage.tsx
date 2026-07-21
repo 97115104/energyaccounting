@@ -9,6 +9,7 @@ import {
 import { hasReturningFlag } from "../lib/returning";
 import { normalizeIdentity } from "../lib/identity";
 import { readCachedIdentity } from "../lib/identityCache";
+import { dailyAffirmation } from "../lib/affirmations";
 import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
 
@@ -242,7 +243,9 @@ export function AuthPage({
     return (
       <div className="panel auth-card">
         <div className="auth-welcome-mark">
-          <IdentityMark identity={identity} size={72} />
+          <span className="auth-mark-disc">
+            <IdentityMark identity={identity} size={72} beatMs={2400} />
+          </span>
         </div>
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
           Welcome back{unlockInfo.user.displayName ? `, ${unlockInfo.user.displayName}` : ""}
@@ -296,9 +299,14 @@ export function AuthPage({
   return (
     <div className="panel auth-card">
       {returningMark && (
-        <div className="auth-welcome-mark">
-          <IdentityMark identity={returningMark} size={64} decorative />
-        </div>
+        <>
+          <div className="auth-welcome-mark">
+            <span className="auth-mark-disc">
+              <IdentityMark identity={returningMark} size={64} decorative beatMs={2400} />
+            </span>
+          </div>
+          <p className="auth-affirmation">{dailyAffirmation()}</p>
+        </>
       )}
       <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
         {needsTotp ? "Authenticator" : mode === "login" ? "Sign in" : "Create account"}
@@ -364,6 +372,16 @@ export function AuthPage({
             Already have an account?{" "}
             <button type="button" className="linkish" onClick={() => switchMode("login")}>
               Sign in
+            </button>
+          </p>
+          <p className="muted auth-privacy-line">
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => setPrivacyOpen(true)}
+              title="How your journal is protected"
+            >
+              We value privacy
             </button>
           </p>
         </>

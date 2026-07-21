@@ -76,9 +76,18 @@ type MarkProps = {
   size?: number;
   className?: string;
   decorative?: boolean;
+  /** Wing-beat period for butterfly symbols; null keeps the still pose. */
+  beatMs?: number | null;
 };
 
-export function IdentityMark({ identity, symbol, size = 40, className, decorative }: MarkProps) {
+export function IdentityMark({
+  identity,
+  symbol,
+  size = 40,
+  className,
+  decorative,
+  beatMs = null,
+}: MarkProps) {
   const which = symbol ?? identity.symbol;
   const label = symbolMeta(which).label;
   const gradientId = `mark-${which}-${identity.seed.replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -86,7 +95,7 @@ export function IdentityMark({ identity, symbol, size = 40, className, decorativ
   if (which === "butterfly") {
     return (
       <span className={className} style={box} {...(decorative ? { "aria-hidden": true as const } : {})}>
-        <Butterfly identity={identity} beatMs={null} size={size} title={decorative ? undefined : label} decorative={decorative} />
+        <Butterfly identity={identity} beatMs={beatMs} size={size} title={decorative ? undefined : label} decorative={decorative} />
       </span>
     );
   }

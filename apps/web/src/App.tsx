@@ -11,7 +11,7 @@ import {
   setSessionDek,
   unwrapDek,
 } from "./lib/crypto";
-import { greetingDetailFor, type GreetingStyle } from "./lib/greeting";
+import { greetingDetailFor, randomFact, type GreetingStyle } from "./lib/greeting";
 import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
@@ -94,6 +94,8 @@ export function App() {
   const [authMode, setAuthMode] = useState<"login" | "register">(() =>
     hasReturningFlag() ? "login" : "register",
   );
+  // One fun fact per visit under the signed-out welcome, stable across renders.
+  const [welcomeFact] = useState(() => randomFact().text);
   const loc = useLocation();
   const navigate = useNavigate();
   const butterflyState = useButterflyDay(!!user && dekReady && !needsTotp);
@@ -346,21 +348,22 @@ export function App() {
             </>
           ) : authMode === "register" ? (
             <>
-              <h1 className="brand">
-                <TypedText text="Your Energy Matters" />
+              <h1 className="brand brand-welcome">
+                <TypedText text="Your Energy Matters!" />
               </h1>
-              <p className="tagline">
-                <span>EAJ is for neurodivergent productivity and pride.</span>
-                <span>
-                  Track your energy, grow your butterfly, and share how to work with you when
-                  you choose.
-                </span>
+              <p className="tagline welcome-fact">
+                EAJ is for neurodivergent productivity and pride and energy tracking.
               </p>
             </>
           ) : (
-            <h1 className="brand brand-welcome">
-              <TypedText text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"} />
-            </h1>
+            <>
+              <h1 className="brand brand-welcome">
+                <TypedText
+                  text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"}
+                />
+              </h1>
+              <p className="welcome-fact">{welcomeFact}</p>
+            </>
           )}
         </div>
         {authed && (
