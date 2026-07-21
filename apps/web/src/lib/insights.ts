@@ -7,6 +7,8 @@
 // suggestion. A below-average day produces either nothing or the "you showed
 // up anyway" framing. Nothing here shames.
 
+import { mean, weekdayName } from "./dateIso";
+
 export type StatPoint = {
   id: string;
   date: string;
@@ -41,17 +43,6 @@ function historyBefore(series: StatPoint[], target: StatPoint): StatPoint[] {
   return series.filter(
     (p) => p.phase === "closed" && Date.parse(p.startedAt) < targetStart,
   );
-}
-
-function mean(xs: number[]): number {
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-}
-
-function weekdayName(dateIso: string): string {
-  return new Date(dateIso + "T12:00:00Z").toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
 }
 
 export function recentClosedCount(series: StatPoint[], withinDays = 7): number {

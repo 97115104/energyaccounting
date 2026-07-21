@@ -41,6 +41,7 @@ import {
 } from "../lib/insights";
 import { recentDisabledReason, repeatActionVisible } from "../lib/planShortcuts";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
+import { liveTimezone } from "../lib/timezone";
 import {
   defaultTemperatureUnit,
   formatTemp,
@@ -695,13 +696,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [weatherKind]);
 
   const playHeavy = day ? isWithdrawalHeavy(day.attwood) : false;
-  const currentSkyPeriod = skyPeriod(
-    user.lat,
-    user.lon,
-    // Match the shell: the live sky uses the device's current timezone so a
-    // UTC-defaulted profile does not read as night during a local afternoon.
-    Intl.DateTimeFormat().resolvedOptions().timeZone || user.timezone || "UTC",
-  );
+  const currentSkyPeriod = skyPeriod(user.lat, user.lon, liveTimezone(user.timezone));
 
   // Trend hint while planning; recovery only at close (never during audit,
   // so tomorrow's day row is not created before today locks).

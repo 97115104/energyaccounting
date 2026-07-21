@@ -14,6 +14,7 @@ import {
 import { greetingDetailFor, randomFact, type GreetingStyle } from "./lib/greeting";
 import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
+import { liveTimezone } from "./lib/timezone";
 import { skyPeriod } from "./lib/weatherUi";
 import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
 import { NeuroMe } from "./components/IdentityMark";
@@ -148,12 +149,8 @@ export function App() {
 
   // Sky theme follows the real sun when we know where the user is:
   // dawn/dusk golden hours around sunrise/sunset, otherwise day or night.
-  // The live theme uses the device's current timezone, not the stored profile
-  // one: a profile saved as UTC (the default) would otherwise flip a US
-  // afternoon into night. The profile timezone still drives dated summaries.
   useEffect(() => {
-    const tz =
-      Intl.DateTimeFormat().resolvedOptions().timeZone || user?.timezone || "UTC";
+    const tz = liveTimezone(user?.timezone);
     const apply = () => {
       const period = skyPeriod(user?.lat, user?.lon, tz);
       document.documentElement.dataset.theme = period;
@@ -282,7 +279,9 @@ export function App() {
   const onOnboardingRoute = loc.pathname.startsWith("/onboarding");
   const greeting = user
     ? greetingDetailFor(user.displayName, {
-        timeZone: user.timezone,
+        // Live timezone (device first): a UTC-defaulted profile must not turn
+        // a local afternoon into an "Evening check-in".
+        timeZone: liveTimezone(user.timezone),
         style: user.greetingStyle,
       })
     : null;

@@ -10,6 +10,7 @@ import { hasReturningFlag } from "../lib/returning";
 import { normalizeIdentity } from "../lib/identity";
 import { readCachedIdentity } from "../lib/identityCache";
 import { dailyAffirmation } from "../lib/affirmations";
+import { deviceTimezone } from "../lib/timezone";
 import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
 
@@ -137,7 +138,7 @@ export function AuthPage({
           kekSalt: salt,
           wrappedDek,
           inviteCode,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          timezone: deviceTimezone() ?? "UTC",
         }),
       });
       await onAuthed(

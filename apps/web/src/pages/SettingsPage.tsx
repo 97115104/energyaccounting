@@ -5,6 +5,7 @@ import { DictatableField } from "../components/DictatableField";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
+import { deviceTimezone } from "../lib/timezone";
 import { defaultTemperatureUnit } from "../lib/weatherUi";
 
 type Props = {
@@ -24,7 +25,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
     user.temperatureUnit ?? defaultTemperatureUnit(user.country),
   );
   const [timezone, setTimezone] = useState(
-    user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    user.timezone || deviceTimezone() || "UTC",
   );
   const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
     user.greetingStyle ?? "mix",

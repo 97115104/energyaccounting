@@ -13,6 +13,7 @@
  */
 
 import type { AcceptedTrait } from "./butterflyTraits";
+import { mean, weekdayName } from "./dateIso";
 import type { PersonalData } from "./personalData";
 
 export type DraftField = "about" | "communication" | "support";
@@ -36,17 +37,6 @@ export type YouFeatures = {
 
 const MIN_USE = 3;
 const MIN_CLOSED_FOR_RHYTHM = 10;
-
-function weekdayName(dateIso: string): string {
-  return new Date(dateIso + "T12:00:00Z").toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
-}
-
-function mean(xs: number[]): number {
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-}
 
 function joinList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";

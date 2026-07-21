@@ -1,6 +1,9 @@
-// Header greeting with selectable flavors. The time slot and random pick
-// freeze on the first call of the visit so the headline doesn't churn
-// mid-session; changing the style (Settings) re-resolves the phrase once.
+// Header greeting with selectable flavors. The random pick freezes on the
+// first call of the visit so the headline doesn't churn mid-session, but the
+// time-of-day slot always tracks the current hour, so a tab left open from
+// morning into evening greets accordingly.
+
+import { hourInTimezone } from "./timezone";
 
 export type GreetingStyle = "classic" | "humor" | "facts" | "mix";
 
@@ -18,23 +21,6 @@ function slotFor(hour: number): Slot {
   if (hour >= 12 && hour < 17) return "afternoon";
   if (hour >= 17 && hour < 22) return "evening";
   return "night";
-}
-
-/** Hour-of-day in the user's profile timezone when available; else device local. */
-function hourInZone(now: Date, timeZone?: string | null): number {
-  if (!timeZone) return now.getHours();
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      hourCycle: "h23",
-      timeZone,
-    }).formatToParts(now);
-    const raw = parts.find((p) => p.type === "hour")?.value;
-    if (raw == null) return now.getHours();
-    return Number(raw) % 24;
-  } catch {
-    return now.getHours();
-  }
 }
 
 type Pool = { named: string[]; anonymous: string[] };
@@ -281,7 +267,6 @@ const visitSeed = Math.random();
 // A second stream from the same seed so "which pool" and "which phrase"
 // don't collapse into one draw for the mix style.
 const poolSeed = (visitSeed * 9301 + 0.49297) % 1;
-let frozenSlot: Slot | null = null;
 
 function pickFrom(pool: Pool, named: boolean, seed: number): string {
   const list = named ? pool.named : pool.anonymous;
@@ -304,9 +289,7 @@ export function greetingDetailFor(
   opts?: { now?: Date; timeZone?: string | null; style?: GreetingStyle | null },
 ): GreetingDetail {
   const now = opts?.now ?? new Date();
-  if (!frozenSlot) {
-    frozenSlot = slotFor(hourInZone(now, opts?.timeZone));
-  }
+  const slot = slotFor(hourInTimezone(now, opts?.timeZone));
   const trimmed = name?.trim();
   const named = !!trimmed;
 
@@ -328,7 +311,7 @@ export function greetingDetailFor(
     };
   }
 
-  const pool = style === "humor" ? HUMOR : CLASSIC[frozenSlot];
+  const pool = style === "humor" ? HUMOR : CLASSIC[slot];
   return { text: withName(pickFrom(pool, named, visitSeed)) };
 }
 
@@ -337,11 +320,6 @@ export function greetingFor(
   opts?: { now?: Date; timeZone?: string | null; style?: GreetingStyle | null },
 ): string {
   return greetingDetailFor(name, opts).text;
-}
-
-/** Test hook: reset the per-visit frozen slot. */
-export function resetGreetingStateForTests(): void {
-  frozenSlot = null;
 }
 
 /**

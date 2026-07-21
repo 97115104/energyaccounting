@@ -1,5 +1,10 @@
 /** Weather mapping, sunrise/sunset math, and temperature formatting. */
 
+import { isNightInTimezone } from "./timezone";
+
+// Re-exported to keep weatherUi's public API unchanged after the move.
+export { isNightInTimezone };
+
 export type WeatherKind = "sun" | "rain" | "cloud" | "snow" | "fog" | "thunder" | "unknown";
 
 export function weatherKindFromCode(code: unknown): WeatherKind {
@@ -187,22 +192,4 @@ export function skyPeriod(
 /** True when the current sky period is daytime-ish (for UV tips that cite daily max). */
 export function isDaylightPeriod(period: SkyPeriod): boolean {
   return period === "day" || period === "dawn" || period === "dusk";
-}
-
-/** Day vs night from local hour in the given IANA timezone (fallback path). */
-export function isNightInTimezone(timezone: string, now = new Date()): boolean {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: timezone || "UTC",
-    }).formatToParts(now);
-    // Some engines emit "24" for midnight under hour12:false, so normalize it.
-    let hour = Number(parts.find((p) => p.type === "hour")?.value ?? "12");
-    if (hour === 24) hour = 0;
-    return hour < 6 || hour >= 20;
-  } catch {
-    const h = now.getHours();
-    return h < 6 || h >= 20;
-  }
 }

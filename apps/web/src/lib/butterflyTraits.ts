@@ -11,6 +11,8 @@
  * Nothing here is uploaded; accepted traits live in the encrypted You profile.
  */
 
+import { mean, weekdayName } from "./dateIso";
+
 export type TraitKind = "interest" | "energy-giver" | "energy-taker" | "rhythm";
 
 export type TraitSuggestion = {
@@ -51,17 +53,6 @@ export type DayPoint = {
 };
 
 const MIN_USE = 3;
-
-function weekdayName(dateIso: string): string {
-  return new Date(dateIso + "T12:00:00Z").toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
-}
-
-function mean(xs: number[]): number {
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-}
 
 /**
  * Suggest traits from decrypted catalog and numeric history. Deterministic and

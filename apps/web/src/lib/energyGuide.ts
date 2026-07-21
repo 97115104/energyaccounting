@@ -12,6 +12,7 @@
 
 import { DAILY_ENERGY } from "@eaj/shared";
 import { suggestActivities, type ActivityCandidate } from "./activitySuggest";
+import { mean, weekdayName } from "./dateIso";
 import type { Insight, StatPoint } from "./insights";
 import { playCategoryTitle, suggestPlayDeposits } from "./playCategories";
 import { selectFromCorpus, type CorpusContext, type CorpusEntry } from "./tipsCorpus";
@@ -268,17 +269,6 @@ export function nextIsoDate(dateIso: string): string {
   const d = new Date(dateIso + "T12:00:00Z");
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
-}
-
-function weekdayName(dateIso: string): string {
-  return new Date(dateIso + "T12:00:00Z").toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
-}
-
-function mean(xs: number[]): number {
-  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
 
 /** Does a calendar weekday historically run a meaningful net drain? */
