@@ -82,6 +82,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           id,
           email,
           totpEnabled: false,
+          displayName: null,
           timezone: "UTC",
           lat: null,
           lon: null,
@@ -131,6 +132,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           id: user.id,
           email: user.email,
           totpEnabled: user.totpEnabled,
+          displayName: user.displayName,
           timezone: user.timezone,
           lat: user.lat,
           lon: user.lon,
@@ -193,6 +195,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           id: auth.user.id,
           email: auth.user.email,
           totpEnabled: auth.user.totpEnabled,
+          displayName: auth.user.displayName,
           timezone: auth.user.timezone,
           lat: auth.user.lat,
           lon: auth.user.lon,
@@ -227,6 +230,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         id: auth.user.id,
         email: auth.user.email,
         totpEnabled: auth.user.totpEnabled,
+        displayName: auth.user.displayName,
         timezone: auth.user.timezone,
         lat: auth.user.lat,
         lon: auth.user.lon,
@@ -319,31 +323,35 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         set.status = 401;
         return { error: "Unauthorized" };
       }
-      await db
-        .update(userTable)
-        .set({
-          timezone: body.timezone ?? auth.user.timezone,
-          lat: body.lat !== undefined ? body.lat : auth.user.lat,
-          lon: body.lon !== undefined ? body.lon : auth.user.lon,
-          country: body.country ?? auth.user.country,
-          temperatureUnit:
-            body.temperatureUnit === undefined
-              ? auth.user.temperatureUnit
-              : body.temperatureUnit,
-          onboardingCompleted:
-            body.onboardingCompleted === undefined
-              ? auth.user.onboardingCompleted
-              : body.onboardingCompleted,
-          locationPrompted:
-            body.locationPrompted === undefined
-              ? auth.user.locationPrompted
-              : body.locationPrompted,
-        })
-        .where(eq(userTable.id, auth.user.id));
+      const patch = {
+        // Only write fields the client sent — rewriting omitted columns from a
+        // stale session snapshot races with concurrent profile PATCHes (geo vs
+        // onboarding) and can clobber a just-saved displayName / coords.
+        ...(body.displayName !== undefined
+          ? { displayName: body.displayName?.trim() || null }
+          : {}),
+        ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
+        ...(body.lat !== undefined ? { lat: body.lat } : {}),
+        ...(body.lon !== undefined ? { lon: body.lon } : {}),
+        ...(body.country !== undefined ? { country: body.country } : {}),
+        ...(body.temperatureUnit !== undefined
+          ? { temperatureUnit: body.temperatureUnit }
+          : {}),
+        ...(body.onboardingCompleted !== undefined
+          ? { onboardingCompleted: body.onboardingCompleted }
+          : {}),
+        ...(body.locationPrompted !== undefined
+          ? { locationPrompted: body.locationPrompted }
+          : {}),
+      };
+      if (Object.keys(patch).length > 0) {
+        await db.update(userTable).set(patch).where(eq(userTable.id, auth.user.id));
+      }
       return { ok: true };
     },
     {
       body: t.Object({
+        displayName: t.Optional(t.Union([t.String({ maxLength: 80 }), t.Null()])),
         timezone: t.Optional(t.String()),
         lat: t.Optional(t.Union([t.Number(), t.Null()])),
         lon: t.Optional(t.Union([t.Number(), t.Null()])),

@@ -9,6 +9,8 @@ export const userTable = sqliteTable("user_table", {
   totpSecret: text("totp_secret"),
   totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
   recoveryCodesHash: text("recovery_codes_hash"),
+  // Preferred name or alias for greetings; null until the user sets one.
+  displayName: text("display_name"),
   timezone: text("timezone").notNull().default("UTC"),
   lat: real("lat"),
   lon: real("lon"),

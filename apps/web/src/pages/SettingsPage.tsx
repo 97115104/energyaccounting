@@ -11,6 +11,7 @@ type Props = {
 };
 
 export function SettingsPage({ user, onUser }: Props) {
+  const [displayName, setDisplayName] = useState(user.displayName ?? "");
   const [lat, setLat] = useState(String(user.lat ?? ""));
   const [lon, setLon] = useState(String(user.lon ?? ""));
   const [country, setCountry] = useState(user.country ?? "US");
@@ -36,6 +37,7 @@ export function SettingsPage({ user, onUser }: Props) {
       await api("/api/auth/profile", {
         method: "PATCH",
         body: JSON.stringify({
+          displayName: displayName.trim() || null,
           lat: lat === "" ? null : Number(lat),
           lon: lon === "" ? null : Number(lon),
           country,
@@ -45,6 +47,7 @@ export function SettingsPage({ user, onUser }: Props) {
       });
       onUser({
         ...user,
+        displayName: displayName.trim() || null,
         lat: lat === "" ? null : Number(lat),
         lon: lon === "" ? null : Number(lon),
         country,
@@ -117,6 +120,15 @@ export function SettingsPage({ user, onUser }: Props) {
     <div>
       <div className="panel">
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Profile</h2>
+        <div className="field">
+          <label htmlFor="display-name">Name or alias (greetings)</label>
+          <input
+            id="display-name"
+            value={displayName}
+            maxLength={80}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+        </div>
         <div className="field">
           <label htmlFor="tz">Timezone</label>
           <input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />

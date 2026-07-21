@@ -41,6 +41,11 @@ try {
 } catch {
   /* column exists */
 }
+try {
+  sqlite.exec("ALTER TABLE user_table ADD COLUMN display_name TEXT");
+} catch {
+  /* column exists */
+}
 
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS user_table (
@@ -52,6 +57,7 @@ CREATE TABLE IF NOT EXISTS user_table (
   totp_secret TEXT,
   totp_enabled INTEGER NOT NULL DEFAULT 0,
   recovery_codes_hash TEXT,
+  display_name TEXT,
   timezone TEXT NOT NULL DEFAULT 'UTC',
   lat REAL,
   lon REAL,

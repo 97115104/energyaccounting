@@ -63,26 +63,65 @@ function PinGlyph() {
   );
 }
 
-const STEPS: { glyph: ReactNode; title: string; body: string }[] = [
+function PersonGlyph() {
+  return (
+    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
+      <circle cx="32" cy="22" r="11" fill="none" stroke="currentColor" strokeWidth="3.5" />
+      <path
+        d="M12 56c2-12 10-18 20-18s18 6 20 18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+type Step = {
+  eyebrow: string;
+  thesis: string;
+  whisper: string;
+  glyph: ReactNode;
+  setup?: boolean;
+};
+
+const STEPS: Step[] = [
   {
+    eyebrow: "The idea",
+    thesis: "Your energy matters.",
+    whisper:
+      "An energy accounting journal built for neurodivergent brains. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow — like money, but you can't borrow from a bank.",
     glyph: <SunGlyph />,
-    title: "Your energy matters",
-    body: "An energy accounting journal built for neurodivergent brains. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow — like money, but you can't borrow from a bank.",
   },
   {
+    eyebrow: "The rhythm",
+    thesis: "Plan, audit, close.",
+    whisper:
+      "In the morning, plan the day's deposits and withdrawals. In the evening, audit how it actually felt. Then close the day to lock the sheet and carry the balance forward.",
     glyph: <LedgerGlyph />,
-    title: "Plan, audit, close",
-    body: "In the morning, plan the day's deposits and withdrawals. In the evening, audit how it actually felt. Then close the day to lock the sheet and carry the balance forward.",
   },
   {
+    eyebrow: "The payoff",
+    thesis: "Done frees energy.",
+    whisper:
+      "Unfinished tasks reserve points from your balance. Check one off and those points come back — spend them on something new, or bank them. Both count as winning.",
     glyph: <CheckGlyph />,
-    title: "Done frees energy",
-    body: "Unfinished tasks reserve points from your balance. Check one off and those points come back — spend them on something new, or bank them. Both count as winning.",
   },
   {
+    eyebrow: "The atmosphere",
+    thesis: "Skies included.",
+    whisper:
+      "Set a location and the background follows your real weather and sunset, tips consider the UV index, and the app quietly nudges you outside when it's nice out.",
     glyph: <PinGlyph />,
-    title: "Skies included",
-    body: "Set a location and the background follows your real weather and sunset, tips consider the UV index, and the app quietly nudges you outside when it's nice out.",
+  },
+  {
+    eyebrow: "Last step",
+    thesis: "Make it yours.",
+    whisper:
+      "Everything here is optional and editable later in Settings. A name makes the greetings warmer; coordinates power the live sky.",
+    glyph: <PersonGlyph />,
+    setup: true,
   },
 ];
 
@@ -93,23 +132,39 @@ type Props = {
 
 export function OnboardingPage({ user, onUser }: Props) {
   const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState<"next" | "prev">("next");
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState(user.displayName ?? "");
   const [lat, setLat] = useState(String(user.lat ?? ""));
   const [lon, setLon] = useState(String(user.lon ?? ""));
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const replay = params.get("replay") === "1";
 
+  // If App geolocates while the user is still on a slide, pick up those coords
+  // into empty fields so finish() doesn't clobber them with null.
+  useEffect(() => {
+    if (lat === "" && user.lat != null) setLat(String(user.lat));
+  }, [user.lat, lat]);
+  useEffect(() => {
+    if (lon === "" && user.lon != null) setLon(String(user.lon));
+  }, [user.lon, lon]);
+
   const last = step >= STEPS.length - 1;
   const current = STEPS[step]!;
+
+  function go(delta: 1 | -1) {
+    setDirection(delta === 1 ? "next" : "prev");
+    setStep((s) => Math.min(Math.max(s + delta, 0), STEPS.length - 1));
+  }
 
   // Arrow keys page through the slides, Apple-keynote style.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
-      if (e.key === "ArrowRight" && !last) setStep((s) => s + 1);
-      if (e.key === "ArrowLeft" && step > 0) setStep((s) => s - 1);
+      if (e.key === "ArrowRight" && !last) go(1);
+      if (e.key === "ArrowLeft" && step > 0) go(-1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -118,19 +173,41 @@ export function OnboardingPage({ user, onUser }: Props) {
   async function finish() {
     setError(null);
     try {
-      const nextLat = lat === "" ? null : Number(lat);
-      const nextLon = lon === "" ? null : Number(lon);
+      // Build a partial PATCH: omit blank lat/lon so we never wipe coords that
+      // App already saved via geolocation while the user was reading slides.
+      const body: Record<string, unknown> = {
+        displayName: name.trim() || null,
+        locationPrompted: true,
+        onboardingCompleted: true,
+      };
+      let nextLat = user.lat ?? null;
+      let nextLon = user.lon ?? null;
+      if (lat !== "") {
+        const n = Number(lat);
+        if (!Number.isFinite(n)) {
+          setError("Latitude must be a number.");
+          return;
+        }
+        body.lat = n;
+        nextLat = n;
+      }
+      if (lon !== "") {
+        const n = Number(lon);
+        if (!Number.isFinite(n)) {
+          setError("Longitude must be a number.");
+          return;
+        }
+        body.lon = n;
+        nextLon = n;
+      }
+      const nextName = name.trim() || null;
       await api("/api/auth/profile", {
         method: "PATCH",
-        body: JSON.stringify({
-          lat: nextLat,
-          lon: nextLon,
-          locationPrompted: true,
-          onboardingCompleted: true,
-        }),
+        body: JSON.stringify(body),
       });
       onUser({
         ...user,
+        displayName: nextName,
         lat: nextLat,
         lon: nextLon,
         locationPrompted: true,
@@ -144,76 +221,111 @@ export function OnboardingPage({ user, onUser }: Props) {
 
   return (
     <div className="ob-root">
+      <div
+        className="ob-progress"
+        aria-hidden="true"
+      >
+        <div
+          className="ob-progress-fill"
+          style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+        />
+      </div>
+
       {/* key remounts the slide so the enter animation replays each step */}
-      <div className="ob-slide" key={step}>
-        {current.glyph}
-        <h2 className="ob-title">{current.title}</h2>
-        <p className="ob-body">{current.body}</p>
-        {last && (
-          <div className="ob-location">
-            <p className="muted">
-              Optional. Coordinates power live weather, the reactive sky, and UV-aware tips. You can
-              also set them anytime in <Link to="/settings">Settings</Link>.
-            </p>
-            <div className="ob-location-fields">
+      <article
+        className={`ob-card ob-card-${direction}`}
+        key={step}
+        aria-labelledby="ob-thesis"
+      >
+        <div className="ob-content" aria-live="polite" aria-atomic="true">
+          <p className="ob-eyebrow">{current.eyebrow}</p>
+          <h2 className="ob-thesis" id="ob-thesis">
+            {current.thesis}
+          </h2>
+          <p className="ob-whisper">{current.whisper}</p>
+          {current.setup && (
+            <div className="ob-setup">
               <div className="field">
-                <label htmlFor="ob-lat">Latitude</label>
+                <label htmlFor="ob-name">Name or alias</label>
                 <input
-                  id="ob-lat"
-                  inputMode="decimal"
-                  value={lat}
-                  onChange={(e) => setLat(e.target.value)}
+                  id="ob-name"
+                  value={name}
+                  maxLength={80}
+                  autoComplete="nickname"
+                  onChange={(e) => setName(e.target.value)}
                 />
               </div>
-              <div className="field">
-                <label htmlFor="ob-lon">Longitude</label>
-                <input
-                  id="ob-lon"
-                  inputMode="decimal"
-                  value={lon}
-                  onChange={(e) => setLon(e.target.value)}
-                />
+              <div className="ob-location-fields">
+                <div className="field">
+                  <label htmlFor="ob-lat">Latitude</label>
+                  <input
+                    id="ob-lat"
+                    inputMode="decimal"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="ob-lon">Longitude</label>
+                  <input
+                    id="ob-lon"
+                    inputMode="decimal"
+                    value={lon}
+                    onChange={(e) => setLon(e.target.value)}
+                  />
+                </div>
               </div>
+              <p className="muted ob-setup-note">
+                You can change any of this in <Link to="/settings">Settings</Link>.
+              </p>
             </div>
+          )}
+          {error && <p className="error">{error}</p>}
+        </div>
+        <div className="ob-aside" aria-hidden="true">
+          {current.glyph}
+        </div>
+      </article>
+
+      <div className="ob-chrome">
+        <div className="ob-dots" role="group" aria-label="Onboarding progress">
+          {STEPS.map((s, i) => (
+            <button
+              key={s.thesis}
+              type="button"
+              aria-current={i === step ? "step" : undefined}
+              aria-label={`Step ${i + 1} of ${STEPS.length}`}
+              className={`ob-dot${i === step ? " active" : ""}`}
+              onClick={() => {
+                setDirection(i > step ? "next" : "prev");
+                setStep(i);
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="ob-actions">
+          {!last ? (
+            <button type="button" className="btn accent ob-continue" onClick={() => go(1)}>
+              Continue
+            </button>
+          ) : (
+            <button type="button" className="btn accent ob-continue" onClick={() => void finish()}>
+              {replay ? "Done" : "Start journaling"}
+            </button>
+          )}
+          <div className="ob-quiet-actions">
+            {step > 0 && (
+              <button type="button" className="linkish" onClick={() => go(-1)}>
+                Back
+              </button>
+            )}
+            {replay && (
+              <button type="button" className="linkish" onClick={() => navigate("/settings")}>
+                Back to settings
+              </button>
+            )}
           </div>
-        )}
-        {error && <p className="error">{error}</p>}
-      </div>
-
-      <div className="ob-dots" role="group" aria-label="Onboarding progress">
-        {STEPS.map((s, i) => (
-          <button
-            key={s.title}
-            type="button"
-            aria-current={i === step ? "step" : undefined}
-            aria-label={`Step ${i + 1} of ${STEPS.length}`}
-            className={`ob-dot${i === step ? " active" : ""}`}
-            onClick={() => setStep(i)}
-          />
-        ))}
-      </div>
-
-      <div className="ob-actions">
-        {!last ? (
-          <button type="button" className="btn accent ob-continue" onClick={() => setStep((s) => s + 1)}>
-            Continue
-          </button>
-        ) : (
-          <button type="button" className="btn accent ob-continue" onClick={() => void finish()}>
-            {replay ? "Done" : "Start journaling"}
-          </button>
-        )}
-        <div className="ob-quiet-actions">
-          {step > 0 && (
-            <button type="button" className="linkish" onClick={() => setStep((s) => s - 1)}>
-              Back
-            </button>
-          )}
-          {replay && (
-            <button type="button" className="linkish" onClick={() => navigate("/settings")}>
-              Back to settings
-            </button>
-          )}
         </div>
       </div>
     </div>

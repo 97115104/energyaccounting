@@ -19,10 +19,12 @@ html[data-theme="day"] {
   --sun-face: #ffcf3d;
   --sun-halo: rgba(255, 200, 60, 0.4);
   --cloud-tint: rgba(255, 255, 255, 0.9);
-  /* Apple-style: SF Pro (system) for UI, New York-style serif for display. */
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --display: ui-serif, "New York", "Times New Roman", Georgia, serif;
+  /* Legibility-research typefaces: Atkinson Hyperlegible (Braille Institute)
+     for body, Lexend (reading-proficiency studies) for display. Self-hosted. */
+  --font: "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Lexend Variable", "Lexend", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
   --radius: 12px;
 }
 
@@ -78,7 +80,8 @@ body {
   font-family: var(--font);
   font-size: 16px;
   line-height: 1.5;
-  letter-spacing: -0.01em;
+  /* Atkinson is designed with its own spacing — don't tighten it. */
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--ink);
@@ -360,6 +363,17 @@ html[data-weather="thunder"] .sky-layer {
   flex: 1;
 }
 
+/* Signed-out (auth) view: center the brand over the centered sign-in card. */
+.top-bar-centered {
+  justify-content: center;
+  text-align: center;
+}
+
+.top-bar-centered .tagline {
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .top-bar-actions {
   display: flex;
   gap: 0.35rem;
@@ -411,6 +425,37 @@ html[data-weather="thunder"] .sky-layer {
   max-width: 36rem;
 }
 
+/* Signed-in header: small wordmark above a time-of-day greeting headline. */
+.wordmark {
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+  animation: greet-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Greeting is the page h1 but shouldn't dominate like the product title did. */
+.brand.greeting {
+  font-size: clamp(1.25rem, 3.6vw, 2rem);
+  max-width: 22ch;
+  font-weight: 500;
+  animation: greet-in 0.55s cubic-bezier(0.32, 0.72, 0, 1) 90ms both;
+}
+
+@keyframes greet-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .nav {
   display: flex;
   flex-wrap: wrap;
@@ -427,7 +472,7 @@ html[data-weather="thunder"] .sky-layer {
   color: var(--muted);
   padding: 0.55rem 1rem;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 700;
   min-height: 44px;
   cursor: pointer;
   display: inline-flex;
@@ -495,7 +540,7 @@ html[data-weather="thunder"] .sky-layer {
   flex: 1;
   min-height: 40px;
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
   background: transparent;
   border-radius: 999px !important;
@@ -563,7 +608,7 @@ html[data-weather="thunder"] .sky-layer {
   background: var(--ink);
   color: var(--accent-ink);
   padding: 0.6rem 1.1rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
   min-height: 44px;
   min-width: 44px;
@@ -622,7 +667,7 @@ html[data-theme="night"] .btn.secondary {
 }
 
 .field label {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.9rem;
 }
 
@@ -855,7 +900,7 @@ html[data-theme="night"] .weather-chip {
 
 .error {
   color: var(--danger);
-  font-weight: 600;
+  font-weight: 700;
   margin: 0.5rem 0;
 }
 
@@ -904,10 +949,11 @@ html[data-theme="night"] .weather-chip {
 
 .auth-card {
   max-width: 420px;
-  margin: 2rem 0;
+  margin: 2rem auto;
   padding: 2rem;
   border-radius: 20px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 20px 50px rgba(42, 34, 8, 0.16);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
+    0 20px 50px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 .auth-card h2 {
@@ -1069,7 +1115,7 @@ html[data-theme="night"] .tip-card {
 
 .site-footer a {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Text-style buttons (quiet actions) — Apple link style: colored, no underline. */
@@ -1078,7 +1124,7 @@ html[data-theme="night"] .tip-card {
   border: none;
   background: transparent;
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
   padding: 0;
@@ -1125,53 +1171,143 @@ html[data-theme="night"] .tip-card {
 }
 
 /* ---------------------------------------------------------------------------
-   Onboarding: full-slide layout with big glyph, headline, and progress dots.
+   Onboarding: keynote-style deck. Left-aligned eyebrow/thesis/whisper column
+   with a glyph aside, staggered rise-in motion, thin progress bar, and dots.
 --------------------------------------------------------------------------- */
 .ob-root {
-  max-width: 560px;
+  max-width: 720px;
   margin: 2.5rem auto 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  min-height: 55vh;
 }
 
-.ob-slide {
+.ob-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+}
+
+.ob-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Fixed footprint so slides don't jump between steps. */
+.ob-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem;
+  align-items: center;
+  height: min(52vh, 520px);
+  overflow: auto;
+}
+
+.ob-card-next {
+  animation: ob-card-in-next 0.4s ease both;
+}
+
+.ob-card-prev {
+  animation: ob-card-in-prev 0.4s ease both;
+}
+
+@keyframes ob-card-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes ob-card-in-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ob-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  animation: ob-slide-in 0.45s cubic-bezier(0.25, 0.8, 0.35, 1);
-  width: 100%;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.ob-eyebrow {
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.ob-thesis {
+  font-family: var(--display);
+  font-size: clamp(1.9rem, 5.5vw, 2.9rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  max-width: 18ch;
+  margin: 0;
+  animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) 90ms both;
+}
+
+.ob-whisper {
+  font-size: 1.02rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 46ch;
+  margin: 1.5rem 0 0;
+  animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) 200ms both;
+}
+
+.ob-aside {
+  animation: ob-rise 0.6s cubic-bezier(0.32, 0.72, 0, 1) 300ms both;
 }
 
 .ob-glyph {
-  width: 96px;
-  height: 96px;
+  width: clamp(88px, 14vw, 128px);
+  height: clamp(88px, 14vw, 128px);
   color: var(--accent);
-  margin-bottom: 1.25rem;
+  display: block;
 }
 
-.ob-title {
-  font-family: var(--display);
-  font-size: clamp(1.8rem, 5vw, 2.6rem);
-  margin: 0 0 0.75rem;
-  line-height: 1.1;
+@media (max-width: 640px) {
+  .ob-card {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    height: min(62vh, 560px);
+  }
+
+  .ob-aside {
+    order: -1;
+  }
+
+  .ob-glyph {
+    width: 72px;
+    height: 72px;
+  }
 }
 
-.ob-body {
-  font-size: 1.08rem;
-  line-height: 1.55;
-  color: var(--ink);
-  max-width: 30rem;
-  margin: 0;
-}
-
-.ob-location {
-  margin-top: 1.5rem;
+/* Final setup slide: name + coordinates. */
+.ob-setup {
+  margin-top: 1.75rem;
   width: 100%;
   max-width: 26rem;
-  text-align: left;
+  animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) 300ms both;
 }
 
 .ob-location-fields {
@@ -1186,10 +1322,33 @@ html[data-theme="night"] .tip-card {
   }
 }
 
+.ob-setup-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.92rem;
+}
+
+@keyframes ob-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ob-chrome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 1rem;
+}
+
 .ob-dots {
   display: flex;
-  gap: 0.35rem;
-  margin: 2rem 0 1.5rem;
+  gap: 0.2rem;
+  margin: 1.25rem 0;
 }
 
 .ob-dot {
@@ -1207,18 +1366,20 @@ html[data-theme="night"] .tip-card {
 
 .ob-dot::after {
   content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 50% !important;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px !important;
   background: var(--muted);
-  opacity: 0.45;
-  transition: opacity 0.25s ease, transform 0.25s ease, background 0.25s ease;
+  opacity: 0.4;
+  transition: opacity 0.3s ease, width 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    background 0.3s ease;
 }
 
+/* Active dot stretches into a small bar, keynote-pill style. */
 .ob-dot.active::after {
   opacity: 1;
+  width: 22px;
   background: var(--accent);
-  transform: scale(1.3);
 }
 
 .ob-actions {
@@ -1239,20 +1400,17 @@ html[data-theme="night"] .tip-card {
   gap: 1rem;
 }
 
-@keyframes ob-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .ob-slide,
-  .ob-dot,
+  .ob-card,
+  .ob-eyebrow,
+  .ob-thesis,
+  .ob-whisper,
+  .ob-aside,
+  .ob-setup,
+  .ob-dot::after,
+  .ob-progress-fill,
+  .wordmark,
+  .brand.greeting,
   .tips-fab,
   .tips-fab svg,
   .tips-sheet,

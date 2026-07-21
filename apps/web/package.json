@@ -13,6 +13,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@eaj/shared": "workspace:*",
+    "@fontsource-variable/lexend": "^5.3.0",
+    "@fontsource/atkinson-hyperlegible": "5.3.0",
     "@huggingface/transformers": "^4.2.0",
     "hash-wasm": "4.11.0",
     "react": "^19.0.0",

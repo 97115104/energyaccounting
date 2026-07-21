@@ -7,6 +7,7 @@ import {
   setSessionDek,
   unwrapDek,
 } from "./lib/crypto";
+import { greetingFor } from "./lib/greeting";
 import { skyPeriod } from "./lib/weatherUi";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -18,6 +19,7 @@ export type UserProfile = {
   id: string;
   email: string;
   totpEnabled: boolean;
+  displayName?: string | null;
   timezone?: string;
   lat?: number | null;
   lon?: number | null;
@@ -196,13 +198,24 @@ export function App() {
         <div className="sky-clouds" />
         <div className="sky-precip" />
       </div>
-      <header className="top-bar">
+      <header className={`top-bar${authed ? "" : " top-bar-centered"}`}>
         <div className="top-bar-brand">
-          <h1 className="brand">Your Energy Matters</h1>
-          <p className="tagline">
-            Energy Accounting Journal for neurodivergent productivity. Plan deposits and
-            withdrawals, audit the day, and carry the balance forward.
-          </p>
+          {authed ? (
+            <>
+              <p className="wordmark">Your Energy Matters</p>
+              <h1 className="brand greeting" key={user?.displayName ?? ""}>
+                {greetingFor(user?.displayName, { timeZone: user?.timezone })}
+              </h1>
+            </>
+          ) : (
+            <>
+              <h1 className="brand">Your Energy Matters</h1>
+              <p className="tagline">
+                Energy Accounting Journal for neurodivergent productivity. Plan deposits and
+                withdrawals, audit the day, and carry the balance forward.
+              </p>
+            </>
+          )}
         </div>
         {authed && (
           <div className="top-bar-actions">
@@ -306,7 +319,7 @@ export function App() {
           <a href="https://attest.97115104.com/s/zn6mxj9z" target="_blank" rel="noreferrer">
             attested
           </a>{" "}
-          · collab · Cursor · auto
+          · collab · cursor (auto)
         </p>
       </footer>
     </div>

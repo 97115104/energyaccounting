@@ -1,7 +1,6 @@
 {
   "name": "eaj",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run --filter @eaj/server dev",
     "dev:web": "bun run --filter @eaj/web dev",
@@ -9,5 +8,6 @@
     "start": "bun run --filter @eaj/server start",
     "typecheck": "bun run --filter @eaj/shared typecheck && bun run --filter @eaj/server typecheck && bun run --filter @eaj/web typecheck",
     "test": "bun test packages/shared apps/server apps/web/src/lib"
-  }
+  },
+  "workspaces": ["apps/*", "packages/*"]
 }
