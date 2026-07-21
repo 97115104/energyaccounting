@@ -48,7 +48,7 @@ A request from the client carries an httpOnly session cookie. The server resolve
 
 ## The encryption boundary
 
-The client derives a key-encryption key (KEK) from the password with Argon2id, unwraps a data-encryption key (DEK) that was generated in the browser at registration, and holds the DEK in session memory only. Text that could identify what a user actually did is encrypted with AES-GCM before upload; numbers stay clear so the server can chart and aggregate without reading anything personal.
+The client derives a key-encryption key (KEK) from the password with Argon2id and unwraps a data-encryption key (DEK) that was generated in the browser at registration. For convenience, the unlocked DEK is cached in the browser profile for at most 24 hours so refreshes and browser restarts preserve the session; explicit logout and expiry clear it. This weakens at-rest protection on the local browser profile compared with memory-only storage, but labels remain encrypted on the wire and server. Text that could identify what a user actually did is encrypted with AES-GCM before upload; numbers stay clear so the server can chart and aggregate without reading anything personal.
 
 ```mermaid
 flowchart LR
@@ -68,7 +68,7 @@ flowchart LR
   audio --> cipher
 ```
 
-The label hash deserves a note: it is a SHA-256 of the normalized label, stored so the suggestion catalog can recognize a repeated activity without decrypting it. It is a correlation handle, and never plaintext. Trend features, including the dashboard charts and the local insight engine in `apps/web/src/lib/insights.ts`, work exclusively from the numeric column set on the right side of the diagram, so no analytics path requires the DEK.
+The label hash deserves a note: it is a SHA-256 of the normalized label, stored so the suggestion catalog can recognize a repeated activity without decrypting it. It is a correlation handle, and never plaintext. Trend features, including the dashboard charts and the local insight engine in `apps/web/src/lib/insights.ts`, work exclusively from the numeric column set on the right side of the diagram, so no analytics path requires the DEK. Contextual activity ranking runs only after unlock in `apps/web/src/lib/activitySuggest.ts`; the server returns encrypted catalog entries plus non-sensitive frequency and weekday metadata.
 
 ## A day's life
 

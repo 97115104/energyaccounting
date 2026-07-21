@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UserProfile } from "../App";
+import { suggestActivities } from "../lib/activitySuggest";
 import { api } from "../lib/api";
 import {
   decryptText,
@@ -64,7 +65,9 @@ type Suggestion = {
   labelIv: string;
   labelHash: string;
   typicalCost: number;
+  weekdayMask: number;
   useCount: number;
+  lastUsed: string;
   label?: string;
 };
 
@@ -382,6 +385,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [weatherKind]);
 
   const playHeavy = day ? isWithdrawalHeavy(day.attwood) : false;
+  const currentSkyPeriod = skyPeriod(
+    user.lat,
+    user.lon,
+    user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
   const playSuggestions = useMemo(() => {
     if (!day || !playHeavy) return [];
     return suggestPlayDeposits({
@@ -393,11 +401,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const tips = useMemo(() => {
     if (!day) return [];
-    const period = skyPeriod(
-      user.lat,
-      user.lon,
-      user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-    );
     return buildTips({
       available: day.availableCapacity,
       depositTotal: day.attwood.depositTotal,
@@ -405,10 +408,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
       incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
       weatherKind,
       uvMax,
-      isDaylight: isDaylightPeriod(period),
+      isDaylight: isDaylightPeriod(currentSkyPeriod),
       justFreed,
     });
-  }, [day, withdrawals, weatherKind, uvMax, justFreed, user.lat, user.lon, user.timezone]);
+  }, [day, withdrawals, weatherKind, uvMax, currentSkyPeriod, justFreed]);
+
+  const activitySuggestions = useMemo(() => {
+    if (!day) return [];
+    return suggestActivities({
+      date,
+      available: day.availableCapacity,
+      weatherKind,
+      uvMax,
+      isDaylight: isDaylightPeriod(currentSkyPeriod),
+      withdrawalHeavy: playHeavy,
+      existingLabels: day.lines.map((line) => line.label ?? ""),
+      candidates: suggestions,
+    });
+  }, [day, date, weatherKind, uvMax, currentSkyPeriod, playHeavy, suggestions]);
 
   async function addLine(
     side: "deposit" | "withdrawal",
@@ -895,9 +912,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
         }}
       >
         <LightbulbIcon />
-        {tips.length > 0 && !tipsOpen && (
+        {tips.length + activitySuggestions.length > 0 && !tipsOpen && (
           <span className="tips-badge" aria-hidden="true">
-            {tips.length}
+            {tips.length + activitySuggestions.length}
           </span>
         )}
       </button>
@@ -918,6 +935,40 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <p>{t.body}</p>
             </div>
           ))}
+          {activitySuggestions.length > 0 && (
+            <div className="tip-card">
+              <strong>Deposits that fit now</strong>
+              <p>
+                {activitySuggestions.some((s) => s.familiar)
+                  ? "Chosen on this device from your patterns, capacity, and today’s conditions."
+                  : "Research-backed options matched to capacity and today’s conditions on this device."}
+              </p>
+              <div className="activity-suggestion-list">
+                {activitySuggestions.map((suggestion) => (
+                  <div key={suggestion.id} className="activity-suggestion">
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={closed}
+                      onClick={() => {
+                        void addLine("deposit", suggestion.label, suggestion.typicalCost);
+                        setTipsOpen(false);
+                      }}
+                    >
+                      + {suggestion.label} · {suggestion.typicalCost}
+                    </button>
+                    <span>{suggestion.reason}</span>
+                    <span className="activity-suggestion-research">{suggestion.research}</span>
+                    {suggestion.sourceUrl && (
+                      <a href={suggestion.sourceUrl} target="_blank" rel="noreferrer">
+                        Evidence
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {playHeavy && playSuggestions.length > 0 && (
             <div className="tip-card">
               <strong>Play deposits</strong>
@@ -1159,10 +1210,24 @@ function SortableTask(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-row${props.line.completed ? " completed" : ""}`}
+      className={`task-row ledger-task${props.line.completed ? " completed" : ""}`}
       {...attributes}
       {...listeners}
     >
+      <button
+        type="button"
+        className={`task-status${props.line.completed ? " checked" : ""}`}
+        aria-label={props.line.completed ? "Mark incomplete" : "Mark complete"}
+        aria-pressed={props.line.completed}
+        disabled={props.closed}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => props.onComplete(props.line)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="m6.5 12.5 3.4 3.4 7.6-8" />
+        </svg>
+      </button>
       <div className="task-main">
         <div className={props.line.completed ? "task-done-label" : undefined}>{props.line.label}</div>
         <div className="task-meta">
@@ -1190,14 +1255,6 @@ function SortableTask(props: {
       </div>
       {!props.closed && (
         <div className="task-actions" onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className={`btn secondary check-btn${props.line.completed ? " checked" : ""}`}
-            aria-label={props.line.completed ? "Mark incomplete" : "Mark complete"}
-            onClick={() => props.onComplete(props.line)}
-          >
-            ✓
-          </button>
           <button
             type="button"
             className="btn secondary"

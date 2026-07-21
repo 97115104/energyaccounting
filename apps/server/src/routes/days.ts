@@ -590,7 +590,9 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         labelIv: c.labelIv,
         labelHash: c.labelHash,
         typicalCost: c.typicalCost,
+        weekdayMask: c.weekdayMask,
         useCount: c.useCount,
+        lastUsed: c.lastUsed,
       }));
     return { suggestions };
   })

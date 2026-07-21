@@ -3,7 +3,11 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-r
 import { api } from "./lib/api";
 import {
   deriveKek,
+  forgetAllRememberedSessionDeks,
+  forgetRememberedSessionDek,
   getSessionDek,
+  rememberSessionDek,
+  restoreRememberedSessionDek,
   setSessionDek,
   unwrapDek,
 } from "./lib/crypto";
@@ -38,7 +42,15 @@ type MeResponse =
       user: UserProfile;
       kekSalt: string;
       wrappedDek: string;
+      sessionExpiresAt: string;
     };
+
+type UnlockInfo = {
+  user: UserProfile;
+  kekSalt: string;
+  wrappedDek: string;
+  sessionExpiresAt: number;
+};
 
 function GearIcon() {
   // Classic cog: ring with eight teeth and a hollow center.
@@ -68,6 +80,7 @@ export function App() {
   const [needsTotp, setNeedsTotp] = useState(false);
   const [booting, setBooting] = useState(true);
   const [dekReady, setDekReady] = useState(!!getSessionDek());
+  const [unlockInfo, setUnlockInfo] = useState<UnlockInfo | null>(null);
   const loc = useLocation();
   const navigate = useNavigate();
 
@@ -79,17 +92,38 @@ export function App() {
           setNeedsTotp(true);
           setUser(null);
         } else if ("user" in me) {
-          if (getSessionDek()) {
+          const sessionExpiresAt = Date.parse(me.sessionExpiresAt);
+          const dek =
+            getSessionDek() ??
+            (await restoreRememberedSessionDek(me.user.id));
+          if (dek) {
+            // Keep stored DEK capped to the live cookie lifetime on every boot.
+            if (Number.isFinite(sessionExpiresAt)) {
+              await rememberSessionDek(dek, me.user.id, Date.now(), sessionExpiresAt);
+            }
             setUser(me.user);
             setNeedsTotp(false);
             setDekReady(true);
+            setUnlockInfo(null);
           } else {
             setUser(null);
             setDekReady(false);
+            setUnlockInfo({
+              user: me.user,
+              kekSalt: me.kekSalt,
+              wrappedDek: me.wrappedDek,
+              sessionExpiresAt: Number.isFinite(sessionExpiresAt)
+                ? sessionExpiresAt
+                : Date.now() + 24 * 60 * 60 * 1000,
+            });
           }
         }
       } catch {
+        forgetAllRememberedSessionDeks();
+        setSessionDek(null);
         setUser(null);
+        setUnlockInfo(null);
+        setDekReady(false);
       } finally {
         setBooting(false);
       }
@@ -166,20 +200,37 @@ export function App() {
     };
   }, [user?.id, user?.locationPrompted, user?.lat, user?.lon, dekReady]);
 
-  async function unlockWithPassword(password: string, kekSalt: string, wrappedDek: string) {
+  async function unlockWithPassword(
+    password: string,
+    kekSalt: string,
+    wrappedDek: string,
+    userId: string,
+    sessionExpiresAt?: number,
+  ) {
     const kek = await deriveKek(password, kekSalt);
     const dek = await unwrapDek(wrappedDek, kek);
     setSessionDek(dek);
+    await rememberSessionDek(dek, userId, Date.now(), sessionExpiresAt);
     setDekReady(true);
   }
 
   async function logout() {
-    await api("/api/auth/logout", { method: "POST" });
-    setSessionDek(null);
-    setUser(null);
-    setDekReady(false);
-    setNeedsTotp(false);
-    navigate("/auth");
+    const userId = user?.id ?? unlockInfo?.user.id;
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Local lock still takes precedence when the revoke request cannot reach the server.
+    } finally {
+      // A failed network revoke must not leave decrypted data open locally.
+      if (userId) forgetRememberedSessionDek(userId);
+      else forgetAllRememberedSessionDeks();
+      setSessionDek(null);
+      setUser(null);
+      setUnlockInfo(null);
+      setDekReady(false);
+      setNeedsTotp(false);
+      navigate("/auth");
+    }
   }
 
   if (booting) {
@@ -273,10 +324,32 @@ export function App() {
             ) : (
               <AuthPage
                 needsTotp={needsTotp}
-                onAuthed={async (u, salt, wrapped, password) => {
+                unlockInfo={unlockInfo}
+                onLogout={() => void logout()}
+                onAuthed={async (u, salt, wrapped, password, sessionExpiresAt) => {
                   setUser(u);
                   setNeedsTotp(false);
-                  await unlockWithPassword(password, salt, wrapped);
+                  setUnlockInfo(null);
+                  await unlockWithPassword(
+                    password,
+                    salt,
+                    wrapped,
+                    u.id,
+                    sessionExpiresAt,
+                  );
+                  markReturning();
+                }}
+                onUnlocked={async (password) => {
+                  if (!unlockInfo) return;
+                  await unlockWithPassword(
+                    password,
+                    unlockInfo.kekSalt,
+                    unlockInfo.wrappedDek,
+                    unlockInfo.user.id,
+                    unlockInfo.sessionExpiresAt,
+                  );
+                  setUser(unlockInfo.user);
+                  setUnlockInfo(null);
                   markReturning();
                 }}
                 onNeedsTotp={() => setNeedsTotp(true)}

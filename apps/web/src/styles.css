@@ -345,6 +345,9 @@ html[data-weather="thunder"] .sky-layer {
   .sky-clouds::after,
   .sky-precip,
   .weather-chip[data-kind="rain"] .weather-glyph,
+  .task-status svg,
+  .task-status circle,
+  .task-status path,
   body {
     animation: none !important;
     transition: none !important;
@@ -721,12 +724,25 @@ html[data-theme="night"] .task-row {
   color: var(--ink);
 }
 
+.task-row.ledger-task {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 0.35rem;
+}
+
 .task-row.completed {
-  opacity: 0.72;
+  border-color: color-mix(in srgb, var(--deposit) 32%, var(--line));
+  background: color-mix(in srgb, var(--deposit) 8%, #fff);
+}
+
+html[data-theme="night"] .task-row.completed {
+  background: color-mix(in srgb, var(--deposit) 10%, #0e1428);
 }
 
 .task-done-label {
+  color: var(--muted);
   text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: color-mix(in srgb, currentColor 65%, transparent);
 }
 
 .task-actions {
@@ -734,10 +750,72 @@ html[data-theme="night"] .task-row {
   gap: 0.35rem;
 }
 
-.check-btn.checked {
-  background: var(--deposit);
-  color: #fff;
-  border-color: var(--deposit);
+.task-status {
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50% !important;
+}
+
+.task-status svg {
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.task-status circle {
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  transition: fill 0.16s ease, stroke 0.16s ease;
+}
+
+.task-status path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 18;
+  stroke-dashoffset: 18;
+  transition: stroke-dashoffset 0.2s ease 0.05s;
+}
+
+.task-status.checked {
+  color: var(--deposit);
+}
+
+.task-status.checked svg {
+  transform: scale(1.08);
+}
+
+.task-status.checked circle {
+  fill: currentColor;
+}
+
+.task-status.checked path {
+  stroke-dashoffset: 0;
+}
+
+.task-status:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--deposit) 10%, transparent);
+}
+
+.task-status:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.task-status:disabled {
+  cursor: default;
 }
 
 .task-row.suggestion {
@@ -853,6 +931,11 @@ html[data-theme="night"] .weather-chip {
   flex-shrink: 0;
   background: #ffcc33;
   box-shadow: 0 0 12px rgba(255, 200, 40, 0.5);
+}
+
+html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
+  background: #f3efff;
+  box-shadow: 0 0 12px rgba(210, 198, 255, 0.45);
 }
 
 .weather-chip[data-kind="rain"] .weather-glyph {
@@ -1103,6 +1186,40 @@ html[data-theme="night"] .tip-card {
   flex-direction: column;
   gap: 0.35rem;
   margin-top: 0.5rem;
+}
+
+.activity-suggestion-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.activity-suggestion {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.activity-suggestion .btn {
+  justify-self: stretch;
+  text-align: left;
+}
+
+.activity-suggestion span,
+.activity-suggestion a {
+  font-size: 0.8rem;
+}
+
+.activity-suggestion span {
+  color: var(--muted);
+}
+
+.activity-suggestion-research {
+  display: block;
+}
+
+.activity-suggestion a {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .site-footer {

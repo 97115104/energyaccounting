@@ -21,6 +21,14 @@ describe("skyPeriod / sunTimes", () => {
     expect(period === "night" || period === "dusk").toBe(true);
   });
 
+  test("logged-in coordinates do not override the local 20:00 night boundary", () => {
+    // Solar golden hour can continue after 20:00 in summer, but the auth sky
+    // already uses the user's local clock and both surfaces should agree.
+    const now = new Date("2026-07-21T03:16:00Z"); // 20:16 PDT
+    expect(skyPeriod(37.77, -122.42, "America/Los_Angeles", now)).toBe("night");
+    expect(skyPeriod(null, null, "America/Los_Angeles", now)).toBe("night");
+  });
+
   test("polar day returns alwaysUp", () => {
     // Tromsø midsummer — sun never sets.
     const midsummer = new Date("2026-06-21T12:00:00Z");

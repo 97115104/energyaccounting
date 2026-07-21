@@ -65,12 +65,17 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         timeCost: 2,
       });
       const id = newId();
+      const timezone =
+        typeof body.timezone === "string" && body.timezone.trim()
+          ? body.timezone.trim()
+          : "UTC";
       await db.insert(userTable).values({
         id,
         email,
         passwordHash,
         kekSalt: body.kekSalt,
         wrappedDek: body.wrappedDek,
+        timezone,
         onboardingCompleted: false,
         locationPrompted: false,
         createdAt: new Date(),
@@ -83,7 +88,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           email,
           totpEnabled: false,
           displayName: null,
-          timezone: "UTC",
+          timezone,
           lat: null,
           lon: null,
           country: "US",
@@ -94,6 +99,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         },
         kekSalt: body.kekSalt,
         wrappedDek: body.wrappedDek,
+        sessionExpiresAt: expiresAt.toISOString(),
       };
     },
     {
@@ -102,6 +108,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         password: t.String(),
         kekSalt: t.String(),
         wrappedDek: t.String(),
+        timezone: t.Optional(t.String()),
       }),
     },
   )
@@ -125,7 +132,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       const { token, expiresAt } = await createSession(user.id, needsTotp);
       set.headers["Set-Cookie"] = cookieHeader(token, expiresAt);
       if (needsTotp) {
-        return { requiresTotp: true };
+        return { requiresTotp: true, sessionExpiresAt: expiresAt.toISOString() };
       }
       return {
         requiresTotp: false,
@@ -145,6 +152,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         },
         kekSalt: user.kekSalt,
         wrappedDek: user.wrappedDek,
+        sessionExpiresAt: expiresAt.toISOString(),
       };
     },
     {
@@ -209,6 +217,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         },
         kekSalt: auth.user.kekSalt,
         wrappedDek: auth.user.wrappedDek,
+        sessionExpiresAt: auth.expiresAt.toISOString(),
       };
     },
     { body: t.Object({ code: t.String() }) },
@@ -245,6 +254,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       },
       kekSalt: auth.user.kekSalt,
       wrappedDek: auth.user.wrappedDek,
+      sessionExpiresAt: auth.expiresAt.toISOString(),
     };
   })
   .post(

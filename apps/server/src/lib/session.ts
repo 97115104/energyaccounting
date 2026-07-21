@@ -4,7 +4,7 @@ import { db } from "../db/index.ts";
 import { sessionTable, userTable } from "../db/schema.ts";
 
 export const SESSION_COOKIE = "eaj_session";
-const SESSION_DAYS = 14;
+export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -44,7 +44,7 @@ export async function createSession(
   pendingTotp: boolean,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   await db.insert(sessionTable).values({
     id: newId(),
     userId,
@@ -63,7 +63,9 @@ export type AuthUser = typeof userTable.$inferSelect;
 
 export async function sessionFromCookie(
   cookie: string | undefined,
-): Promise<{ user: AuthUser; sessionId: string; pendingTotp: boolean } | null> {
+): Promise<
+  { user: AuthUser; sessionId: string; pendingTotp: boolean; expiresAt: Date } | null
+> {
   if (!cookie) return null;
   const row = await db.query.sessionTable.findFirst({
     where: eq(sessionTable.tokenHash, hashToken(cookie)),
@@ -77,7 +79,12 @@ export async function sessionFromCookie(
     where: eq(userTable.id, row.userId),
   });
   if (!user) return null;
-  return { user, sessionId: row.id, pendingTotp: row.pendingTotp };
+  return {
+    user,
+    sessionId: row.id,
+    pendingTotp: row.pendingTotp,
+    expiresAt: row.expiresAt,
+  };
 }
 
 export async function requireFullUser(request: Request): Promise<AuthUser | null> {

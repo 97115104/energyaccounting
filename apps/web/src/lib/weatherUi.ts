@@ -132,6 +132,19 @@ export function skyPeriod(
   timezone: string,
   now = new Date(),
 ): SkyPeriod {
+  // Keep authenticated and signed-out skies consistent at the local night
+  // boundary; solar golden hour must not reintroduce a sun after 20:00.
+  // Polar day is the only exception — the sun truly never sets.
+  if (isNightInTimezone(timezone, now)) {
+    if (lat != null && lon != null) {
+      const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      for (const offset of [0, -1, 1] as const) {
+        const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
+        if (result.kind === "polar" && result.alwaysUp) return "day";
+      }
+    }
+    return "night";
+  }
   if (lat != null && lon != null) {
     const t = now.getTime();
     const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
