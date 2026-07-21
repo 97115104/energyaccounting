@@ -1691,6 +1691,28 @@ html[data-theme="night"] .tip-card {
   min-height: 44px;
 }
 
+/* Character-limit feedback for task details. */
+.char-counter {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.char-counter.at-limit {
+  color: var(--danger);
+}
+
+.dictation-notice {
+  margin: 0.35rem 0 0;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.detail-dictate-row {
+  margin-top: 0.5rem;
+}
+
 /* Dictation control. */
 .mic-btn {
   display: inline-flex;

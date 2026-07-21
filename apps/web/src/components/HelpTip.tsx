@@ -17,7 +17,11 @@ export function HelpTip({ label, children }: { label: string; children: ReactNod
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        // Swallow the key so an enclosing dialog doesn't also close.
+        e.stopPropagation();
+        setOpen(false);
+      }
     }
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKey);

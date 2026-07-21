@@ -97,7 +97,7 @@ const STEPS: Step[] = [
     eyebrow: "The boundary",
     thesis: "Private by architecture.",
     whisper:
-      "Activity labels, journals, and recordings are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions — every one explains itself, and every one can be dismissed.",
+      "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions — every one explains itself, and every one can be dismissed.",
     glyph: <CheckGlyph />,
   },
   {

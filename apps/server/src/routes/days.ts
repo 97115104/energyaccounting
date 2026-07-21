@@ -156,8 +156,6 @@ function serializeDay(
     feelRating: day.feelRating,
     journalCiphertext: day.journalCiphertext,
     journalIv: day.journalIv,
-    audioPath: day.audioPath,
-    audioIv: day.audioIv,
     weather: day.weatherJson ? JSON.parse(day.weatherJson) : null,
     isHoliday: day.isHoliday,
     qualitativeCiphertext: day.qualitativeCiphertext,
@@ -268,7 +266,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .from(taskCatalogTable)
       .where(eq(taskCatalogTable.userId, user.id));
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -638,8 +636,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
               : body.compensateNoteCiphertext,
           compensateNoteIv:
             body.compensateNoteIv === undefined ? day.compensateNoteIv : body.compensateNoteIv,
-          audioPath: body.audioPath === undefined ? day.audioPath : body.audioPath,
-          audioIv: body.audioIv === undefined ? day.audioIv : body.audioIv,
         })
         .where(eq(dayTable.id, day.id));
       return { ok: true };
@@ -654,8 +650,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         qualitativeIv: t.Optional(t.Nullable(t.String())),
         compensateNoteCiphertext: t.Optional(t.Nullable(t.String())),
         compensateNoteIv: t.Optional(t.Nullable(t.String())),
-        audioPath: t.Optional(t.Nullable(t.String())),
-        audioIv: t.Optional(t.Nullable(t.String())),
       }),
     },
   )

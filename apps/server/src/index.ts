@@ -4,7 +4,6 @@ import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { authRoutes } from "./routes/auth.ts";
-import { audioRoutes } from "./routes/audio.ts";
 import { dayRoutes } from "./routes/days.ts";
 
 const port = Number(process.env.PORT ?? 3000);
@@ -22,8 +21,7 @@ const app = new Elysia()
     service: "eaj",
   }))
   .use(authRoutes)
-  .use(dayRoutes)
-  .use(audioRoutes);
+  .use(dayRoutes);
 
 if (existsSync(webDist)) {
   const indexHtml = () => Bun.file(join(webDist, "index.html"));

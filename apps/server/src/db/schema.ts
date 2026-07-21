@@ -48,8 +48,6 @@ export const dayTable = sqliteTable(
     feelRating: integer("feel_rating"),
     journalCiphertext: text("journal_ciphertext"),
     journalIv: text("journal_iv"),
-    audioPath: text("audio_path"),
-    audioIv: text("audio_iv"),
     weatherJson: text("weather_json"),
     isHoliday: integer("is_holiday", { mode: "boolean" }).notNull().default(false),
     qualitativeCiphertext: text("qualitative_ciphertext"),

@@ -99,20 +99,6 @@ export async function decryptText(
   return textDec.decode(pt);
 }
 
-export async function encryptBytes(
-  dek: CryptoKey,
-  data: ArrayBuffer,
-  aad = "eaj-audio",
-): Promise<{ ciphertext: Blob; iv: string }> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, additionalData: textEnc.encode(aad) },
-    dek,
-    data,
-  );
-  return { ciphertext: new Blob([ct]), iv: b64(iv) };
-}
-
 export async function labelHash(label: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",

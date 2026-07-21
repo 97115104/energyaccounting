@@ -5,7 +5,7 @@
 #   PRIMARY_URL      URL to open (default: http://localhost:5173)
 #   HEALTH_TIMEOUT   Seconds to wait for primary URL (default: 60)
 #   PORT             API port (default: 3000)
-#   DATA_DIR         SQLite and audio directory (default: ./data)
+#   DATA_DIR         SQLite data directory (default: ./data)
 #
 # Usage: ./deploy-locally.sh
 # Stop: Ctrl+C (trap stops background processes started by this script)

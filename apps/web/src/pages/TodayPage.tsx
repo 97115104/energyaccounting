@@ -92,7 +92,6 @@ type DayPayload = {
   feelRating: number | null;
   journalCiphertext: string | null;
   journalIv: string | null;
-  audioPath: string | null;
   compensateNoteCiphertext: string | null;
   compensateNoteIv: string | null;
   weather: Record<string, unknown> | null;
@@ -100,6 +99,13 @@ type DayPayload = {
   attwood: { depositTotal: number; withdrawalTotal: number; attwoodNet: number };
   lines: Line[];
 };
+
+// Details are capped so one note cannot balloon the encrypted payload; the
+// warning threshold surfaces the counter before typing or dictation hits it.
+const DETAILS_MAX = 5000;
+const DETAILS_WARN_AT = 4500;
+
+type SpeechTarget = "journal" | "details";
 
 type SpeechRec = {
   continuous: boolean;
@@ -174,12 +180,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
-  const [listening, setListening] = useState(false);
+  // Which surface the microphone is feeding, or null when idle.
+  const [listening, setListening] = useState<SpeechTarget | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [detailLineId, setDetailLineId] = useState<string | null>(null);
   const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
   const [detailText, setDetailText] = useState("");
   const [detailError, setDetailError] = useState<string | null>(null);
+  // Non-error status for the details dialog, e.g. dictation hit the cap.
+  const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [dismissedGuideIds, setDismissedGuideIds] = useState<Set<string>>(() => new Set());
   // The welcome walkthrough dismisses once, forever — not per day.
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
@@ -205,7 +214,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Numeric history, feeding the planning hint and the recovery plan.
   const [statSeries, setStatSeries] = useState<StatPoint[]>([]);
   const speechRef = useRef<SpeechRec | null>(null);
-  const journalBaseRef = useRef("");
+  // Bumps on every stop/start so late Web Speech callbacks cannot touch state.
+  const speechGenerationRef = useRef(0);
+  // Text committed before/while dictating, per active target; interim results render on top of it.
+  const speechBaseRef = useRef("");
   const journalRef = useRef("");
 
   useEffect(() => {
@@ -222,10 +234,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   useEffect(() => {
     return () => {
-      speechRef.current?.stop();
-      speechRef.current = null;
+      stopLiveSpeech();
     };
   }, []);
+
+  // Closing the details dialog (escape, scrim, cancel, save, date change)
+  // also releases the microphone.
+  useEffect(() => {
+    if (!detailLineId && listening === "details") stopLiveSpeech();
+  }, [detailLineId, listening]);
 
   const [draftSide, setDraftSide] = useState<"deposit" | "withdrawal" | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
@@ -386,6 +403,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        stopLiveSpeech();
         setDetailLineId(null);
         return;
       }
@@ -408,7 +426,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       window.removeEventListener("keydown", onKey);
       previous?.focus?.();
     };
-  }, [detailLineId]);
+  }, [detailLineId, listening]);
 
   // Escape closes the guide sheet; Tab stays inside (same contract as the
   // other dialogs on this page).
@@ -568,10 +586,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   function openTaskDetails(line: Line) {
     if (dndBusy || activeDragId || suppressOpenRef.current) return;
+    stopLiveSpeech();
     setDetailLineId(line.id);
     setDetailDifficulty(line.difficulty);
     setDetailText(line.details ?? "");
     setDetailError(null);
+    setDetailNotice(null);
     setGuideOpen(false);
   }
 
@@ -691,6 +711,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
     if (!detailLine || !day || day.phase === "closed") return;
     const dek = getSessionDek();
     if (!dek) return;
+    // Release the mic first so nothing lands in the field after we snapshot it.
+    if (listening === "details") stopLiveSpeech();
     setDetailError(null);
     try {
       const text = detailText.trim();
@@ -793,21 +815,45 @@ export function TodayPage({ user }: { user: UserProfile }) {
     await load();
   }
 
-  function startLiveSpeech() {
+  function stopLiveSpeech() {
+    const rec = speechRef.current;
+    if (rec) {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      rec.stop();
+      speechRef.current = null;
+    }
+    speechGenerationRef.current += 1;
+    setListening(null);
+  }
+
+  function startLiveSpeech(target: SpeechTarget) {
     const SR =
       (window as unknown as { SpeechRecognition?: new () => SpeechRec }).SpeechRecognition ||
       (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec })
         .webkitSpeechRecognition;
     if (!SR) {
-      setError("Dictation is not available in this browser. The keyboard still believes in you.");
+      const msg =
+        "Dictation is not available in this browser. The keyboard still believes in you.";
+      if (target === "details") setDetailError(msg);
+      else setError(msg);
       return;
     }
-    journalBaseRef.current = journal;
+    stopLiveSpeech();
+    speechGenerationRef.current += 1;
+    const generation = speechGenerationRef.current;
+    speechBaseRef.current = target === "journal" ? journal : detailText;
+    if (target === "details") {
+      setDetailNotice(null);
+      setDetailError(null);
+    }
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
     rec.onresult = (ev) => {
+      if (generation !== speechGenerationRef.current || speechRef.current !== rec) return;
       let interim = "";
       let finals = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -816,20 +862,40 @@ export function TodayPage({ user }: { user: UserProfile }) {
         else interim += r[0].transcript;
       }
       if (finals) {
-        journalBaseRef.current = (journalBaseRef.current + " " + finals).trim();
+        speechBaseRef.current = (speechBaseRef.current + " " + finals).trim();
       }
-      setJournal((journalBaseRef.current + (interim ? " " + interim : "")).trim());
+      const next = (speechBaseRef.current + (interim ? " " + interim : "")).trim();
+      if (target === "journal") {
+        setJournal(next);
+        return;
+      }
+      if (next.length >= DETAILS_MAX) {
+        const capped = next.slice(0, DETAILS_MAX);
+        speechBaseRef.current = capped;
+        setDetailText(capped);
+        setDetailNotice("Character limit reached, dictation stopped.");
+        speechGenerationRef.current += 1;
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+        if (speechRef.current === rec) speechRef.current = null;
+        setListening(null);
+        return;
+      }
+      setDetailText(next);
     };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
+    rec.onerror = () => {
+      if (generation !== speechGenerationRef.current) return;
+      setListening(null);
+    };
+    rec.onend = () => {
+      if (generation !== speechGenerationRef.current) return;
+      setListening(null);
+    };
     speechRef.current = rec;
     rec.start();
-    setListening(true);
-  }
-
-  function stopLiveSpeech() {
-    speechRef.current?.stop();
-    setListening(false);
+    setListening(target);
   }
 
   function onDragStart(e: DragStartEvent) {
@@ -1148,21 +1214,29 @@ export function TodayPage({ user }: { user: UserProfile }) {
               onChange={(e) => setJournal(e.target.value)}
               placeholder="What shaped your energy today?"
             />
-            {listening && <p className="listening-pill">Listening · your words appear as you talk</p>}
+            {listening === "journal" && (
+              <p className="listening-pill">Listening · your words appear as you talk</p>
+            )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-            {!listening ? (
+            {listening !== "journal" ? (
               <button
                 type="button"
                 className="btn secondary mic-btn"
                 disabled={closed}
                 title="Typing is hard sometimes. Talk instead."
-                onClick={startLiveSpeech}
+                aria-label="Dictate journal"
+                onClick={() => startLiveSpeech("journal")}
               >
                 <MicIcon /> Dictate
               </button>
             ) : (
-              <button type="button" className="btn danger mic-btn" onClick={stopLiveSpeech}>
+              <button
+                type="button"
+                className="btn danger mic-btn"
+                aria-label="Stop dictating journal"
+                onClick={stopLiveSpeech}
+              >
                 <span className="rec-dot" aria-hidden="true" /> Stop dictating
               </button>
             )}
@@ -1316,7 +1390,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <div
           className="insight-scrim"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setDetailLineId(null);
+            if (e.target === e.currentTarget) {
+              stopLiveSpeech();
+              setDetailLineId(null);
+            }
           }}
         >
           <form
@@ -1364,15 +1441,65 @@ export function TodayPage({ user }: { user: UserProfile }) {
               </div>
             </fieldset>
             <div className="field">
-              <label htmlFor="task-details">Details</label>
+              <label htmlFor="task-details">
+                Details{" "}
+                <HelpTip label="task details">
+                  Details are capped at {DETAILS_MAX.toLocaleString()} characters. A counter
+                  appears as you approach the limit, and dictation stops automatically when
+                  it is reached.
+                </HelpTip>
+              </label>
               <textarea
                 id="task-details"
                 value={detailText}
                 disabled={closed}
-                maxLength={5000}
+                maxLength={DETAILS_MAX}
                 placeholder="What made this easier or harder? Add any context worth remembering."
-                onChange={(e) => setDetailText(e.target.value)}
+                onChange={(e) => {
+                  setDetailText(e.target.value);
+                  if (e.target.value.length < DETAILS_MAX) setDetailNotice(null);
+                }}
               />
+              {listening === "details" && (
+                <p className="listening-pill">Listening · your words appear as you talk</p>
+              )}
+              {detailText.length >= DETAILS_WARN_AT && (
+                <p
+                  className={`char-counter${detailText.length >= DETAILS_MAX ? " at-limit" : ""}`}
+                >
+                  {detailText.length.toLocaleString()} / {DETAILS_MAX.toLocaleString()} characters
+                </p>
+              )}
+              {detailNotice && (
+                <p className="dictation-notice" role="status">
+                  {detailNotice}
+                </p>
+              )}
+              {!closed && (
+                <div className="detail-dictate-row">
+                  {listening !== "details" ? (
+                    <button
+                      type="button"
+                      className="btn secondary mic-btn"
+                      disabled={detailText.length >= DETAILS_MAX}
+                      title="Typing is hard sometimes. Talk instead."
+                      aria-label="Dictate task details"
+                      onClick={() => startLiveSpeech("details")}
+                    >
+                      <MicIcon /> Dictate
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn danger mic-btn"
+                      aria-label="Stop dictating task details"
+                      onClick={stopLiveSpeech}
+                    >
+                      <span className="rec-dot" aria-hidden="true" /> Stop dictating
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="muted">
                 This text is encrypted before it leaves your browser.
               </p>
@@ -1384,7 +1511,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   Save task details
                 </button>
               )}
-              <button type="button" className="btn secondary" onClick={() => setDetailLineId(null)}>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  stopLiveSpeech();
+                  setDetailLineId(null);
+                }}
+              >
                 {closed ? "Done" : "Cancel"}
               </button>
             </div>

@@ -1,12 +1,15 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import * as schema from "./schema.ts";
 
-const dataDir = process.env.DATA_DIR ?? join(import.meta.dir, "../../../../data");
+const rawDataDir = process.env.DATA_DIR?.trim();
+const dataDir =
+  rawDataDir && rawDataDir.length > 0
+    ? rawDataDir
+    : join(import.meta.dir, "../../../../data");
 mkdirSync(dataDir, { recursive: true });
-mkdirSync(join(dataDir, "audio"), { recursive: true });
 
 const dbPath = join(dataDir, "eaj.sqlite");
 const sqlite = new Database(dbPath, { create: true });
@@ -76,6 +79,27 @@ try {
 } catch {
   /* column exists */
 }
+// Voice-recording storage was removed in favor of dictation-to-text: drop the
+// legacy pointer columns and purge any encrypted blobs left on disk. The
+// recordings were never playable in-app (no decrypt/download path shipped).
+function dropColumnIfExists(table: string, column: string) {
+  try {
+    sqlite.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.includes("no such column") && !msg.includes("no such table")) {
+      console.warn(`[eaj] could not drop ${table}.${column}: ${msg}`);
+    }
+  }
+}
+dropColumnIfExists("day_table", "audio_path");
+dropColumnIfExists("day_table", "audio_iv");
+try {
+  rmSync(join(dataDir, "audio"), { recursive: true, force: true });
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  console.warn(`[eaj] could not remove legacy audio directory: ${msg}`);
+}
 
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS user_table (
@@ -117,8 +141,6 @@ CREATE TABLE IF NOT EXISTS day_table (
   feel_rating INTEGER,
   journal_ciphertext TEXT,
   journal_iv TEXT,
-  audio_path TEXT,
-  audio_iv TEXT,
   weather_json TEXT,
   is_holiday INTEGER NOT NULL DEFAULT 0,
   qualitative_ciphertext TEXT,

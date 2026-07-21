@@ -10,24 +10,22 @@ flowchart TB
     ui["React 19 + react-router 7"]
     webcrypto["Web Crypto: Argon2id KEK, AES-GCM with session DEK"]
     embed["Transformers.js cost suggestions"]
-    speech["Browser speech recognition for dictation"]
+    speech["Browser speech recognition dictates journals and task details as text"]
   end
   subgraph server [Server: apps/server, Elysia on Bun]
     authr["/api/auth: register, login, TOTP, profile"]
     daysr["/api/days, /api/stats, /api/suggestions/:date, /api/export/days"]
-    audior["/api/days/:date/audio"]
     shared["packages/shared: balance math"]
   end
   db[("bun:sqlite file under DATA_DIR")]
   meteo["Open-Meteo weather API"]
   ui -->|"fetch /api/* with httpOnly session cookie"| authr
   ui --> daysr
-  webcrypto -->|"ciphertext: labels, journal, audio"| daysr
+  webcrypto -->|"ciphertext: labels, journal, task details"| daysr
   ui -->|"plaintext: costs, balances, feel"| daysr
   daysr --> shared
   authr --> db
   daysr --> db
-  audior --> db
   daysr -->|"daily forecast fetch, cached"| meteo
 ```
 
@@ -38,7 +36,7 @@ flowchart TB
 | `apps/web` | React client, Vite build, all encryption and decryption |
 | `apps/server` | Elysia routes, Drizzle schema, session and TOTP handling |
 | `packages/shared` | Balance math (`openingBalance`, `closingBalance`, Attwood totals), used by both sides |
-| `data/` (or `DATA_DIR`) | SQLite file plus encrypted audio blobs |
+| `data/` (or `DATA_DIR`) | SQLite file |
 
 The root `package.json` defines the workspace scripts. `bun run dev` starts the API, `bun run dev:web` starts Vite, `bun test` runs the shared, server, and web-lib test suites, and `bun run build` produces `apps/web/dist`, which the server serves as static assets when present.
 
@@ -55,7 +53,6 @@ flowchart LR
   subgraph client [Client-side plaintext]
     labels["Task labels"]
     journalText["Journal, task details, and compensate notes"]
-    audio["Voice recordings"]
   end
   subgraph wire [Crosses the network and rests in SQLite]
     cipher["AES-GCM ciphertext + IV"]
@@ -65,7 +62,6 @@ flowchart LR
   labels --> cipher
   labels --> hash
   journalText --> cipher
-  audio --> cipher
 ```
 
 The label hash deserves a note: it is a SHA-256 of the normalized label, stored so the suggestion catalog can recognize a repeated activity without decrypting it. It is a correlation handle, and never plaintext. Trend features, including the dashboard charts and the local insight engine in `apps/web/src/lib/insights.ts`, work exclusively from the numeric column set on the right side of the diagram, so no analytics path requires the DEK. Contextual activity ranking runs only after unlock in `apps/web/src/lib/activitySuggest.ts`; the server returns encrypted catalog entries plus non-sensitive frequency and weekday metadata. All recommendation surfaces flow through the Energy Guide in `apps/web/src/lib/energyGuide.ts`, a deterministic on-device ranker whose every item carries the concrete signals that produced it, so "why this?" is answerable without any server round trip. The legacy compensate-note columns remain in the schema and the corpus export for old data, but the UI now generates a tomorrow-recovery recommendation instead of asking for a free-text note.
