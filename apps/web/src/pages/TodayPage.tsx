@@ -147,6 +147,72 @@ async function fetchRecentStats(): Promise<StatPoint[]> {
   return res.series;
 }
 
+/** One trend line for the card/modal, Apple-Trends style: a recent average
+    compared against the average of the closed days before it. */
+type TrendWindow = { recent: number; delta: number | null };
+
+function average(nums: number[]): number {
+  return nums.reduce((sum, n) => sum + n, 0) / nums.length;
+}
+
+/**
+ * Last-7-closed-days average vs the (up to 30) closed days before them.
+ * Delta stays null until there are at least 3 prior days, so early arrows
+ * never over-claim a pattern.
+ */
+function trendWindow(values: number[]): TrendWindow | null {
+  if (values.length < 2) return null;
+  const recent = values.slice(-7);
+  const prior = values.slice(0, -7).slice(-30);
+  const recentAvg = average(recent);
+  return {
+    recent: recentAvg,
+    delta: prior.length >= 3 ? recentAvg - average(prior) : null,
+  };
+}
+
+/** Tiny line chart with a soft area fill; colors come from currentColor. */
+function TrendSpark({ values, className }: { values: number[]; className?: string }) {
+  const w = 120;
+  const h = 34;
+  const min = Math.min(...values);
+  const span = Math.max(...values) - min || 1;
+  const step = values.length > 1 ? w / (values.length - 1) : w;
+  const pts = values.map((v, i) => ({
+    x: i * step,
+    y: h - 3 - ((v - min) / span) * (h - 6),
+  }));
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className={className} preserveAspectRatio="none" aria-hidden="true">
+      <path d={`${line} L${w} ${h} L0 ${h} Z`} fill="currentColor" opacity="0.12" stroke="none" />
+      <path
+        d={line}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Direction arrow for a trend delta. "signed" tones color the arrow by
+ * direction (for metrics where up is unambiguously more energy left);
+ * "neutral" keeps it muted, since using more energy is not a failure here.
+ */
+function TrendArrow({ delta, tone = "signed" }: { delta: number; tone?: "signed" | "neutral" }) {
+  const up = delta >= 0;
+  const cls = tone === "signed" ? (up ? " up" : " down") : "";
+  return (
+    <span className={`trend-arrow${cls}`} aria-hidden="true">
+      {up ? "↗" : "↘"}
+    </span>
+  );
+}
+
 function guideDismissKey(dayId: string): string {
   return `eaj-guide-dismissed:${dayId}`;
 }
@@ -242,6 +308,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   } | null>(null);
   // Numeric history, feeding the planning hint and the recovery plan.
   const [statSeries, setStatSeries] = useState<StatPoint[]>([]);
+  // The Trends stat card's detail dialog.
+  const [trendsOpen, setTrendsOpen] = useState(false);
   const speechRef = useRef<SpeechRec | null>(null);
   // Bumps on every stop/start so late Web Speech callbacks cannot touch state.
   const speechGenerationRef = useRef(0);
@@ -404,10 +472,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
     });
   }, [load]);
 
-  // Numeric history feeds the planning hint during plan.
   const dayPhase = day?.phase;
+  // Numeric history feeds the planning hint during plan and the Trends card
+  // in every phase, so it loads once per day view.
   useEffect(() => {
-    if (!day || dayPhase !== "plan" && dayPhase !== "audit") return;
+    if (!day?.id) return;
     let cancelled = false;
     void fetchRecentStats()
       .then((series) => {
@@ -419,7 +488,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => {
       cancelled = true;
     };
-  }, [dayPhase, day?.id]);
+  }, [day?.id]);
 
   // Keep keyboard focus inside the destructive confirmation.
   useEffect(() => {
@@ -707,6 +776,42 @@ export function TodayPage({ user }: { user: UserProfile }) {
     () => (dayPhase === "plan" && day ? planningHint(statSeries, day.date) : null),
     [dayPhase, statSeries, day],
   );
+
+  // Closed days in date order power the Trends card and its detail dialog.
+  const closedStats = useMemo(
+    () =>
+      statSeries
+        .filter((p) => p.phase === "closed")
+        .sort((a, b) => (a.date < b.date ? -1 : 1)),
+    [statSeries],
+  );
+  const closingTrend = useMemo(
+    () => trendWindow(closedStats.map((p) => p.closingBalance)),
+    [closedStats],
+  );
+  const trendMetrics = useMemo(() => {
+    if (closedStats.length < 2) return [];
+    const defs: { label: string; values: number[]; tone: "signed" | "neutral" }[] = [
+      { label: "Energy at close", values: closedStats.map((p) => p.closingBalance), tone: "signed" },
+      { label: "Attwood net", values: closedStats.map((p) => p.attwoodNet), tone: "signed" },
+      { label: "Energy added / day", values: closedStats.map((p) => p.depositTotal), tone: "neutral" },
+      { label: "Energy used / day", values: closedStats.map((p) => p.withdrawalTotal), tone: "neutral" },
+    ];
+    return defs.flatMap((d) => {
+      const w = trendWindow(d.values);
+      return w ? [{ label: d.label, tone: d.tone, ...w }] : [];
+    });
+  }, [closedStats]);
+
+  // Escape closes the trends dialog, matching the other lightweight modals.
+  useEffect(() => {
+    if (!trendsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTrendsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [trendsOpen]);
 
   const guide = useMemo(() => {
     if (!day) return { primary: null, items: [] as GuideItem[] };
@@ -1520,6 +1625,33 @@ export function TodayPage({ user }: { user: UserProfile }) {
               {day.attwood.depositTotal} / {day.attwood.withdrawalTotal}
             </div>
           </div>
+          <button
+            type="button"
+            className="stat stat-trends"
+            aria-haspopup="dialog"
+            onClick={() => setTrendsOpen(true)}
+          >
+            <div className="label">Trends</div>
+            {closingTrend ? (
+              <div className="trend-body">
+                <div className="value trend-value">
+                  {closingTrend.delta != null && <TrendArrow delta={closingTrend.delta} />}
+                  {Math.round(closingTrend.recent)}
+                </div>
+                <div className="trend-side">
+                  <TrendSpark
+                    values={closedStats.slice(-14).map((p) => p.closingBalance)}
+                    className="trend-spark"
+                  />
+                  <span className="muted trend-caption">Energy at close · 7-day avg</span>
+                </div>
+              </div>
+            ) : (
+              <span className="muted trend-caption trend-caption-empty">
+                Your history will grow here
+              </span>
+            )}
+          </button>
         </div>
         <div className="phase-bar" style={{ marginTop: "1rem" }}>
           <button
@@ -2080,6 +2212,81 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 onClick={() => void deletePreviousDay()}
               >
                 {deletingDay ? "Deleting…" : "Delete this day"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {trendsOpen && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setTrendsOpen(false);
+          }}
+        >
+          <div
+            id="trends-modal"
+            className="panel insight-modal trends-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trends-title"
+          >
+            <h2 id="trends-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Your trends
+            </h2>
+            {closedStats.length >= 2 ? (
+              <>
+                <TrendSpark
+                  values={closedStats.slice(-30).map((p) => p.closingBalance)}
+                  className="trend-spark trend-spark-large"
+                />
+                <p className="muted trend-spark-caption">
+                  Energy remaining at close, last {Math.min(30, closedStats.length)} closed days.
+                </p>
+                <div className="trend-rows">
+                  {trendMetrics.map((m) => (
+                    <div key={m.label} className="trend-row">
+                      <span className="trend-row-label">{m.label}</span>
+                      <span className="trend-row-value">
+                        {Math.round(m.recent)}
+                        {m.delta != null && (
+                          <>
+                            <TrendArrow delta={m.delta} tone={m.tone} />
+                            <span className="muted trend-row-delta">
+                              {m.delta >= 0 ? "+" : ""}
+                              {Math.round(m.delta)}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="muted">
+                  Averages cover your last 7 closed days; arrows compare them with the days
+                  before. Direction is information, not a grade.
+                </p>
+              </>
+            ) : (
+              <p className="muted">
+                These trends will populate slowly but surely 🙂 Close a few more days and your
+                patterns will start to appear here.
+              </p>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn accent"
+                onClick={() => {
+                  setTrendsOpen(false);
+                  navigate("/dashboard");
+                }}
+              >
+                Open dashboard
+              </button>
+              <button type="button" className="btn secondary" onClick={() => setTrendsOpen(false)}>
+                Close
               </button>
             </div>
           </div>
