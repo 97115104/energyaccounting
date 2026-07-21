@@ -361,7 +361,7 @@ export function App() {
                   text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"}
                 />
               </h1>
-              <p className="welcome-fact">{welcomeFact}</p>
+              <p className="welcome-fact">Did you know… {welcomeFact}</p>
             </>
           )}
         </div>

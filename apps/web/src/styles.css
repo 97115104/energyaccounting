@@ -379,10 +379,16 @@ html[data-weather="thunder"] .sky-layer {
   flex: 1;
 }
 
-/* Signed-out (auth) view: center the brand over the centered sign-in card. */
+/* Signed-out (auth) view: the brand column matches the sign-in card's width,
+   so the greeting and fact align with the card's left corner. */
 .top-bar-centered {
   justify-content: center;
-  text-align: center;
+}
+
+.top-bar-centered .top-bar-brand {
+  flex: none;
+  width: var(--auth-card-w, min(525px, 100%));
+  text-align: left;
 }
 
 /* Signed-out shell: stack brand + card and center the group vertically, so the
@@ -397,6 +403,8 @@ html[data-weather="thunder"] .sky-layer {
 }
 
 .app-shell-auth {
+  /* Shared by the card and the brand column above it, so they stay aligned. */
+  --auth-card-w: min(525px, 100%);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -412,8 +420,8 @@ html[data-weather="thunder"] .sky-layer {
 }
 
 .top-bar-centered .tagline {
-  margin-left: auto;
-  margin-right: auto;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 /* Returning welcome: handwritten and left-aligned so it reads like a note,
@@ -422,7 +430,7 @@ html[data-weather="thunder"] .sky-layer {
   font-family: "Caveat", "Snell Roundhand", "Bradley Hand", cursive;
   font-size: clamp(2.4rem, 6vw, 3.2rem);
   font-weight: 700;
-  text-align: center;
+  text-align: left;
   line-height: 1.1;
   /* Warmed toward the accent and softened so it reads like a friendly note. */
   color: color-mix(in srgb, var(--accent) 65%, var(--ink));
@@ -431,7 +439,7 @@ html[data-weather="thunder"] .sky-layer {
 
 /* A per-visit fun fact whispered under the welcome headline. */
 .top-bar-centered .welcome-fact {
-  margin: 0.2rem auto 0;
+  margin: 0.2rem 0 0;
   max-width: 34rem;
   font-size: 0.85rem;
   color: var(--muted);
@@ -1561,7 +1569,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 .auth-card {
   /* Explicit width: as a flex item with auto margins the card would otherwise
      shrink-wrap its content and come out skinny. */
-  width: min(420px, 100%);
+  width: var(--auth-card-w, min(525px, 100%));
   margin: 2rem auto;
   padding: 2rem;
   border-radius: 20px !important;
