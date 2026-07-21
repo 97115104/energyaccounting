@@ -4,15 +4,16 @@ import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
 import { DictatableField } from "../components/DictatableField";
 import { IdentityMark, NeuroMe } from "../components/IdentityMark";
+import { WingFamilyPicker } from "../components/IdentityPickers";
 import { api } from "../lib/api";
 import { normalizeWing } from "../lib/butterflyGeometry";
 import { resolveButterflyState } from "../lib/butterflyState";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import {
-  ARCHETYPES,
   PALETTE_PRESETS,
   SYMBOLS,
+  archetypeMeta,
   normalizeIdentity,
   type IdentityConfig,
 } from "../lib/identity";
@@ -305,7 +306,9 @@ export function OnboardingPage({ user, onUser }: Props) {
 
       {/* key remounts the slide so the enter animation replays each step */}
       <article
-        className={`ob-card ob-card-${direction}${current.setup ? " ob-card-tall" : ""}`}
+        className={`ob-card ob-card-${direction}${
+          current.setup || current.identity === "butterfly" ? " ob-card-tall" : ""
+        }`}
         key={step}
         aria-labelledby="ob-thesis"
       >
@@ -348,47 +351,23 @@ export function OnboardingPage({ user, onUser }: Props) {
           )}
           {current.identity === "butterfly" && (
             <div className="ob-setup ob-identity">
-              <div role="radiogroup" aria-label="Wing family" className="ob-archetypes">
-                {ARCHETYPES.map((a) => (
-                  <label
-                    key={a.id}
-                    className={`ob-symbol-card${identity.archetype === a.id ? " selected" : ""}`}
-                  >
-                    <input
-                      type="radio"
-                      name="ob-archetype"
-                      value={a.id}
-                      checked={identity.archetype === a.id}
-                      onChange={() =>
-                        setIdentity({
-                          ...identity,
-                          archetype: a.id,
-                          // Keep the wing family in step with the chosen base.
-                          wing: normalizeWing(a.id, identity.wing),
-                          palette: { ...a.palette },
-                        })
-                      }
-                    />
-                    <span className="ob-symbol-art">
-                      <Butterfly
-                        identity={{
-                          ...identity,
-                          archetype: a.id,
-                          wing: normalizeWing(a.id, identity.wing),
-                          palette: a.palette,
-                        }}
-                        beatMs={null}
-                        size={52}
-                        decorative
-                      />
-                    </span>
-                    <span className="ob-symbol-copy">
-                      <strong>{a.label}</strong>
-                      <span className="muted">{a.blurb}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <WingFamilyPicker
+                identity={identity}
+                value={identity.archetype}
+                suggestPalettes
+                compact
+                name="ob-archetype"
+                onChange={(family) =>
+                  setIdentity({
+                    ...identity,
+                    archetype: family,
+                    // Keep the wing family in step with the chosen base, and
+                    // start from the family's suggested palette.
+                    wing: normalizeWing(family, identity.wing),
+                    palette: { ...archetypeMeta(family).palette },
+                  })
+                }
+              />
               <div className="ob-palettes" role="group" aria-label="Wing colors">
                 {PALETTE_PRESETS.map((p) => (
                   <button

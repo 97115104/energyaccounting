@@ -59,32 +59,54 @@ export function WingFamilyPicker({
   identity,
   value,
   onChange,
+  suggestPalettes = false,
+  /** Compact row cards for tight surfaces (onboarding slide). */
+  compact = false,
+  /** Radio input name; unique when multiple pickers could share a page. */
+  name = "you-archetype",
 }: {
   identity: IdentityConfig;
   value: ButterflyArchetype;
   onChange: (family: ButterflyArchetype) => void;
+  /** Preview each family in its suggested palette (onboarding, where the
+      palette is chosen together with the family). */
+  suggestPalettes?: boolean;
+  compact?: boolean;
+  name?: string;
 }) {
+  const artSize = compact ? 52 : 64;
   return (
-    <div className="you-symbol-grid" role="radiogroup" aria-label="Wing family">
+    <div
+      className={`you-symbol-grid${compact ? " you-symbol-grid--compact" : ""}`}
+      role="radiogroup"
+      aria-label="Wing family"
+    >
       {ARCHETYPES.map((a) => (
         <label key={a.id} className={`you-symbol-card${value === a.id ? " selected" : ""}`}>
           <input
             type="radio"
-            name="you-archetype"
+            name={name}
             value={a.id}
             checked={value === a.id}
             onChange={() => onChange(a.id)}
           />
           <span className="you-symbol-art">
             <Butterfly
-              identity={{ ...identity, archetype: a.id, wing: normalizeWing(a.id, identity.wing) }}
+              identity={{
+                ...identity,
+                archetype: a.id,
+                wing: normalizeWing(a.id, identity.wing),
+                ...(suggestPalettes ? { palette: { ...a.palette } } : {}),
+              }}
               beatMs={null}
-              size={64}
+              size={artSize}
               decorative
             />
           </span>
-          <span className="you-symbol-name">{a.label}</span>
-          <span className="you-symbol-blurb muted">{a.blurb}</span>
+          <span className="you-symbol-copy">
+            <span className="you-symbol-name">{a.label}</span>
+            <span className="you-symbol-blurb muted">{a.blurb}</span>
+          </span>
         </label>
       ))}
     </div>

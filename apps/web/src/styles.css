@@ -2588,7 +2588,14 @@ html[data-theme="night"] .tip-card {
 .you-symbol-art {
   display: grid;
   place-items: center;
-  height: 56px;
+  /* Tall enough for the 64px Butterfly thumbnails the family picker draws. */
+  height: 68px;
+}
+
+.you-symbol-copy {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
 }
 
 .you-symbol-name {
@@ -2597,6 +2604,35 @@ html[data-theme="night"] .tip-card {
 
 .you-symbol-blurb {
   font-size: 0.82rem;
+}
+
+/* Dense row cards for the onboarding butterfly slide: one column of
+   horizontal cards keeps all eight silhouettes reachable without a
+   long vertical scroll of stacked You-page tiles. */
+.you-symbol-grid--compact {
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.you-symbol-grid--compact .you-symbol-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-items: unset;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+}
+
+.you-symbol-grid--compact .you-symbol-art {
+  flex: none;
+  width: 56px;
+  height: 52px;
+}
+
+.you-symbol-grid--compact .you-symbol-copy {
+  justify-items: start;
+  flex: 1;
+  min-width: 0;
 }
 
 .you-palette-presets {
@@ -2963,9 +2999,10 @@ html[data-theme="night"] .tip-card {
   font-size: 0.9rem;
 }
 
-.ob-archetypes {
-  display: grid;
-  gap: 0.5rem;
+/* Onboarding reuses WingFamilyPicker; compact mode supplies the density.
+   Drop the default You-page grid margins so the slide's own spacing wins. */
+.ob-identity .you-symbol-grid {
+  margin-top: 0;
 }
 
 .ob-palettes {

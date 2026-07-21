@@ -7,8 +7,15 @@
  * the same config draws the same butterfly on every device and can be unit
  * tested without a DOM.
  *
- * Coordinate system: a 200-wide box with the body on x=100. Every path is drawn
- * for the LEFT wing (x < 100); the component mirrors it for the right side.
+ * Silhouettes are landmark polylines, not hand-tuned Bézier soup: each family
+ * lists the points a wing outline passes through, plus which stretch of it is
+ * the outer margin. The edge trait then decides how that margin is drawn into
+ * the FILLED path (flowing spline, straight facets, or scallop lobes), so
+ * choosing "angular" visibly changes the silhouette instead of overlaying
+ * decorative strokes.
+ *
+ * Coordinate system: a 200-wide box with the body on x=100. Every outline is
+ * drawn for the LEFT wing (x < 100); the component mirrors it for the right.
  */
 
 export type WingFamily =
@@ -72,10 +79,23 @@ export type WingVariation = {
 
 type Point = { x: number; y: number };
 
+/**
+ * One wing outline: ordered landmarks from the upper body root around the tip
+ * and back to the lower body root, plus the segment span [from, to) that forms
+ * the outer margin and receives the edge treatment.
+ */
+export type WingOutline = {
+  points: Point[];
+  margin: [number, number];
+};
+
+/** Both outlines of a family's left wing, exported so tests can measure them. */
+export type FamilySilhouette = { fore: WingOutline; hind: WingOutline };
+
 export type WingRender = {
   forewing: string;
   hindwing: string;
-  /** Tail path appended to the hindwing, or null when tailless. */
+  /** Tail paths blended into the hindwing, or empty when tailless. */
   tails: string[];
   veins: string[];
   bands: string[];
@@ -83,8 +103,6 @@ export type WingRender = {
   eyespots: { x: number; y: number; r: number }[];
   /** Lighter "clear" panels for glasswing-style wings. */
   clearPanels: string[];
-  /** Edge treatment strokes along the outer margin (scallops / points). */
-  edgeMarks: string[];
 };
 
 /**
@@ -166,133 +184,388 @@ export function defaultWingFor(family: WingFamily): WingConfig {
 }
 
 // --- Base silhouettes -------------------------------------------------------
-// Each family defines a left-side forewing and hindwing outline. `reach`
-// (from spread) widens the tips; `lift` (from aspect) raises the forewing apex.
+// Landmarks per family. `reach` (from spread) pushes the wingtips outward;
+// `lift` (from aspect) raises the forewing apex. Proportions are the family's
+// identity: monarch is a broad triangle, longwing a slim blade, owl carries a
+// deep hindwing, and so on.
 
-type Base = { forewing: string; hindwing: string; hindLow: number; hindOut: number };
-
-function familyBase(family: WingFamily, reach: number, lift: number): Base {
+/**
+ * The left-wing silhouette for a family. Exported for tests, which assert real
+ * geometric differences (reach, depth) instead of comparing path strings.
+ */
+export function familySilhouette(
+  family: WingFamily,
+  reach: number,
+  lift: number,
+): FamilySilhouette {
   switch (family) {
     case "monarch":
-      // Danaus plexippus: a broad, rounded triangular forewing that sweeps up
-      // and outward to a soft apex, with a full but compact rounded hindwing.
-      // This is the shape people read in the butterfly emoji.
+      // Danaus plexippus: broad rounded-triangular forewing sweeping up to a
+      // soft apex, full but compact hindwing. The classic emoji silhouette.
       return {
-        forewing: `M97 89 C94 ${64 - lift}, ${72 - reach} ${34 - lift}, ${48 - reach} ${
-          32 - lift
-        } C${34 - reach} ${32 - lift}, ${28 - reach} 44, 34 58 C42 74, 62 85, 80 89 C88 91, 94 91, 97 89 Z`,
-        hindwing:
-          "M97 96 C85 95, 62 98, 51 109 C41 119, 43 137, 57 144 C71 150, 87 141, 93 125 C96 117, 97 105, 97 100 Z",
-        hindLow: 144,
-        hindOut: 51,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 88, y: 62 },
+            { x: 66 - reach, y: 34 - lift },
+            { x: 40 - reach, y: 28 - lift },
+            { x: 30 - reach, y: 44 },
+            { x: 36, y: 62 },
+            { x: 52, y: 78 },
+            { x: 78, y: 88 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 7],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 72, y: 96 },
+            { x: 52, y: 104 },
+            { x: 40, y: 120 },
+            { x: 44, y: 138 },
+            { x: 58, y: 148 },
+            { x: 78, y: 142 },
+            { x: 92, y: 124 },
+            { x: 97, y: 100 },
+          ],
+          margin: [3, 7],
+        },
       };
     case "morpho":
+      // Wide, almost circular span: broad forewing and a big round hindwing.
       return {
-        forewing: `M97 88 C93 ${56 - lift}, ${72 - reach} ${30 - lift}, ${46 - reach} ${
-          30 - lift
-        } C${26 - reach} 30, ${16 - reach} 46, ${20 - reach} 62 C${
-          26 - reach
-        } 78, 44 87, 62 90 C76 92, 88 93, 97 92 Z`,
-        hindwing:
-          "M97 96 C80 94, 52 98, 40 112 C30 124, 34 146, 52 154 C70 161, 90 148, 95 128 C96 120, 97 104, 97 100 Z",
-        hindLow: 154,
-        hindOut: 40,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 84, y: 58 },
+            { x: 62 - reach, y: 32 - lift },
+            { x: 36 - reach, y: 28 - lift },
+            { x: 20 - reach, y: 44 },
+            { x: 18 - reach, y: 64 },
+            { x: 32, y: 82 },
+            { x: 60, y: 90 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 7],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 66, y: 96 },
+            { x: 40, y: 106 },
+            { x: 28, y: 126 },
+            { x: 34, y: 148 },
+            { x: 54, y: 158 },
+            { x: 76, y: 150 },
+            { x: 90, y: 132 },
+            { x: 97, y: 104 },
+          ],
+          margin: [3, 7],
+        },
       };
     case "swallowtail":
+      // Swept, pointed forewing and a hindwing that narrows toward the tail
+      // lobe. Its default angular edge keeps the facets crisp.
       return {
-        forewing: `M97 88 C88 ${52 - lift}, ${56 - reach} ${30 - lift}, ${36 - reach} 36 C${
-          22 - reach
-        } 41, ${24 - reach} 62, 40 78 C58 92, 82 96, 97 92 Z`,
-        hindwing:
-          "M97 96 C80 96, 54 102, 44 116 C34 130, 42 146, 56 148 C66 149, 78 140, 86 128 C92 118, 97 108, 97 100 Z",
-        hindLow: 148,
-        hindOut: 44,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 80, y: 60 },
+            { x: 54 - reach, y: 36 - lift },
+            { x: 26 - reach, y: 26 - lift },
+            { x: 34, y: 50 },
+            { x: 44, y: 68 },
+            { x: 68, y: 84 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 6],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 74, y: 98 },
+            { x: 54, y: 106 },
+            { x: 42, y: 122 },
+            { x: 46, y: 136 },
+            { x: 54, y: 146 },
+            { x: 68, y: 140 },
+            { x: 82, y: 128 },
+            { x: 92, y: 114 },
+            { x: 97, y: 100 },
+          ],
+          margin: [3, 8],
+        },
       };
     case "glasswing":
-      // Narrow, elongated wings held close to the body.
+      // Narrow, elongated wings held close to the body; the tips stay well
+      // inside where broader families reach (half-strength spread).
       return {
-        forewing: `M97 88 C93 ${58 - lift}, ${74 - reach} ${34 - lift}, ${58 - reach} ${
-          32 - lift
-        } C${46 - reach} 32, ${42 - reach} 48, 50 64 C60 80, 78 90, 97 92 Z`,
-        hindwing:
-          "M97 96 C86 96, 66 100, 58 112 C50 124, 54 140, 66 144 C78 148, 90 138, 94 124 C96 116, 97 106, 97 100 Z",
-        hindLow: 144,
-        hindOut: 58,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 86, y: 64 },
+            { x: 72 - reach * 0.5, y: 42 - lift },
+            { x: 58 - reach * 0.5, y: 30 - lift },
+            { x: 48, y: 40 },
+            { x: 52, y: 58 },
+            { x: 66, y: 76 },
+            { x: 84, y: 88 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 6],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 80, y: 98 },
+            { x: 66, y: 106 },
+            { x: 58, y: 120 },
+            { x: 62, y: 134 },
+            { x: 74, y: 140 },
+            { x: 86, y: 132 },
+            { x: 93, y: 118 },
+            { x: 97, y: 102 },
+          ],
+          margin: [3, 6],
+        },
       };
     case "longwing":
-      // Heliconius: long, slim forewing, small rounded hindwing.
+      // Heliconius: a long slim forewing blade angled far up and out, with a
+      // small round hindwing tucked beneath.
       return {
-        forewing: `M97 88 C92 ${52 - lift}, ${70 - reach} ${26 - lift}, ${50 - reach} ${
-          24 - lift
-        } C${40 - reach} 24, ${36 - reach} 40, 44 58 C54 76, 76 90, 97 92 Z`,
-        hindwing:
-          "M97 96 C88 96, 70 100, 62 110 C54 120, 58 134, 70 138 C82 142, 92 132, 95 120 C96 112, 97 104, 97 100 Z",
-        hindLow: 138,
-        hindOut: 62,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 82, y: 70 },
+            { x: 52 - reach, y: 40 - lift },
+            { x: 24 - reach, y: 24 - lift },
+            { x: 18 - reach, y: 34 },
+            { x: 38, y: 56 },
+            { x: 64, y: 78 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 6],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 80, y: 98 },
+            { x: 62, y: 102 },
+            { x: 52, y: 114 },
+            { x: 56, y: 130 },
+            { x: 72, y: 138 },
+            { x: 88, y: 130 },
+            { x: 96, y: 114 },
+            { x: 97, y: 102 },
+          ],
+          margin: [3, 6],
+        },
       };
     case "owl":
-      // Caligo: broad, tall hindwing to carry large eyespots.
+      // Caligo: a modest forewing over a deep, tall hindwing built to carry
+      // large eyespots. The hindwing dominates the silhouette.
       return {
-        forewing: `M97 88 C90 ${54 - lift}, ${64 - reach} ${32 - lift}, ${42 - reach} 34 C${
-          28 - reach
-        } 40, ${28 - reach} 60, 44 76 C60 90, 84 95, 97 92 Z`,
-        hindwing:
-          "M97 96 C78 94, 48 100, 38 118 C28 136, 38 158, 58 160 C78 162, 92 140, 96 118 C97 110, 97 104, 97 100 Z",
-        hindLow: 160,
-        hindOut: 38,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 86, y: 62 },
+            { x: 66 - reach, y: 38 - lift },
+            { x: 46 - reach, y: 34 - lift },
+            { x: 34, y: 48 },
+            { x: 38, y: 68 },
+            { x: 56, y: 84 },
+            { x: 80, y: 91 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 6],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 72, y: 96 },
+            { x: 50, y: 104 },
+            { x: 38, y: 122 },
+            { x: 36, y: 144 },
+            { x: 46, y: 160 },
+            { x: 66, y: 164 },
+            { x: 84, y: 152 },
+            { x: 94, y: 130 },
+            { x: 97, y: 104 },
+          ],
+          margin: [3, 8],
+        },
       };
     case "sulphur":
-      // Compact, leaf-like rounded wings.
+      // Compact, leaf-like wings: a pointed forewing apex and a hindwing that
+      // tapers to a soft leaf tip.
       return {
-        forewing: `M97 88 C92 ${60 - lift}, ${68 - reach} ${38 - lift}, ${50 - reach} 40 C${
-          38 - reach
-        } 42, ${36 - reach} 60, 48 74 C62 88, 84 94, 97 92 Z`,
-        hindwing:
-          "M97 96 C82 95, 58 100, 50 112 C42 124, 48 140, 62 143 C76 146, 90 134, 94 120 C96 112, 97 105, 97 100 Z",
-        hindLow: 143,
-        hindOut: 50,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 84, y: 64 },
+            { x: 64 - reach, y: 44 - lift },
+            { x: 46 - reach, y: 36 - lift },
+            { x: 38, y: 52 },
+            { x: 46, y: 70 },
+            { x: 66, y: 82 },
+            { x: 86, y: 90 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 6],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 76, y: 97 },
+            { x: 58, y: 104 },
+            { x: 48, y: 118 },
+            { x: 52, y: 132 },
+            { x: 62, y: 142 },
+            { x: 76, y: 137 },
+            { x: 89, y: 125 },
+            { x: 96, y: 111 },
+            { x: 97, y: 102 },
+          ],
+          margin: [3, 7],
+        },
       };
     case "peacock":
     default:
+      // Aglais io: broad wings whose outer margins carry built-in notches and
+      // lobes; the scalloped default edge deepens them further.
       return {
-        forewing: `M97 88 C90 ${52 - lift}, ${60 - reach} ${30 - lift}, ${40 - reach} 34 C${
-          26 - reach
-        } 40, ${28 - reach} 62, 44 78 C60 92, 84 96, 97 92 Z`,
-        hindwing:
-          "M97 96 C80 95, 52 100, 42 116 C32 132, 40 152, 58 153 C76 154, 90 136, 95 118 C96 110, 97 104, 97 100 Z",
-        hindLow: 153,
-        hindOut: 42,
+        fore: {
+          points: [
+            { x: 97, y: 88 },
+            { x: 82, y: 58 },
+            { x: 58 - reach, y: 32 - lift },
+            { x: 34 - reach, y: 30 - lift },
+            { x: 26, y: 44 },
+            { x: 36, y: 54 },
+            { x: 30, y: 66 },
+            { x: 44, y: 78 },
+            { x: 68, y: 88 },
+            { x: 97, y: 92 },
+          ],
+          margin: [3, 8],
+        },
+        hind: {
+          points: [
+            { x: 97, y: 96 },
+            { x: 70, y: 96 },
+            { x: 46, y: 104 },
+            { x: 34, y: 122 },
+            { x: 42, y: 136 },
+            { x: 36, y: 148 },
+            { x: 52, y: 155 },
+            { x: 70, y: 148 },
+            { x: 86, y: 134 },
+            { x: 94, y: 116 },
+            { x: 97, y: 100 },
+          ],
+          margin: [3, 9],
+        },
       };
   }
 }
 
-function tailPaths(tail: WingTail, base: Base, tailLen: number): string[] {
-  if (tail === "none") return [];
-  const anchorX = base.hindOut + 8;
-  const top = base.hindLow - 8;
-  const drop = { short: 14, long: 30, twin: 22 }[tail] * (0.7 + tailLen * 0.6);
-  if (tail === "twin") {
-    return [
-      `M${anchorX} ${top} C${anchorX - 3} ${top + drop * 0.6}, ${anchorX - 5} ${
-        top + drop
-      }, ${anchorX - 1} ${top + drop} C${anchorX + 2} ${top + drop * 0.6}, ${anchorX + 3} ${
-        top + drop * 0.4
-      }, ${anchorX + 4} ${top} Z`,
-      `M${anchorX + 10} ${top - 2} C${anchorX + 8} ${top + drop * 0.55}, ${anchorX + 7} ${
-        top + drop * 0.9
-      }, ${anchorX + 11} ${top + drop * 0.9} C${anchorX + 14} ${top + drop * 0.55}, ${
-        anchorX + 15
-      } ${top + drop * 0.3}, ${anchorX + 16} ${top - 2} Z`,
-    ];
-  }
+// --- Outline serialization --------------------------------------------------
+// Landmarks become one filled path. Inner and leading edges always flow as a
+// Catmull-Rom spline (real wings hinge smoothly at the body); the outer margin
+// obeys the edge trait: spline (smooth), straight facets (angular), or
+// outward scallop lobes (scalloped).
+
+const r = (n: number) => Math.round(n * 10) / 10;
+
+function catmullControls(pts: Point[], i: number): [Point, Point] {
+  const p0 = pts[Math.max(0, i - 1)]!;
+  const p1 = pts[i]!;
+  const p2 = pts[i + 1]!;
+  const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
   return [
-    `M${anchorX} ${top} C${anchorX - 4} ${top + drop * 0.6}, ${anchorX - 6} ${
-      top + drop
-    }, ${anchorX} ${top + drop} C${anchorX + 5} ${top + drop * 0.6}, ${anchorX + 6} ${
-      top + drop * 0.35
-    }, ${anchorX + 8} ${top} Z`,
+    { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+    { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 },
   ];
 }
+
+/** Scallop lobes along one margin segment, bulging away from the wing center. */
+function scallopSegment(a: Point, b: Point, cx: number, cy: number): string {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const lobes = len >= 26 ? 2 : 1;
+  let nx = dy / len;
+  let ny = -dx / len;
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  // Flip the normal if it points into the wing rather than out of it.
+  if (nx * (mx - cx) + ny * (my - cy) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const depth = 5;
+  let d = "";
+  for (let i = 0; i < lobes; i++) {
+    const qx = a.x + dx * ((i + 0.5) / lobes) + nx * depth;
+    const qy = a.y + dy * ((i + 0.5) / lobes) + ny * depth;
+    const ex = a.x + dx * ((i + 1) / lobes);
+    const ey = a.y + dy * ((i + 1) / lobes);
+    d += ` Q${r(qx)} ${r(qy)}, ${r(ex)} ${r(ey)}`;
+  }
+  return d;
+}
+
+function outlinePath(outline: WingOutline, edge: WingEdge): string {
+  const pts = outline.points;
+  const [mFrom, mTo] = outline.margin;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  let d = `M${r(pts[0]!.x)} ${r(pts[0]!.y)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const b = pts[i + 1]!;
+    const onMargin = i >= mFrom && i < mTo;
+    if (onMargin && edge === "angular") {
+      d += ` L${r(b.x)} ${r(b.y)}`;
+    } else if (onMargin && edge === "scalloped") {
+      d += scallopSegment(pts[i]!, b, cx, cy);
+    } else {
+      const [c1, c2] = catmullControls(pts, i);
+      d += ` C${r(c1.x)} ${r(c1.y)}, ${r(c2.x)} ${r(c2.y)}, ${r(b.x)} ${r(b.y)}`;
+    }
+  }
+  return `${d} Z`;
+}
+
+// --- Tails -------------------------------------------------------------------
+
+/**
+ * Tail streamers grow from the hindwing's lowest landmark and overlap it, so
+ * the join disappears under the shared fill and the tail reads as one wing.
+ */
+function tailPaths(tail: WingTail, hind: WingOutline, tailLen: number): string[] {
+  if (tail === "none") return [];
+  const anchor = hind.points.reduce((low, p) => (p.y > low.y ? p : low));
+  const ax = anchor.x;
+  const ay = anchor.y - 4;
+  const drop = { short: 16, long: 34, twin: 24 }[tail] * (0.75 + tailLen * 0.5);
+  const streamer = (x: number, y: number, len: number, halfW: number) =>
+    `M${r(x - halfW)} ${r(y)} C${r(x - halfW - 2)} ${r(y + len * 0.45)}, ${r(
+      x - halfW * 0.6,
+    )} ${r(y + len * 0.85)}, ${r(x - 2)} ${r(y + len)} C${r(x + 1)} ${r(y + len * 0.7)}, ${r(
+      x + halfW * 0.6,
+    )} ${r(y + len * 0.35)}, ${r(x + halfW)} ${r(y)} Z`;
+  if (tail === "twin") {
+    return [
+      streamer(ax, ay, drop, 5),
+      // Second streamer sits along the margin toward the body, slightly shorter.
+      streamer(ax + 12, ay - 3, drop * 0.7, 4),
+    ];
+  }
+  return [streamer(ax, ay, drop, 6)];
+}
+
+// --- Interior marks ----------------------------------------------------------
 
 function veinPaths(count: number, veinFan: number): string[] {
   // A fan of curves radiating from the body joint across both wings.
@@ -316,15 +589,6 @@ function veinPaths(count: number, veinFan: number): string[] {
   return out;
 }
 
-function bandPaths(count: number, base: Base, thickness: number): string[] {
-  // Border-following bands near the outer margin of each wing.
-  const out: string[] = [];
-  if (count >= 1) out.push(base.forewing);
-  if (count >= 2) out.push(base.hindwing);
-  return out.map((d) => d);
-  void thickness;
-}
-
 function jittered(p: Point, jitter: number, i: number): Point {
   const dx = ((((i * 37) % 11) - 5) / 5) * 3 * jitter;
   const dy = ((((i * 53) % 9) - 4) / 4) * 3 * jitter;
@@ -338,10 +602,12 @@ function jittered(p: Point, jitter: number, i: number): Point {
 export function buildWingRender(wing: WingConfig, variation: WingVariation): WingRender {
   const reach = 12 * variation.spread;
   const lift = 8 * variation.aspect;
-  const base = familyBase(wing.family, reach, lift);
+  const sil = familySilhouette(wing.family, reach, lift);
   const c = wing.complexity;
 
-  const tails = tailPaths(wing.tail, base, variation.aspect);
+  const forewing = outlinePath(sil.fore, wing.edge);
+  const hindwing = outlinePath(sil.hind, wing.edge);
+  const tails = tailPaths(wing.tail, sil.hind, variation.aspect);
 
   let veins: string[] = [];
   let bands: string[] = [];
@@ -370,7 +636,8 @@ export function buildWingRender(wing: WingConfig, variation: WingVariation): Win
       break;
     }
     case "banded": {
-      bands = bandPaths(Math.min(2, c), base, variation.band);
+      // Border-following bands: stroke the outlines themselves, clipped inside.
+      bands = [forewing, hindwing].slice(0, Math.min(2, c));
       veins = veinPaths(Math.max(0, c - 1), variation.veinFan);
       break;
     }
@@ -403,29 +670,5 @@ export function buildWingRender(wing: WingConfig, variation: WingVariation): Win
     }
   }
 
-  const edgeMarks = edgeTreatment(wing.edge, base, c);
-
-  return { forewing: base.forewing, hindwing: base.hindwing, tails, veins, bands, spots, eyespots, clearPanels, edgeMarks };
-}
-
-function edgeTreatment(edge: WingEdge, base: Base, complexity: number): string[] {
-  if (edge === "smooth") return [];
-  // A short row of arcs (scalloped) or chevrons (angular) along the lower
-  // outer margin of the hindwing. Count scales gently with complexity.
-  const count = 3 + complexity;
-  const startX = base.hindOut + 4;
-  const endX = 92;
-  const y = base.hindLow - 6;
-  const step = (endX - startX) / count;
-  const out: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const x = startX + step * i;
-    const yy = y - (i % 2) * 3;
-    if (edge === "scalloped") {
-      out.push(`M${x} ${yy} q${step / 2} 5, ${step} 0`);
-    } else {
-      out.push(`M${x} ${yy} l${step / 2} 4 l${step / 2} -4`);
-    }
-  }
-  return out;
+  return { forewing, hindwing, tails, veins, bands, spots, eyespots, clearPanels };
 }

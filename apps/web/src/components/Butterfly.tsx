@@ -47,6 +47,8 @@ export function Butterfly({
   const gradientId = `bf-${instanceId}-${seedKey}-${identity.wing.family}`;
   const clipId = `${gradientId}-clip`;
   const animated = beatMs != null && beatMs > 0;
+  // Angular edges keep their crisp corners; everything else rounds gently.
+  const joins = identity.wing.edge === "angular" ? ("miter" as const) : ("round" as const);
   const wingStyle: CSSProperties | undefined = animated
     ? ({ "--beat": `${beatMs}ms` } as CSSProperties)
     : undefined;
@@ -60,7 +62,7 @@ export function Butterfly({
           fill={`url(#${gradientId}-hind)`}
           stroke={accent}
           strokeWidth="1.6"
-          strokeLinejoin="round"
+          strokeLinejoin={joins}
         />
       ))}
       <path
@@ -68,14 +70,14 @@ export function Butterfly({
         fill={`url(#${gradientId}-fore)`}
         stroke={accent}
         strokeWidth="2"
-        strokeLinejoin="round"
+        strokeLinejoin={joins}
       />
       <path
         d={geo.hindwing}
         fill={`url(#${gradientId}-hind)`}
         stroke={accent}
         strokeWidth="2"
-        strokeLinejoin="round"
+        strokeLinejoin={joins}
       />
       {/* Interior marks are clipped to the wing so veins and spots never poke
           past the silhouette on narrow families. */}
@@ -103,18 +105,6 @@ export function Butterfly({
             strokeWidth="1.1"
             strokeLinecap="round"
             opacity="0.55"
-          />
-        ))}
-        {geo.edgeMarks.map((d, i) => (
-          <path
-            key={`e${i}`}
-            d={d}
-            fill="none"
-            stroke={accent}
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.5"
           />
         ))}
         {geo.spots.map((s, i) => (
