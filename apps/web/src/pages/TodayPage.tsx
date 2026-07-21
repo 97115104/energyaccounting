@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
+import { WeatherDetailModal } from "../components/WeatherDetailModal";
 import { api } from "../lib/api";
 import {
   decryptText,
@@ -48,6 +49,7 @@ import { loadPersonalData } from "../lib/personalData";
 import { recentDisabledReason, repeatActionVisible } from "../lib/planShortcuts";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
+import { parseDayWeather } from "../lib/weatherInsight";
 import {
   defaultTemperatureUnit,
   formatTemp,
@@ -320,6 +322,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [intelDays, setIntelDays] = useState<IntelligenceDay[]>([]);
   // The Trends stat card's detail dialog.
   const [trendsOpen, setTrendsOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
   const speechRef = useRef<SpeechRec | null>(null);
   // Bumps on every stop/start so late Web Speech callbacks cannot touch state.
   const speechGenerationRef = useRef(0);
@@ -341,6 +344,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setStatSeries([]);
     setDetailLineId(null);
     setAmending(false);
+    setWeatherOpen(false);
     if (day?.id) setDismissedGuideIds(loadDismissedGuideIds(day.id));
   }, [day?.id, historyDayId]);
 
@@ -372,6 +376,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     // A soft load refreshes data in place without blanking the page or the
     // error banner, e.g. after a repeat conflict.
     if (!opts?.soft) {
+      // Close day-bound overlays before swapping payloads so stale open state
+      // cannot briefly render the next day's content.
+      setWeatherOpen(false);
       setError(null);
       setLoading(true);
     }
@@ -799,8 +806,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     [day],
   );
 
-  const weatherKind = weatherKindFromCode(day?.weather?.weathercode);
-  const uvMax = typeof day?.weather?.uvMax === "number" ? day.weather.uvMax : null;
+  const parsedWeather = useMemo(() => parseDayWeather(day?.weather ?? null), [day?.weather]);
+  const weatherKind = weatherKindFromCode(parsedWeather?.weathercode);
+  const uvMax = parsedWeather?.uvMax ?? null;
   const tempUnit = user.temperatureUnit ?? defaultTemperatureUnit(user.country);
 
   // Let the global sky scene react to today's conditions.
@@ -1622,24 +1630,35 @@ export function TodayPage({ user }: { user: UserProfile }) {
           Signed in as {user.email}
           {day.isHoliday ? " · Holiday" : ""}
         </p>
-        <div className="weather-chip" data-kind={weatherKind}>
+        <button
+          type="button"
+          className="weather-chip"
+          data-kind={weatherKind}
+          aria-haspopup={parsedWeather ? "dialog" : undefined}
+          disabled={!parsedWeather}
+          onClick={() => setWeatherOpen(true)}
+        >
           <span className="weather-glyph" aria-hidden="true" />
           <div>
             <strong>{weatherLabel(weatherKind)}</strong>
-            {day.weather && typeof day.weather.tempMax === "number" ? (
+            {parsedWeather ? (
               <span>
                 {" "}
-                {typeof day.weather.tempMin === "number"
-                  ? formatTempRange(day.weather.tempMin, day.weather.tempMax, tempUnit)
-                  : formatTemp(day.weather.tempMax, tempUnit)}
-                {typeof day.weather.precip === "number" ? ` · ${day.weather.precip} mm` : ""}
+                {parsedWeather.tempMin != null && parsedWeather.tempMax != null
+                  ? formatTempRange(parsedWeather.tempMin, parsedWeather.tempMax, tempUnit)
+                  : parsedWeather.tempMax != null
+                    ? formatTemp(parsedWeather.tempMax, tempUnit)
+                    : parsedWeather.tempMin != null
+                      ? formatTemp(parsedWeather.tempMin, tempUnit)
+                      : "Details available"}
+                {parsedWeather.precip != null ? ` · ${parsedWeather.precip} mm` : ""}
               </span>
             ) : (
               <span> Set location in settings for live weather.</span>
             )}
             {uvMax != null && <span>{` · UV ${Math.round(uvMax)}`}</span>}
           </div>
-        </div>
+        </button>
         <div className="stats" style={{ marginTop: "1rem" }}>
           <div className="stat">
             <div className="label">
@@ -2286,6 +2305,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
           </div>
         </div>
+      )}
+
+      {weatherOpen && parsedWeather && (
+        <WeatherDetailModal
+          weather={parsedWeather}
+          tempUnit={tempUnit}
+          favorites={intelCatalog}
+          isDaylight={isHistoryView || isDaylightPeriod(currentSkyPeriod)}
+          isHistorical={isHistoryView}
+          onClose={() => setWeatherOpen(false)}
+        />
       )}
 
       {trendsOpen && (

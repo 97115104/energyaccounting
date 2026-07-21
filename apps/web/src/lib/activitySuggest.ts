@@ -36,6 +36,11 @@ export type ActivitySuggestContext = {
 const DRY_WEATHER: WeatherKind[] = ["sun", "cloud"];
 const OUTDOOR_WORDS = /\b(walk|hike|run|jog|bike|cycle|garden|outside|outdoor)\b/i;
 
+/** Labels stay private on-device; this heuristic only classifies decrypted text locally. */
+export function isOutdoorActivity(label: string): boolean {
+  return OUTDOOR_WORDS.test(label);
+}
+
 function normalized(label: string): string {
   return label.trim().toLocaleLowerCase();
 }
@@ -75,7 +80,7 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       continue;
     }
 
-    const outdoor = OUTDOOR_WORDS.test(label);
+    const outdoor = isOutdoorActivity(label);
     // Outdoor history stays suppressed when weather/daylight/UV are wrong.
     if (outdoor && !safeOutdoor) continue;
 
