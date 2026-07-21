@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Day upper-left / night lower-right: static icon for home screen and sharing -->
+  <polygon points="0,0 64,0 0,64" fill="#fff6c8"/>
+  <polygon points="64,0 64,64 0,64" fill="#12182e"/>
+
+  <!-- Sun kept entirely inside the day triangle, with clearance for round line caps -->
+  <g stroke="#e09a10" stroke-width="2.5" stroke-linecap="round">
+    <line x1="18" y1="3" x2="18" y2="7"/>
+    <line x1="18" y1="29" x2="18" y2="33"/>
+    <line x1="3" y1="18" x2="7" y2="18"/>
+    <line x1="29" y1="18" x2="33" y2="18"/>
+    <line x1="7.4" y1="7.4" x2="10.2" y2="10.2"/>
+    <line x1="25.8" y1="25.8" x2="28.6" y2="28.6"/>
+    <line x1="7.4" y1="28.6" x2="10.2" y2="25.8"/>
+    <line x1="25.8" y1="10.2" x2="28.6" y2="7.4"/>
+  </g>
+  <circle cx="18" cy="18" r="8" fill="#ffcc33" stroke="#e09a10" stroke-width="2"/>
+
+  <!-- Crescent moon, fully on the night side -->
+  <path d="M50 28a12 12 0 1 0 8 20 13 13 0 0 1-8-20z" fill="#f0e8ff"/>
+</svg>

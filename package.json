@@ -7,7 +7,11 @@
     "build": "bun run --filter @eaj/shared build && bun run --filter @eaj/web build",
     "start": "bun run --filter @eaj/server start",
     "typecheck": "bun run --filter @eaj/shared typecheck && bun run --filter @eaj/server typecheck && bun run --filter @eaj/web typecheck",
-    "test": "bun test packages/shared apps/server apps/web/src/lib"
+    "test": "bun test packages/shared apps/server apps/web/src/lib",
+    "icons": "bun scripts/generate-icons.ts"
   },
-  "workspaces": ["apps/*", "packages/*"]
+  "workspaces": ["apps/*", "packages/*"],
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
 }
