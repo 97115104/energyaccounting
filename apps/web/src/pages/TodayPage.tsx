@@ -312,6 +312,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [closeCelebration]);
 
+  // Escape closes the add-item modal.
+  useEffect(() => {
+    if (!draftSide) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDraftSide(null);
+        setDraftLabel("");
+        setDraftCost("20");
+        setSuggestNote(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [draftSide]);
+
   function dismissHint() {
     setHint(null);
     try {
@@ -424,14 +439,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
     await load();
   }
 
-  async function submitDraft() {
-    if (!draftSide || !draftLabel.trim()) return;
-    const cost = Math.max(0, Math.min(100, Number(draftCost) || 20));
-    await addLine(draftSide, draftLabel, cost);
+  function closeDraft() {
     setDraftSide(null);
     setDraftLabel("");
     setDraftCost("20");
     setSuggestNote(null);
+  }
+
+  async function submitDraft() {
+    if (!draftSide || !draftLabel.trim()) return;
+    const cost = Math.max(0, Math.min(100, Number(draftCost) || 20));
+    await addLine(draftSide, draftLabel, cost);
+    closeDraft();
   }
 
   async function updateActual(line: Line, actual: number | null) {
@@ -634,7 +653,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   return (
     <div className="today-root">
-      <div aria-hidden={closeCelebration ? true : undefined}>
+      <div aria-hidden={closeCelebration || (draftSide && !closed) ? true : undefined}>
       <div className="panel">
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="day">Date</label>
@@ -800,51 +819,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </DragOverlay>
       </DndContext>
 
-      {draftSide && !closed && (
-        <div className="panel" style={{ marginTop: "1rem" }}>
-          <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
-            Add {draftSide === "deposit" ? "deposit" : "withdrawal"}
-          </h2>
-          <p className="muted">Available to allocate · {day.availableCapacity}</p>
-          <div className="field">
-            <label htmlFor="draft-label">Activity / experience</label>
-            <input
-              id="draft-label"
-              value={draftLabel}
-              onChange={(e) => setDraftLabel(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="draft-cost">Energy value (0 to 100)</label>
-            <input
-              id="draft-cost"
-              type="number"
-              min={0}
-              max={100}
-              value={draftCost}
-              onChange={(e) => setDraftCost(e.target.value)}
-            />
-            {suggestNote && <p className="muted">{suggestNote}</p>}
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" className="btn accent" onClick={() => void submitDraft()}>
-              Add to ledger
-            </button>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => {
-                setDraftSide(null);
-                setSuggestNote(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {(day.phase === "audit" || closed) && (
         <div className="panel" style={{ marginTop: "1rem" }}>
           <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Evening audit</h2>
@@ -969,6 +943,60 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
       )}
       </div>
+
+      {draftSide && !closed && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeDraft();
+          }}
+        >
+          <form
+            className="panel insight-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="draft-title"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitDraft();
+            }}
+          >
+            <h2 id="draft-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Add {draftSide === "deposit" ? "deposit" : "withdrawal"}
+            </h2>
+            <p className="muted">Available to allocate · {day.availableCapacity}</p>
+            <div className="field">
+              <label htmlFor="draft-label">Activity / experience</label>
+              <input
+                id="draft-label"
+                value={draftLabel}
+                onChange={(e) => setDraftLabel(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="draft-cost">Energy value (0 to 100)</label>
+              <input
+                id="draft-cost"
+                type="number"
+                min={0}
+                max={100}
+                value={draftCost}
+                onChange={(e) => setDraftCost(e.target.value)}
+              />
+              {suggestNote && <p className="muted">{suggestNote}</p>}
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button type="submit" className="btn accent">
+                Add to ledger
+              </button>
+              <button type="button" className="btn secondary" onClick={closeDraft}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {closeCelebration && (
         <div
