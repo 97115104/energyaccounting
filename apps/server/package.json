@@ -1,0 +1,24 @@
+{
+  "name": "@eaj/server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@eaj/shared": "workspace:*",
+    "drizzle-orm": "^0.41.0",
+    "elysia": "^1.2.25",
+    "@elysiajs/static": "^1.2.0",
+    "@elysiajs/cors": "^1.2.0",
+    "otpauth": "^9.3.6",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.5",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,132 @@
+/** Client-side E2E helpers: password → KEK (Argon2id) → wrap/unwrap DEK → AES-GCM. */
+
+import { argon2id } from "hash-wasm";
+
+const textEnc = new TextEncoder();
+const textDec = new TextDecoder();
+
+function b64(buf: ArrayBuffer | Uint8Array): string {
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+  return btoa(s);
+}
+
+function fromB64(s: string): Uint8Array {
+  const bin = atob(s);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+
+export async function deriveKek(password: string, saltB64: string): Promise<CryptoKey> {
+  const salt = fromB64(saltB64);
+  const hash = await argon2id({
+    password,
+    salt,
+    parallelism: 1,
+    iterations: 4,
+    memorySize: 65536,
+    hashLength: 32,
+    outputType: "binary",
+  });
+  return crypto.subtle.importKey("raw", hash as BufferSource, "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export function newSalt(): string {
+  return b64(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+export async function generateDek(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export async function wrapDek(dek: CryptoKey, kek: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", dek);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, kek, raw);
+  return JSON.stringify({ iv: b64(iv), ct: b64(ct) });
+}
+
+export async function unwrapDek(wrapped: string, kek: CryptoKey): Promise<CryptoKey> {
+  const { iv, ct } = JSON.parse(wrapped) as { iv: string; ct: string };
+  const raw = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromB64(iv) as BufferSource },
+    kek,
+    fromB64(ct) as BufferSource,
+  );
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM", length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+export async function encryptText(
+  dek: CryptoKey,
+  plaintext: string,
+  aad = "eaj",
+): Promise<{ ciphertext: string; iv: string }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: textEnc.encode(aad) },
+    dek,
+    textEnc.encode(plaintext),
+  );
+  return { ciphertext: b64(ct), iv: b64(iv) };
+}
+
+export async function decryptText(
+  dek: CryptoKey,
+  ciphertext: string,
+  iv: string,
+  aad = "eaj",
+): Promise<string> {
+  const pt = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: fromB64(iv) as BufferSource,
+      additionalData: textEnc.encode(aad),
+    },
+    dek,
+    fromB64(ciphertext) as BufferSource,
+  );
+  return textDec.decode(pt);
+}
+
+export async function encryptBytes(
+  dek: CryptoKey,
+  data: ArrayBuffer,
+  aad = "eaj-audio",
+): Promise<{ ciphertext: Blob; iv: string }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: textEnc.encode(aad) },
+    dek,
+    data,
+  );
+  return { ciphertext: new Blob([ct]), iv: b64(iv) };
+}
+
+export async function labelHash(label: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    textEnc.encode(label.trim().toLowerCase()),
+  );
+  return b64(digest);
+}
+
+let sessionDek: CryptoKey | null = null;
+
+export function setSessionDek(dek: CryptoKey | null) {
+  sessionDek = dek;
+}
+
+export function getSessionDek(): CryptoKey | null {
+  return sessionDek;
+}

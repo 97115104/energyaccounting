@@ -1,0 +1,66 @@
+# EAJ (Energy Accounting Journal)
+
+EAJ is an open-source energy accounting journal for neurodivergent productivity. You plan deposits and withdrawals each morning, complete tasks to free reserved capacity during the day, audit how the day actually felt in the evening, and carry the closing balance into tomorrow. Activity labels, journal text, and voice recordings stay encrypted on the device before they reach the server.
+
+Host target `eaj.97115104.com` (see [host.txt](host.txt)).
+
+## Conceptual sources
+
+Energy Accounting as described by Maja Toudal and Dr. Tony Attwood ([energyaccounting.com](https://energyaccounting.com/)). Iceberg-aware neurodivergent framing informed by Dr. Samantha Hiew’s *Tip of the ADHD Iceberg*. Play-category deposit suggestions follow Stuart Brown and National Institute for Play styles. Weather from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0).
+
+## Stack
+
+Bun, Elysia, React, Drizzle, `bun:sqlite`. One self-hosted SQLite file under `DATA_DIR`. Optional TOTP. Optional server Whisper (`whisper.cpp`) for journal enhance, with live browser speech for realtime dictate. In-browser Transformers.js embeddings suggest costs from your personal catalog when available.
+
+## Local development
+
+```bash
+./deploy-locally.sh
+```
+
+This installs dependencies if needed, starts the API on port 3000 and the Vite UI on port 5173, waits for health checks, and opens the browser. Press Ctrl+C to stop.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PRIMARY_URL` | `http://localhost:5173` | URL opened in the browser |
+| `HEALTH_TIMEOUT` | `60` | Seconds to wait for readiness |
+| `PORT` | `3000` | API port |
+| `DATA_DIR` | `./data` | SQLite and encrypted audio |
+| `WHISPER_BIN` | `whisper-cli` | Optional whisper.cpp binary |
+| `WHISPER_MODEL` | `$DATA_DIR/models/ggml-tiny.bin` | Whisper model path |
+
+Without Whisper installed, typing and live dictate still work. Whisper enhance returns a clear error when the binary is missing.
+
+## Production notes
+
+```bash
+bun install
+bun run build
+DATA_DIR=/var/lib/eaj PORT=3000 COOKIE_SECURE=1 bun run start
+```
+
+Serve behind TLS at `eaj.97115104.com`. The server serves `apps/web/dist` when present.
+
+## Security model
+
+Password verified with Argon2id on the server. A data encryption key (DEK) is generated in the browser, wrapped with a password-derived KEK, and stored as ciphertext. Activity labels, journal text, and voice blobs are AES-GCM encrypted client-side. Numeric energy costs and balances stay clear so dashboards can chart without reading activity names. A SHA-256 of the normalized label is stored so recurring suggestions can dedupe without decrypting. It is a correlation handle, and not plaintext.
+
+`/api/transcribe` may see plaintext audio briefly after ffmpeg converts webm to wav, then discards it. Encrypted audio is what persists.
+
+## Training corpus export
+
+Settings includes a corpus download. After unlock, the client fetches your encrypted days, decrypts labels and journals with the session DEK, and saves a JSON file with schema version, days, lines, journals, and catalog. The format is intended for optional personal model training later.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+---
+
+Attested · collab · Cursor · auto · [verify](https://attest.97115104.com/s/zn6mxj9z)
+
+## Scripts
+
+- `bun test` runs shared balance math tests
+- `bun run typecheck` runs TypeScript checks across packages
+- `bun run build` builds the production web app
