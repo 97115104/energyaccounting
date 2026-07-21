@@ -506,8 +506,16 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .select()
       .from(taskCatalogTable)
       .where(eq(taskCatalogTable.userId, user.id));
+    let identity: unknown = null;
+    if (user.identityJson) {
+      try {
+        identity = JSON.parse(user.identityJson) as unknown;
+      } catch {
+        identity = null;
+      }
+    }
     return {
-      schemaVersion: 4,
+      schemaVersion: 5,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -515,6 +523,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         lat: user.lat,
         lon: user.lon,
         country: user.country,
+        identity,
       },
       days: out,
       catalog: catalog.map((c) => ({

@@ -2,7 +2,7 @@
 
 # EAJ (Energy Accounting Journal)
 
-EAJ is for neurodivergent productivity 💖 An open-source, end-to-end encrypted energy accounting journal.
+EAJ is for neurodivergent productivity and pride. An open-source, end-to-end encrypted energy accounting journal that is also a social identity tool.
 
 [![License: MIT](https://img.shields.io/github/license/97115104/energyaccounting?color=blue)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-1.x-black?logo=bun&logoColor=white)](https://bun.sh)
@@ -10,7 +10,9 @@ EAJ is for neurodivergent productivity 💖 An open-source, end-to-end encrypted
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Attested](https://img.shields.io/badge/attested-verify-brightgreen?logo=npm&logoColor=white)](https://attest.97115104.com/s/zn6mxj9z)
 
-EAJ is for neurodivergent productivity 💖 You start an energy day when you're ready, plan what will add energy and what will use it against a finite 100 points of daily energy, complete tasks to free reserved capacity, audit how the day actually felt, and close it when your day is actually done — not when the clock hits midnight. Calendar midnight is not a reliable personal day boundary for many neurodivergent people; there is no missed-day penalty and energy never carries to the next day. Closed energy days appear under **Previous days** on the Dashboard and open read-only. You can explicitly amend a record without reopening its lifecycle, or request permanent deletion and confirm the irreversible action. Activity labels, journal text, and task details stay encrypted on the device before they reach the server.
+EAJ is for neurodivergent productivity and pride. You start an energy day when you're ready and work against a finite 100 points of daily energy: restorative activities add points, demanding ones use them, completing tasks frees their reserved capacity, and the day closes when you decide it is done, and not when the clock hits midnight. Calendar midnight is not a reliable personal day boundary for many neurodivergent people; there is no missed-day penalty and energy never carries to the next day. Closed energy days appear under **Previous days** on the Dashboard and open read-only. You can explicitly amend a record without reopening its lifecycle, or request permanent deletion and confirm the irreversible action. Activity labels, journal text, and task details stay encrypted on the device before they reach the server.
+
+EAJ is also a social tool. Every person has a butterfly, the app's symbol of becoming: it starts from a base chosen in onboarding, its wings beat with the day's energy, and its colors mean whatever their person says they mean. The **You** page holds the butterfly, an explainable view of what the journal shows, and an encrypted "how to work with me" profile that can be exported as an image or print-quality document, or published as a revocable share link. See [BUTTERFLY.md](BUTTERFLY.md) for the full design.
 
 Host target `eaj.97115104.com` (see [host.txt](host.txt)).
 

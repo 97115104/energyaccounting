@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db/index.ts";
 import { inviteCodeTable, sessionTable, userTable } from "../db/schema.ts";
 import { hashInviteCode, isWellFormedInviteCode } from "../lib/inviteCodes.ts";
+import { sanitizeIdentity } from "../lib/identity.ts";
 import {
   SESSION_COOKIE,
   clearCookieHeader,
@@ -24,6 +25,36 @@ import {
 function hashCode(code: string): string {
   return createHash("sha256").update(code.toLowerCase()).digest("hex");
 }
+
+/** One shape for every login/me/register response so fields never drift. */
+function publicUser(user: typeof userTable.$inferSelect) {
+  return {
+    id: user.id,
+    email: user.email,
+    totpEnabled: user.totpEnabled,
+    displayName: user.displayName,
+    timezone: user.timezone,
+    lat: user.lat,
+    lon: user.lon,
+    country: user.country,
+    temperatureUnit: user.temperatureUnit,
+    greetingStyle: user.greetingStyle,
+    onboardingCompleted: user.onboardingCompleted,
+    locationPrompted: user.locationPrompted,
+    identity: parseIdentityJson(user.identityJson),
+  };
+}
+
+function parseIdentityJson(raw: string | null): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+const MAX_IDENTITY_BYTES = 4 * 1024;
 function parseCookie(header: string | null | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -143,21 +174,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       }
       const { token, expiresAt } = await createSession(id, false);
       set.headers["Set-Cookie"] = cookieHeader(token, expiresAt);
+      const created = await db.query.userTable.findFirst({ where: eq(userTable.id, id) });
       return {
-        user: {
-          id,
-          email,
-          totpEnabled: false,
-          displayName: null,
-          timezone,
-          lat: null,
-          lon: null,
-          country: "US",
-          temperatureUnit: null,
-          greetingStyle: null,
-          onboardingCompleted: false,
-          locationPrompted: false,
-        },
+        user: publicUser(created!),
         kekSalt: body.kekSalt,
         wrappedDek: body.wrappedDek,
         sessionExpiresAt: expiresAt.toISOString(),
@@ -198,20 +217,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       }
       return {
         requiresTotp: false,
-        user: {
-          id: user.id,
-          email: user.email,
-          totpEnabled: user.totpEnabled,
-          displayName: user.displayName,
-          timezone: user.timezone,
-          lat: user.lat,
-          lon: user.lon,
-          country: user.country,
-          temperatureUnit: user.temperatureUnit,
-          greetingStyle: user.greetingStyle,
-          onboardingCompleted: user.onboardingCompleted,
-          locationPrompted: user.locationPrompted,
-        },
+        user: publicUser(user),
         kekSalt: user.kekSalt,
         wrappedDek: user.wrappedDek,
         sessionExpiresAt: expiresAt.toISOString(),
@@ -263,20 +269,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         .set({ pendingTotp: false })
         .where(eq(sessionTable.id, auth.sessionId));
       return {
-        user: {
-          id: auth.user.id,
-          email: auth.user.email,
-          totpEnabled: auth.user.totpEnabled,
-          displayName: auth.user.displayName,
-          timezone: auth.user.timezone,
-          lat: auth.user.lat,
-          lon: auth.user.lon,
-          country: auth.user.country,
-          temperatureUnit: auth.user.temperatureUnit,
-          greetingStyle: auth.user.greetingStyle,
-          onboardingCompleted: auth.user.onboardingCompleted,
-          locationPrompted: auth.user.locationPrompted,
-        },
+        user: publicUser(auth.user),
         kekSalt: auth.user.kekSalt,
         wrappedDek: auth.user.wrappedDek,
         sessionExpiresAt: auth.expiresAt.toISOString(),
@@ -300,20 +293,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       return { requiresTotp: true };
     }
     return {
-      user: {
-        id: auth.user.id,
-        email: auth.user.email,
-        totpEnabled: auth.user.totpEnabled,
-        displayName: auth.user.displayName,
-        timezone: auth.user.timezone,
-        lat: auth.user.lat,
-        lon: auth.user.lon,
-        country: auth.user.country,
-        temperatureUnit: auth.user.temperatureUnit,
-        greetingStyle: auth.user.greetingStyle,
-        onboardingCompleted: auth.user.onboardingCompleted,
-        locationPrompted: auth.user.locationPrompted,
-      },
+      user: publicUser(auth.user),
       kekSalt: auth.user.kekSalt,
       wrappedDek: auth.user.wrappedDek,
       sessionExpiresAt: auth.expiresAt.toISOString(),
@@ -421,6 +401,23 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           ? { locationPrompted: body.locationPrompted }
           : {}),
       };
+      if (body.identity !== undefined) {
+        if (body.identity === null) {
+          Object.assign(patch, { identityJson: null });
+        } else {
+          const cleaned = sanitizeIdentity(body.identity, auth.user.id);
+          if (!cleaned) {
+            set.status = 400;
+            return { error: "Identity config is invalid." };
+          }
+          const serialized = JSON.stringify(cleaned);
+          if (serialized.length > MAX_IDENTITY_BYTES) {
+            set.status = 400;
+            return { error: "Identity config is too large." };
+          }
+          Object.assign(patch, { identityJson: serialized });
+        }
+      }
       if (Object.keys(patch).length > 0) {
         await db.update(userTable).set(patch).where(eq(userTable.id, auth.user.id));
       }
@@ -445,6 +442,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         ),
         onboardingCompleted: t.Optional(t.Boolean()),
         locationPrompted: t.Optional(t.Boolean()),
+        // Render-only NeuroMe config; stored as JSON, validated for size here
+        // and normalized field by field on the client.
+        identity: t.Optional(t.Union([t.Record(t.String(), t.Unknown()), t.Null()])),
       }),
     },
   )
@@ -486,6 +486,53 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         newPassword: t.String(),
         kekSalt: t.String(),
         wrappedDek: t.String(),
+      }),
+    },
+  )
+  .post(
+    "/delete-account",
+    async ({ body, request, set }) => {
+      const auth = await sessionFromCookie(tokenFromRequest(request));
+      if (!auth || auth.pendingTotp) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const pwOk = await Bun.password.verify(body.password, auth.user.passwordHash);
+      if (!pwOk) {
+        set.status = 401;
+        return { error: "Password incorrect." };
+      }
+      // The typed confirmation is checked client-side for UX and re-checked
+      // here so a bare API call cannot skip the deliberate step.
+      if (body.confirm !== "DELETE") {
+        set.status = 400;
+        return { error: "Type DELETE to confirm." };
+      }
+      if (auth.user.totpEnabled) {
+        if (!auth.user.totpSecret || !body.code || !verifyTotp(auth.user.totpSecret, body.code)) {
+          set.status = 400;
+          return { error: "Authenticator code invalid." };
+        }
+      }
+      // One row delete removes everything: sessions, days, task lines,
+      // catalog, You profile, and share snapshots all cascade from user_table.
+      // The invite audit column has no FK by design, so scrub it explicitly:
+      // after deletion nothing may point back at the account.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(inviteCodeTable)
+          .set({ usedByUserId: null })
+          .where(eq(inviteCodeTable.usedByUserId, auth.user.id));
+        await tx.delete(userTable).where(eq(userTable.id, auth.user.id));
+      });
+      set.headers["Set-Cookie"] = clearCookieHeader();
+      return { ok: true };
+    },
+    {
+      body: t.Object({
+        password: t.String(),
+        confirm: t.String(),
+        code: t.Optional(t.String()),
       }),
     },
   );

@@ -13,19 +13,22 @@ flowchart TB
     speech["Browser speech recognition dictates journals and task details as text"]
   end
   subgraph server [Server: apps/server, Elysia on Bun]
-    authr["/api/auth: register, login, TOTP, profile"]
+    authr["/api/auth: register, login, TOTP, profile, delete-account"]
     daysr["/api/days/active, /api/days/start, /api/days/:dayId, /api/stats, /api/export/days"]
+    your["/api/you: encrypted profile blob, share snapshots; /api/share/:token public"]
     shared["packages/shared: balance math"]
   end
   db[("bun:sqlite file under DATA_DIR")]
   meteo["Open-Meteo weather API"]
   ui -->|"fetch /api/* with httpOnly session cookie"| authr
   ui --> daysr
-  webcrypto -->|"ciphertext: labels, journal, task details"| daysr
+  ui --> your
+  webcrypto -->|"ciphertext: labels, journal, task details, You profile"| daysr
   ui -->|"plaintext: costs, balances, feel"| daysr
   daysr --> shared
   authr --> db
   daysr --> db
+  your --> db
   daysr -->|"daily forecast fetch, cached"| meteo
 ```
 
@@ -71,3 +74,11 @@ The label hash deserves a note: it is a SHA-256 of the normalized label, stored 
 An energy day moves through three phases: `plan`, `audit`, and `closed`. The user starts it explicitly; it opens with `DAILY_ENERGY` (100) and may remain active across calendar midnights until closed. Planning adds lines for what will add energy and what will use it, with each planned task reserving points against that finite supply. The API and database retain their legacy internal side enum values for backward compatibility, while the interface consistently uses action language. Completing a task frees its reservation back into available capacity. The audit phase records actual costs, a feel rating from 1 to 10, and an encrypted journal entry. Closing records energy remaining and moves the day to **Previous days** without creating another one. Previous days open read-only. A closed day never reopens into `plan` or `audit`, but it accepts amendments (line edits, journal, feel rating) via an explicit edit toggle; each amendment atomically recomputes energy remaining and rebuilds the derived activity catalog when needed, while the live capacity guard does not apply because amendments describe what already happened. After an in-app confirmation, `DELETE /api/days/:dayId` atomically removes only an owned, closed day, cascades its lines, and rebuilds the user's derived activity catalog; active days cannot be deleted through this history action. The next day begins only when the user chooses **Start new day**, again at 100 with no carry-over. `GET /api/stats` aggregates per-day plaintext numbers (energy remaining, task and completion counts, planned and actual totals, `startedAt`) that the client-side insight rules turn into end-of-day observations.
 
 The lifecycle is intentionally decoupled from midnight because calendar boundaries are unreliable for many neurodivergent schedules, including irregular sleep, long hyperfocus sessions, shift work, and time blindness. These schedules are first-class cases, and the application does not treat them as edge cases to punish.
+
+## Identity, the You profile, and sharing
+
+The butterfly identity system (see [BUTTERFLY.md](BUTTERFLY.md)) adds three data tiers with distinct privacy treatment. The identity config (chosen symbol, butterfly archetype, palette, seed, motion preference) is render-only JSON on the user row, deliberately outside the encryption boundary so the sign-in screen can welcome a returning person before any key is derived. The You profile (about, communication and support notes, accepted traits, color meanings) is one AES-GCM blob per user in `you_profile_table`, encrypted client-side exactly like journal text. Share snapshots in `share_snapshot_table` are the deliberate disclosure path: the client decrypts locally, the person picks sections, and the chosen plaintext is frozen under a 32-byte random token whose SHA-256 alone is stored. Links expire on a bounded TTL, and revocation both tombstones the row and deletes the frozen payload. `GET /api/share/:token` is the only unauthenticated data route.
+
+The daily butterfly state (`apps/web/src/lib/butterflyState.ts`) and trait suggestions (`apps/web/src/lib/butterflyTraits.ts`) follow the same rule as the Energy Guide: deterministic, on-device, evidence-carrying. State reads only plaintext day numbers; trait inference additionally reads the catalog decrypted after unlock, and its output goes nowhere unless the person accepts a suggestion into their encrypted You profile.
+
+Account deletion (`POST /api/auth/delete-account`) requires the password, the current TOTP code when enabled, and a typed confirmation; one user-row delete then cascades through sessions, days, task lines, the catalog, the You profile, and all share snapshots.

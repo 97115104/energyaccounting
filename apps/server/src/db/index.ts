@@ -79,6 +79,11 @@ try {
 } catch {
   /* column exists */
 }
+try {
+  sqlite.exec("ALTER TABLE user_table ADD COLUMN identity_json TEXT");
+} catch {
+  /* column exists */
+}
 // Voice-recording storage was removed in favor of dictation-to-text: drop the
 // legacy pointer columns and purge any encrypted blobs left on disk. The
 // recordings were never playable in-app (no decrypt/download path shipped).
@@ -120,6 +125,7 @@ CREATE TABLE IF NOT EXISTS user_table (
   greeting_style TEXT,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   location_prompted INTEGER NOT NULL DEFAULT 0,
+  identity_json TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -187,6 +193,23 @@ CREATE TABLE IF NOT EXISTS task_catalog_table (
   difficulty_total INTEGER NOT NULL DEFAULT 0,
   difficulty_count INTEGER NOT NULL DEFAULT 0,
   last_used TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS you_profile_table (
+  user_id TEXT PRIMARY KEY REFERENCES user_table(id) ON DELETE CASCADE,
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS share_snapshot_table (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES user_table(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  payload TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  revoked_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS weather_cache_table (

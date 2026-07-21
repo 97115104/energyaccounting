@@ -1,5 +1,7 @@
 import { decryptText, getSessionDek } from "./crypto";
 import { api } from "./api";
+import type { CatalogEntry } from "./butterflyTraits";
+import { decryptYouProfile, type YouProfile } from "./youProfile";
 
 type ExportLine = {
   id: string;
@@ -56,6 +58,47 @@ type ExportPayload = {
     lastUsed: string;
   }>;
 };
+
+/**
+ * Decrypted activity catalog for on-device intelligence (trait suggestions).
+ * Uses the same export endpoint as the corpus so there is one source of truth.
+ */
+export async function fetchDecryptedCatalog(): Promise<CatalogEntry[]> {
+  const dek = getSessionDek();
+  if (!dek) throw new Error("Unlock your journal key first.");
+  const raw = await api<ExportPayload>("/api/export/days");
+  const out: CatalogEntry[] = [];
+  for (const c of raw.catalog) {
+    let label = "";
+    try {
+      label = await decryptText(dek, c.labelCiphertext, c.labelIv, "eaj-label");
+    } catch {
+      label = "";
+    }
+    if (!label) continue;
+    out.push({
+      side: c.side as CatalogEntry["side"],
+      label,
+      useCount: c.useCount,
+      typicalDifficulty: c.typicalDifficulty,
+      difficultyCount: c.difficultyCount,
+    });
+  }
+  return out;
+}
+
+/** Decrypted You profile for the corpus; null when none is saved yet. */
+async function fetchDecryptedYouProfile(dek: CryptoKey): Promise<YouProfile | null> {
+  const res = await api<{ profile: { ciphertext: string; iv: string } | null }>(
+    "/api/you/profile",
+  );
+  if (!res.profile) return null;
+  try {
+    return await decryptYouProfile(dek, res.profile.ciphertext, res.profile.iv);
+  } catch {
+    return null;
+  }
+}
 
 /** Fetch encrypted export, decrypt labels and journals with the session DEK, download JSON. */
 export async function downloadTrainingCorpus(): Promise<void> {
@@ -161,11 +204,16 @@ export async function downloadTrainingCorpus(): Promise<void> {
     });
   }
 
+  // The You profile and identity ride along so the corpus captures the whole
+  // person, ready for the future personal machine intelligence.
+  const youProfile = await fetchDecryptedYouProfile(dek);
+
   const corpus = {
     schemaVersion: raw.schemaVersion,
     exportedAt: raw.exportedAt,
     purpose: "personal energy accounting corpus for optional future model training",
     user: raw.user,
+    youProfile,
     days,
     catalog,
   };

@@ -226,6 +226,55 @@ const FACTS: FactEntry[] = [
     anonymous: "Pigeons can sense Earth's magnetic field.",
     source: { label: "Wikipedia", url: "https://en.wikipedia.org/wiki/Magnetoreception" },
   },
+  // Butterfly facts: the app's own symbol earns a deeper bench in the pool.
+  {
+    named: "Butterflies taste with their feet, {name}.",
+    anonymous: "Butterflies taste with their feet.",
+    source: {
+      label: "Smithsonian",
+      url: "https://www.si.edu/spotlight/buginfo/butterfly",
+    },
+  },
+  {
+    named: "{name}, monarchs navigate thousands of miles with a sun compass in their antennae.",
+    anonymous: "Monarchs navigate thousands of miles with a sun compass in their antennae.",
+    source: {
+      label: "Science",
+      url: "https://www.science.org/doi/10.1126/science.1176221",
+    },
+  },
+  {
+    named: "Inside the chrysalis a caterpillar mostly dissolves before becoming a butterfly, {name}.",
+    anonymous: "Inside the chrysalis a caterpillar mostly dissolves before becoming a butterfly.",
+    source: {
+      label: "Scientific American",
+      url: "https://www.scientificamerican.com/article/caterpillar-butterfly-metamorphosis-explainer/",
+    },
+  },
+  {
+    named: "Some butterflies remember what they learned as caterpillars, {name}.",
+    anonymous: "Some butterflies remember what they learned as caterpillars.",
+    source: {
+      label: "PLOS ONE",
+      url: "https://doi.org/10.1371/journal.pone.0001736",
+    },
+  },
+  {
+    named: "Morpho wings are not blue pigment, {name}. The color is built from microscopic structure.",
+    anonymous: "Morpho wings are not blue pigment. The color is built from microscopic structure.",
+    source: {
+      label: "Natural History Museum",
+      url: "https://www.nhm.ac.uk/discover/how-do-butterflies-get-their-colour.html",
+    },
+  },
+  {
+    named: "Butterflies can see ultraviolet patterns on wings that people cannot, {name}.",
+    anonymous: "Butterflies can see ultraviolet patterns on wings that people cannot.",
+    source: {
+      label: "Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Butterfly#Senses",
+    },
+  },
 ];
 
 const visitSeed = Math.random();

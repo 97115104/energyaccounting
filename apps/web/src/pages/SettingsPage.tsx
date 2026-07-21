@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
@@ -9,9 +9,11 @@ import { defaultTemperatureUnit } from "../lib/weatherUi";
 type Props = {
   user: UserProfile;
   onUser: (u: UserProfile) => void;
+  /** Called after the account is deleted so App can clear keys and session. */
+  onDeleted: () => void;
 };
 
-export function SettingsPage({ user, onUser }: Props) {
+export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
   const [lat, setLat] = useState(String(user.lat ?? ""));
   const [lon, setLon] = useState(String(user.lon ?? ""));
@@ -34,6 +36,57 @@ export function SettingsPage({ user, onUser }: Props) {
   const [disablePw, setDisablePw] = useState("");
   const [disableCode, setDisableCode] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePw, setDeletePw] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteCode, setDeleteCode] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletingRef = useRef(false);
+
+  useEffect(() => {
+    deletingRef.current = deleting;
+  }, [deleting]);
+
+  // Keep keyboard focus inside the destructive confirmation (same contract as Today).
+  useEffect(() => {
+    if (!deleteOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("delete-profile-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((element) => !element.hasAttribute("disabled"))
+        : [];
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !deletingRef.current) {
+        setDeleteOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [deleteOpen]);
 
   async function saveProfile() {
     setError(null);
@@ -119,6 +172,26 @@ export function SettingsPage({ user, onUser }: Props) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await api("/api/auth/delete-account", {
+        method: "POST",
+        body: JSON.stringify({
+          password: deletePw,
+          confirm: deleteConfirm.trim(),
+          ...(user.totpEnabled ? { code: deleteCode } : {}),
+        }),
+      });
+      // Server data is gone; onDeleted clears local keys and returns to /auth.
+      onDeleted();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Deletion failed");
+      setDeleting(false);
     }
   }
 
@@ -299,6 +372,95 @@ export function SettingsPage({ user, onUser }: Props) {
           View overview again
         </Link>
       </div>
+
+      <div className="panel danger-zone" style={{ marginTop: "1rem" }}>
+        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Delete profile</h2>
+        <p className="muted">
+          Deleting your profile removes your account, every day and task, your journal, your You
+          profile, your butterfly, and all share links. There is no undo and no retained copy.
+        </p>
+        <button type="button" className="btn danger" onClick={() => setDeleteOpen(true)}>
+          Delete profile…
+        </button>
+      </div>
+
+      {deleteOpen && (
+        <div className="insight-scrim" role="presentation">
+          <div
+            id="delete-profile-modal"
+            className="panel insight-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-title"
+          >
+            <h2 id="delete-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Delete your profile?
+            </h2>
+            <p className="muted">
+              This permanently deletes everything: account, days, tasks, journal entries, your
+              You profile, your butterfly, and every share link. Consider downloading your data
+              first; this is the last chance to keep a copy.
+            </p>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={exporting}
+              onClick={() => void exportCorpus()}
+            >
+              {exporting ? "Preparing…" : "Download my data first"}
+            </button>
+            <div className="field" style={{ marginTop: "0.75rem" }}>
+              <label htmlFor="delete-pw">Password</label>
+              <input
+                id="delete-pw"
+                type="password"
+                autoComplete="current-password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+              />
+            </div>
+            {user.totpEnabled && (
+              <div className="field">
+                <label htmlFor="delete-code">Authenticator code</label>
+                <input
+                  id="delete-code"
+                  inputMode="numeric"
+                  value={deleteCode}
+                  onChange={(e) => setDeleteCode(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="field">
+              <label htmlFor="delete-confirm">Type DELETE to confirm</label>
+              <input
+                id="delete-confirm"
+                autoComplete="off"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+            {deleteError && <p className="error">{deleteError}</p>}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={deleting || !deletePw || deleteConfirm.trim() !== "DELETE"}
+                onClick={() => void deleteAccount()}
+              >
+                {deleting ? "Deleting…" : "Delete everything"}
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={deleting}
+                onClick={() => setDeleteOpen(false)}
+              >
+                Keep my profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

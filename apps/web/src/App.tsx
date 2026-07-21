@@ -12,13 +12,18 @@ import {
   unwrapDek,
 } from "./lib/crypto";
 import { greetingDetailFor, type GreetingStyle } from "./lib/greeting";
+import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
+import { NeuroMe } from "./components/IdentityMark";
+import { useButterflyDay } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SharePage } from "./pages/SharePage";
 import { TodayPage } from "./pages/TodayPage";
+import { YouPage } from "./pages/YouPage";
 
 export type UserProfile = {
   id: string;
@@ -33,6 +38,8 @@ export type UserProfile = {
   greetingStyle?: GreetingStyle | null;
   onboardingCompleted?: boolean;
   locationPrompted?: boolean;
+  /** Raw NeuroMe identity config from the server; normalize before rendering. */
+  identity?: unknown;
 };
 
 type MeResponse =
@@ -83,6 +90,7 @@ export function App() {
   const [unlockInfo, setUnlockInfo] = useState<UnlockInfo | null>(null);
   const loc = useLocation();
   const navigate = useNavigate();
+  const butterflyState = useButterflyDay(!!user && dekReady && !needsTotp);
 
   useEffect(() => {
     (async () => {
@@ -258,6 +266,7 @@ export function App() {
         style: user.greetingStyle,
       })
     : null;
+  const identity = user ? normalizeIdentity(user.identity, user.id) : null;
 
   return (
     <div className={`app-shell${authed ? "" : " app-shell-auth"}`}>
@@ -272,12 +281,34 @@ export function App() {
           {authed ? (
             <>
               <p className="wordmark">Your Energy Matters</p>
-              <h1
-                className="brand greeting"
-                key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
-              >
-                {greeting?.text}
-              </h1>
+              <div className="greeting-row">
+                {identity && (
+                  <Link
+                    to="/you"
+                    className="greeting-seal"
+                    title={`Today: ${butterflyState.label}`}
+                    aria-label={`Your butterfly, today: ${butterflyState.label}. Open You.`}
+                  >
+                    <NeuroMe
+                      identity={identity}
+                      state={butterflyState}
+                      size={52}
+                      decorative
+                    />
+                  </Link>
+                )}
+                <div>
+                  <h1
+                    className="brand greeting"
+                    key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
+                  >
+                    {greeting?.text}
+                  </h1>
+                  {(loc.pathname === "/" || loc.pathname.startsWith("/you")) && (
+                    <p className="greeting-state muted">{butterflyState.label}</p>
+                  )}
+                </div>
+              </div>
               {greeting?.factSource && (
                 <a
                   className="greeting-source"
@@ -293,14 +324,17 @@ export function App() {
           ) : hasReturningFlag() ? (
             <>
               <h1 className="brand">Welcome back</h1>
-              <p className="tagline">EAJ is for neurodivergent productivity 💖</p>
+              <p className="tagline">
+                EAJ is for neurodivergent productivity and pride. Track your energy, grow your
+                butterfly, and share how to work with you when you choose.
+              </p>
             </>
           ) : (
             <>
               <h1 className="brand">Your Energy Matters</h1>
               <p className="tagline">
-                EAJ is for neurodivergent productivity 💖 Plan what will add energy and what will
-                use it, audit the day, and close it when your day is actually done.
+                EAJ is for neurodivergent productivity and pride. Track your energy, grow your
+                butterfly, and share how to work with you when you choose.
               </p>
             </>
           )}
@@ -335,6 +369,9 @@ export function App() {
           </Link>
           <Link className={loc.pathname.startsWith("/dashboard") ? "active" : ""} to="/dashboard">
             Dashboard
+          </Link>
+          <Link className={loc.pathname.startsWith("/you") ? "active" : ""} to="/you">
+            You
           </Link>
         </nav>
       )}
@@ -415,15 +452,29 @@ export function App() {
           }
         />
         <Route
+          path="/you"
+          element={
+            !authed ? (
+              <Navigate to="/auth" replace />
+            ) : needsOnboarding ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              <YouPage user={user!} onUser={setUser} butterflyState={butterflyState} />
+            )
+          }
+        />
+        <Route
           path="/settings"
           element={
             !authed ? (
               <Navigate to="/auth" replace />
             ) : (
-              <SettingsPage user={user!} onUser={setUser} />
+              <SettingsPage user={user!} onUser={setUser} onDeleted={() => void logout()} />
             )
           }
         />
+        {/* Public: anyone with a live share link can view the snapshot. */}
+        <Route path="/share/:token" element={<SharePage />} />
         <Route path="*" element={<Navigate to={authed ? "/" : "/auth"} replace />} />
       </Routes>
       <footer className="site-footer">

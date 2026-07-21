@@ -7,6 +7,8 @@ import {
   wrapDek,
 } from "../lib/crypto";
 import { hasReturningFlag } from "../lib/returning";
+import { normalizeIdentity } from "../lib/identity";
+import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
 
 type Props = {
@@ -206,9 +208,17 @@ export function AuthPage({
   }
 
   if (unlockInfo && !needsTotp) {
+    // The person's own mark welcomes them back before anything decrypts:
+    // identity is render-only by design, so it is available pre-unlock.
+    const identity = normalizeIdentity(unlockInfo.user.identity, unlockInfo.user.id);
     return (
       <div className="panel auth-card">
-        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Unlock journal</h2>
+        <div className="auth-welcome-mark">
+          <IdentityMark identity={identity} size={72} />
+        </div>
+        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+          Welcome back{unlockInfo.user.displayName ? `, ${unlockInfo.user.displayName}` : ""}
+        </h2>
         <p className="muted">
           Your 24-hour session is still active for {unlockInfo.user.email}. Enter your password to
           unlock encrypted journal entries on this device.

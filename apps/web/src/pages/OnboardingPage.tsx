@@ -1,8 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
+import { Butterfly } from "../components/Butterfly";
+import { IdentityMark } from "../components/IdentityMark";
 import { api } from "../lib/api";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
+import {
+  ARCHETYPES,
+  PALETTE_PRESETS,
+  SYMBOLS,
+  normalizeIdentity,
+  type IdentityConfig,
+} from "../lib/identity";
 
 function SunGlyph() {
   return (
@@ -71,6 +80,8 @@ type Step = {
   glyph: ReactNode;
   source?: { label: string; url: string };
   setup?: boolean;
+  /** Interactive identity slides: pick a symbol, then shape the butterfly. */
+  identity?: "symbol" | "butterfly";
 };
 
 // Deliberately short: the core loop and the privacy boundary. Everything
@@ -97,7 +108,7 @@ const STEPS: Step[] = [
     eyebrow: "The rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Plan what will add energy and what will use it, audit how it actually felt, then close the energy day. Closed days appear under Previous days on the Dashboard and open read-only. Choose Edit this day to amend the record without reopening it, or Delete this day and confirm to remove it permanently.",
+      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Closed days appear under Previous days on the Dashboard and open read-only. Choose Edit this day to amend the record without reopening it, or Delete this day and confirm to remove it permanently.",
     glyph: <DayGlyph />,
   },
   {
@@ -106,6 +117,22 @@ const STEPS: Step[] = [
     whisper:
       "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions, with an explanation and a dismiss control available for every suggestion.",
     glyph: <CheckGlyph />,
+  },
+  {
+    eyebrow: "Your symbol",
+    thesis: "Choose your mark.",
+    whisper:
+      "Neurodivergent people carry many symbols with pride. Pick the one that feels like yours; it appears on shares, exports, and your sign-in welcome. Inside the app, your butterfly is always you, and you can change this any time on the You page.",
+    glyph: <PersonGlyph />,
+    identity: "symbol",
+  },
+  {
+    eyebrow: "Your butterfly",
+    thesis: "Meet your butterfly.",
+    whisper:
+      "The butterfly is this app's symbol of becoming: change that looks like struggle from the inside. Yours starts from a base you choose and grows with your days. Its wings beat with your energy, and its colors mean whatever you decide they mean.",
+    glyph: <PersonGlyph />,
+    identity: "butterfly",
   },
   {
     eyebrow: "Last step",
@@ -131,6 +158,9 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [lon, setLon] = useState(String(user.lon ?? ""));
   const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
     user.greetingStyle ?? "mix",
+  );
+  const [identity, setIdentity] = useState<IdentityConfig>(() =>
+    normalizeIdentity(user.identity, user.id),
   );
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -173,6 +203,7 @@ export function OnboardingPage({ user, onUser }: Props) {
       const body: Record<string, unknown> = {
         displayName: name.trim() || null,
         greetingStyle,
+        identity,
         locationPrompted: true,
         onboardingCompleted: true,
       };
@@ -207,6 +238,7 @@ export function OnboardingPage({ user, onUser }: Props) {
         lat: nextLat,
         lon: nextLon,
         greetingStyle,
+        identity,
         locationPrompted: true,
         onboardingCompleted: true,
       });
@@ -245,6 +277,91 @@ export function OnboardingPage({ user, onUser }: Props) {
               {current.source.label}
               <span aria-hidden="true"> ↗</span>
             </a>
+          )}
+          {current.identity === "symbol" && (
+            <div className="ob-setup ob-identity" role="radiogroup" aria-label="Your symbol">
+              {SYMBOLS.map((s) => (
+                <label
+                  key={s.id}
+                  className={`ob-symbol-card${identity.symbol === s.id ? " selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="ob-symbol"
+                    value={s.id}
+                    checked={identity.symbol === s.id}
+                    onChange={() => setIdentity({ ...identity, symbol: s.id })}
+                  />
+                  <span className="ob-symbol-art">
+                    <IdentityMark identity={identity} symbol={s.id} size={40} />
+                  </span>
+                  <span className="ob-symbol-copy">
+                    <strong>{s.label}</strong>
+                    <span className="muted">{s.blurb}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          {current.identity === "butterfly" && (
+            <div className="ob-setup ob-identity">
+              <div role="radiogroup" aria-label="Butterfly base" className="ob-archetypes">
+                {ARCHETYPES.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`ob-symbol-card${identity.archetype === a.id ? " selected" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="ob-archetype"
+                      value={a.id}
+                      checked={identity.archetype === a.id}
+                      onChange={() =>
+                        setIdentity({
+                          ...identity,
+                          archetype: a.id,
+                          palette: { ...a.palette },
+                        })
+                      }
+                    />
+                    <span className="ob-symbol-art">
+                      <Butterfly
+                        identity={{ ...identity, archetype: a.id, palette: a.palette }}
+                        beatMs={null}
+                        size={52}
+                        title={a.label}
+                      />
+                    </span>
+                    <span className="ob-symbol-copy">
+                      <strong>{a.label}</strong>
+                      <span className="muted">{a.blurb}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="ob-palettes" role="group" aria-label="Wing colors">
+                {PALETTE_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    className={`ob-palette${
+                      identity.palette.primary === p.palette.primary ? " selected" : ""
+                    }`}
+                    aria-pressed={identity.palette.primary === p.palette.primary}
+                    onClick={() => setIdentity({ ...identity, palette: { ...p.palette } })}
+                  >
+                    <span
+                      className="you-preset-swatch"
+                      style={{
+                        background: `linear-gradient(135deg, ${p.palette.primary}, ${p.palette.secondary})`,
+                      }}
+                      aria-hidden="true"
+                    />
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {current.setup && (
             <div className="ob-setup">
@@ -303,7 +420,11 @@ export function OnboardingPage({ user, onUser }: Props) {
           {error && <p className="error">{error}</p>}
         </div>
         <div className="ob-aside" aria-hidden="true">
-          {current.glyph}
+          {current.identity ? (
+            <Butterfly identity={identity} beatMs={2400} size={160} />
+          ) : (
+            current.glyph
+          )}
         </div>
       </article>
 

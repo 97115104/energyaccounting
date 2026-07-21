@@ -11,8 +11,5 @@
     "icons": "bun scripts/generate-icons.ts",
     "generate-more-invite-codes": "bun scripts/generate-more-invite-codes.ts"
   },
-  "workspaces": ["apps/*", "packages/*"],
-  "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2"
-  }
+  "workspaces": ["apps/*", "packages/*"]
 }

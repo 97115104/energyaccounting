@@ -22,7 +22,39 @@ export const userTable = sqliteTable("user_table", {
   greetingStyle: text("greeting_style"),
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).notNull().default(false),
   locationPrompted: integer("location_prompted", { mode: "boolean" }).notNull().default(false),
+  // NeuroMe identity config (symbol, archetype, palette, seed, motion) as
+  // JSON. Render-only, never sensitive: it must be readable before the
+  // journal unlocks so the login screen can welcome the person back.
+  identityJson: text("identity_json"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+// The encrypted You profile: one AES-GCM blob per user, written client-side
+// under the person's DEK. The server never sees the plaintext.
+export const youProfileTable = sqliteTable("you_profile_table", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => userTable.id, { onDelete: "cascade" }),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+// Public share snapshots. The person decrypts locally, picks sections, and the
+// chosen plaintext is frozen here under an unguessable token. Deliberate
+// disclosure, revocable at any time, auto-expiring.
+export const shareSnapshotTable = sqliteTable("share_snapshot_table", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => userTable.id, { onDelete: "cascade" }),
+  // SHA-256 of the URL token; the plaintext token is shown once at creation.
+  tokenHash: text("token_hash").notNull().unique(),
+  // Frozen plaintext payload: identity config plus chosen sections.
+  payload: text("payload").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  revokedAt: integer("revoked_at", { mode: "timestamp" }),
 });
 
 // One-time signup invites. Only the SHA-256 of the normalized code is stored;

@@ -1553,8 +1553,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             {closed ? "Day closed" : "Close day"}
           </button>
           <HelpTip label="the daily rhythm">
-            Plan what will add energy and what will use it, audit real costs and how it felt,
-            then close the energy day. Previous days open read-only on the Dashboard; choose Edit
+            Your day moves through three phases: planning, auditing real costs and how it felt,
+            then closing. Previous days open read-only on the Dashboard; choose Edit
             this day to amend one, or confirm before deleting it. Your next day starts fresh at 100
             when you choose to start it.
           </HelpTip>
@@ -1766,8 +1766,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
             {guide.items.length === 0 && (
               <p className="muted">
-                Nothing to suggest right now. Plan what will add energy and what will use it,
-                complete what you can, and the guide will speak up when it has something concrete.
+                Nothing to suggest right now. Keep planning your day and completing what you can,
+                and the guide will speak up when it has something concrete.
               </p>
             )}
             {guide.items.map((item) => (
