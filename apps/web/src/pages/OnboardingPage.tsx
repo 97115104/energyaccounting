@@ -164,6 +164,13 @@ const STEPS: Step[] = [
     glyph: <CheckGlyph />,
   },
   {
+    eyebrow: "Getting to know you",
+    thesis: "A private picture of you.",
+    whisper:
+      "On the You page, Your energy intelligence quietly learns from the days you log: what tends to restore you, what costs energy, and what your typical day actually looks like. It is built on this device and stays private unless you choose to share it. How to work with you turns that into a short, shareable perspective, drafted from your history and editable in your own words, so people can understand you without you having to explain from scratch. The more you log, the sharper it gets.",
+    glyph: <PersonGlyph />,
+  },
+  {
     eyebrow: "Symbolism matters",
     thesis: "Choose your mark.",
     whisper:

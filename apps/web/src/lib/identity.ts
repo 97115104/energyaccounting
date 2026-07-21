@@ -95,7 +95,7 @@ export const SYMBOLS: SymbolMeta[] = [
     id: "rainbow-pride",
     label: "Rainbow pride",
     blurb:
-      "One mark for people who hold both neurodivergent and LGBTQ+ identity together.",
+      "One mark for people who hold both neurodivergent and LGBTQ+ identity together, or if you just like rainbows.",
   },
 ];
 
