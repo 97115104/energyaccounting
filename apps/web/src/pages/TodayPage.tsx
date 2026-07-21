@@ -520,6 +520,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             side: item.side,
             label: item.label,
             useCount: item.useCount,
+            typicalDifficulty: item.typicalDifficulty,
+            difficultyCount: item.difficultyCount,
           })),
         );
         setIntelDays(
@@ -907,6 +909,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         withdrawalHeavy: playHeavy,
         existingLabels: day.lines.map((line) => line.label ?? ""),
         candidates: suggestions,
+        movement: personalIntel.tipSignals.movement,
         firstName: user.displayName?.trim().split(/\s+/)[0],
         recentLowFeel: personalIntel.tipSignals.recentLowFeel,
         recentRatedSample: personalIntel.tipSignals.recentRatedSample,
@@ -1075,11 +1078,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
   }
 
-  /** Apply a guide action; returns whether the line was added. */
-  async function applyGuideAction(item: GuideItem): Promise<boolean> {
-    if (!item.action) return false;
+  /** Apply a guide action (primary or lower-impact alternative); returns whether the line was added. */
+  async function applyGuideAction(item: GuideItem, useAlt = false): Promise<boolean> {
+    const action = useAlt ? item.altAction : item.action;
+    if (!action) return false;
     let targetDayId = day?.id;
-    if (item.action.requiresStart) {
+    if (action.requiresStart) {
       if (day && day.phase !== "closed") {
         setError("Close your active day before starting a new one.");
         return false;
@@ -1087,13 +1091,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       targetDayId = (await startNewDay()) ?? undefined;
       if (!targetDayId) return false;
     }
-    const ok = await addLine(
-      item.action.side,
-      item.action.label,
-      item.action.cost,
-      undefined,
-      targetDayId,
-    );
+    const ok = await addLine(action.side, action.label, action.cost, undefined, targetDayId);
     if (ok) dismissGuideItem(item.id);
     return ok;
   }
@@ -1797,7 +1795,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           <GuideCard
             item={guide.primary}
             closed={readOnly}
-            onAction={(item) => void applyGuideAction(item)}
+            onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
             onDismiss={dismissGuideItem}
           />
         )}
@@ -1994,8 +1992,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 item={item}
                 closed={readOnly}
                 inSheet
-                onAction={(entry) => {
-                  void applyGuideAction(entry).then((ok) => {
+                onAction={(entry, useAlt) => {
+                  void applyGuideAction(entry, useAlt).then((ok) => {
                     if (ok) setGuideOpen(false);
                   });
                 }}
@@ -2408,7 +2406,7 @@ function GuideCard(props: {
   inSheet?: boolean;
   actionLabel?: string;
   dismissLabel?: string;
-  onAction: (item: GuideItem) => void;
+  onAction: (item: GuideItem, useAlt?: boolean) => void;
   onDismiss: (id: string) => void;
 }) {
   const [whyOpen, setWhyOpen] = useState(false);
@@ -2464,6 +2462,18 @@ function GuideCard(props: {
               (item.action.requiresStart
                 ? `Start new day · Add energy: ${item.action.label} · ${item.action.cost}`
                 : `Add energy: ${item.action.label} · ${item.action.cost}`)}
+          </button>
+        )}
+        {item.altAction && (
+          /* Same styling as the primary action: the lower-impact dose is an
+             equal choice, not a fallback. */
+          <button
+            type="button"
+            className="btn accent"
+            disabled={props.closed}
+            onClick={() => props.onAction(item, true)}
+          >
+            {`Add energy: ${item.altAction.label} · ${item.altAction.cost}`}
           </button>
         )}
         <button

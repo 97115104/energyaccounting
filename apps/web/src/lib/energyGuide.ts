@@ -11,6 +11,7 @@
  */
 
 import { DAILY_ENERGY } from "@eaj/shared";
+import type { MovementProgress } from "./activityCatalog";
 import { suggestActivities, type ActivityCandidate } from "./activitySuggest";
 import { mean, weekdayName } from "./dateIso";
 import type { Insight, StatPoint } from "./insights";
@@ -44,6 +45,8 @@ export type GuideItem = {
   /** Overrides the default provenance label (e.g. "Getting started"). */
   provenance?: string;
   action?: GuideAction;
+  /** Lower-impact alternative action, offered as an equal choice (movement doses). */
+  altAction?: GuideAction;
   score: number;
 };
 
@@ -59,6 +62,8 @@ export type GuideContext = {
   withdrawalHeavy: boolean;
   existingLabels: string[];
   candidates: ActivityCandidate[];
+  /** Movement progression from the shared intelligence model, when loaded. */
+  movement?: MovementProgress[];
   firstName?: string;
   recentLowFeel?: boolean;
   recentRatedSample?: number;
@@ -183,13 +188,18 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     withdrawalHeavy: ctx.withdrawalHeavy,
     existingLabels: ctx.existingLabels,
     candidates: ctx.candidates,
+    movement: ctx.movement,
   });
   activities.forEach((suggestion, index) => {
     items.push({
       id: `activity:${suggestion.id}`,
       kind: "activity",
-      title: suggestion.familiar ? "A familiar way to add energy" : "A way to add energy that fits now",
-      body: `${suggestion.label} fits the ${ctx.available} points available now.`,
+      title:
+        suggestion.title ??
+        (suggestion.familiar ? "A familiar way to add energy" : "A way to add energy that fits now"),
+      body: suggestion.alternative
+        ? `${suggestion.label} — or ${suggestion.alternative.label.toLocaleLowerCase()} if that fits better. Either counts.`
+        : `${suggestion.label} fits the ${ctx.available} points available now.`,
       because: [suggestion.reason],
       // Familiar items are personal inference, not research; keep the
       // research slot for actual evidence so provenance stays honest.
@@ -197,7 +207,18 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       sourceUrl: suggestion.sourceUrl || undefined,
       personalized: suggestion.familiar,
       action: { side: "deposit", label: suggestion.label, cost: suggestion.typicalCost },
-      score: 50 - index * 5,
+      altAction: suggestion.alternative
+        ? {
+            side: "deposit",
+            label: suggestion.alternative.label,
+            cost: suggestion.alternative.typicalCost,
+          }
+        : undefined,
+      // Movement encouragement lives in the sheet: it never interrupts inline,
+      // so its score stays below PRIMARY_THRESHOLD regardless of rank.
+      score: suggestion.id.startsWith("movement:")
+        ? Math.min(40, 50 - index * 5)
+        : 50 - index * 5,
     });
   });
 
@@ -260,21 +281,37 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
   // Dedupe by id and by action label, drop dismissed, rank, cap.
   const seenIds = new Set<string>();
   const seenLabels = new Set(ctx.existingLabels.map(normalizedLabel));
-  const ranked = items
-    .filter((item) => {
-      if (ctx.dismissedIds?.has(item.id)) return false;
-      if (seenIds.has(item.id)) return false;
-      seenIds.add(item.id);
-      if (item.action) {
-        const key = normalizedLabel(item.action.label);
-        // Cross-date duplicates are allowed; only skip labels already on this day.
-        if (seenLabels.has(key)) return false;
-        seenLabels.add(key);
+  const deduped: GuideItem[] = [];
+  for (const item of items) {
+    if (ctx.dismissedIds?.has(item.id)) continue;
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+    let entry = item;
+    if (entry.action) {
+      const key = normalizedLabel(entry.action.label);
+      // Cross-date duplicates are allowed; only skip labels already on this day.
+      if (seenLabels.has(key)) continue;
+      seenLabels.add(key);
+    }
+    if (entry.altAction) {
+      const altKey = normalizedLabel(entry.altAction.label);
+      if (seenLabels.has(altKey)) {
+        // The card survives, but an alternative already covered elsewhere
+        // disappears — and the body stops promising it.
+        entry = {
+          ...entry,
+          altAction: undefined,
+          body: entry.action
+            ? `${entry.action.label} fits the ${ctx.available} points available now.`
+            : entry.body,
+        };
+      } else {
+        seenLabels.add(altKey);
       }
-      return true;
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_ITEMS);
+    }
+    deduped.push(entry);
+  }
+  const ranked = deduped.sort((a, b) => b.score - a.score).slice(0, MAX_ITEMS);
 
   const top = ranked[0];
   return {

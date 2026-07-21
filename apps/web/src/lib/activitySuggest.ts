@@ -1,3 +1,8 @@
+import {
+  MOVEMENT_FAMILIES,
+  deriveMovementProgress,
+  type MovementProgress,
+} from "./activityCatalog";
 import type { WeatherKind } from "./weatherUi";
 
 export type ActivityCandidate = {
@@ -20,6 +25,10 @@ export type ActivitySuggestion = {
   research: string;
   sourceUrl: string;
   familiar: boolean;
+  /** Playful card title override (movement families). */
+  title?: string;
+  /** Lower-impact alternative, always offered next to a movement dose. */
+  alternative?: { label: string; typicalCost: number };
 };
 
 export type ActivitySuggestContext = {
@@ -31,6 +40,12 @@ export type ActivitySuggestContext = {
   withdrawalHeavy: boolean;
   existingLabels: string[];
   candidates: ActivityCandidate[];
+  /**
+   * Per-family movement progression from the shared intelligence model.
+   * When absent, it is derived from `candidates` (day-scoped, so usually
+   * starter tiers); passing the full-history signals personalizes the dose.
+   */
+  movement?: MovementProgress[];
 };
 
 const DRY_WEATHER: WeatherKind[] = ["sun", "cloud"];
@@ -52,6 +67,72 @@ function weekdayBit(dateIso: string): number {
 function recentEnough(lastUsed: string, date: string): boolean {
   const age = Date.parse(`${date}T12:00:00Z`) - Date.parse(`${lastUsed}T12:00:00Z`);
   return Number.isFinite(age) && age >= 0 && age <= 14 * 86_400_000;
+}
+
+function hashSeed(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/**
+ * One movement family per day, rotated deterministically by date so the guide
+ * stays varied without being random. Each variant's dose comes from its own
+ * history (starter tiers unless that exact variant proved comfortable), and a
+ * lower-impact alternative is always offered as an equal choice so nobody has
+ * to negotiate with a suggestion that assumes ability.
+ */
+function movementSuggestion(
+  ctx: ActivitySuggestContext,
+  otherLabels: string[],
+): (ActivitySuggestion & { score: number }) | null {
+  const progress = ctx.movement ?? deriveMovementProgress(
+    ctx.candidates
+      .filter((c) => c.label)
+      .map((c) => ({
+        side: c.side,
+        label: c.label!,
+        useCount: c.useCount,
+        typicalDifficulty: c.typicalDifficulty,
+        difficultyCount: c.difficultyCount,
+      })),
+  );
+  const byFamily = new Map(progress.map((p) => [p.familyId, p]));
+  const start = hashSeed(ctx.date) % MOVEMENT_FAMILIES.length;
+
+  for (let i = 0; i < MOVEMENT_FAMILIES.length; i++) {
+    const family = MOVEMENT_FAMILIES[(start + i) % MOVEMENT_FAMILIES.length]!;
+    const p = byFamily.get(family.id);
+    const primary = p?.primary ?? { tier: 0 as const, uses: 0, familiar: false };
+    const gentler = p?.gentler ?? { tier: 0 as const, uses: 0, familiar: false };
+    const dose = family.primary.tiers[primary.tier];
+    const gentle = family.gentler.tiers[gentler.tier];
+    if (dose.cost > ctx.available) continue;
+    // Any same-family movement already on the day (any tier, either variant)
+    // suppresses the whole family — one movement moment per family per day.
+    if (otherLabels.some((label) => family.matcher.test(label))) continue;
+
+    const familiar = primary.familiar || gentler.familiar;
+    const doseNote =
+      primary.tier >= 1
+        ? "Your own ratings show this dose has been comfortable, so it steps up a little."
+        : familiar
+          ? "The dose stays small until your own ratings show it feels easy."
+          : "Starting tiny on purpose — finishing a small set beats planning a big one.";
+    return {
+      id: `movement:${family.id}`,
+      title: family.title,
+      label: dose.label,
+      typicalCost: dose.cost,
+      reason: `${doseNote}${p && p.because.length > 0 ? ` ${p.because.join(" ")}` : ""}`,
+      research: family.research,
+      sourceUrl: family.sourceUrl,
+      familiar,
+      alternative: { label: gentle.label, typicalCost: gentle.cost },
+      score: familiar ? 15 : ctx.withdrawalHeavy ? 12 : 9,
+    };
+  }
+  return null;
 }
 
 /**
@@ -182,8 +263,18 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
     }
   }
 
-  return ranked
+  // Suppress a movement family when any same-family label is already on the
+  // day or among the ranked suggestions, whatever its tier or variant.
+  const movement = movementSuggestion(ctx, [
+    ...ctx.existingLabels,
+    ...ranked.map((entry) => entry.label),
+  ]);
+
+  const top = ranked
     .sort((a, b) => b.score - a.score || Number(b.familiar) - Number(a.familiar))
-    .slice(0, 3)
-    .map(({ score: _score, ...suggestion }) => suggestion);
+    .slice(0, 3);
+  // Movement keeps a reserved slot after the top picks: a rich familiar
+  // catalog should never crowd the day's one movement moment out entirely.
+  if (movement) top.push(movement);
+  return top.map(({ score: _score, ...suggestion }) => suggestion);
 }

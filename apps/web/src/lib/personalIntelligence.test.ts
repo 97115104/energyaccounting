@@ -61,6 +61,28 @@ describe("buildPersonalIntelligence", () => {
     expect(ready.tipSignals.recentRatedSample).toBe(3);
   });
 
+  test("movement signals ride along with the other tip signals", () => {
+    const model = buildPersonalIntelligence({
+      catalog: [
+        {
+          side: "deposit",
+          label: "Do 3 push-ups",
+          useCount: 4,
+          typicalDifficulty: 2,
+          difficultyCount: 3,
+        },
+      ],
+      days: [],
+    });
+    const pushups = model.tipSignals.movement.find((m) => m.familyId === "pushups");
+    expect(pushups?.primary.tier).toBe(1);
+    expect(pushups?.primary.familiar).toBe(true);
+    // Families without history stay at the quiet starter default.
+    const jacks = model.tipSignals.movement.find((m) => m.familyId === "jacks");
+    expect(jacks?.primary.tier).toBe(0);
+    expect(jacks?.because).toEqual([]);
+  });
+
   test("sorts unsorted closed days before recent windows", () => {
     const model = buildPersonalIntelligence({
       catalog: [],

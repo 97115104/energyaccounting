@@ -5,6 +5,7 @@ import {
   nextIsoDate,
   recoveryPlan,
   type GuideContext,
+  type GuideItem,
   type RecoveryContext,
 } from "./energyGuide";
 import type { StatPoint } from "./insights";
@@ -198,6 +199,101 @@ describe("buildGuide", () => {
     expect(plan?.action?.label).toBe("Quiet pause");
     expect(plan?.action?.requiresStart).toBe(true);
     expect(plan?.because.some((b) => b.includes("100"))).toBe(true);
+  });
+
+  test("movement cards carry a primary dose and an equal gentler action", () => {
+    const guide = buildGuide(guideContext());
+    const movement = guide.items.find((i) => i.id.startsWith("activity:movement:"));
+    expect(movement).toBeDefined();
+    expect(movement!.action?.side).toBe("deposit");
+    expect(movement!.altAction?.side).toBe("deposit");
+    expect(movement!.altAction?.label).not.toBe(movement!.action?.label);
+    expect(movement!.body).toContain("Either counts");
+  });
+
+  test("movement never interrupts inline, even as the only activity", () => {
+    // available: 5 leaves only cost-5 movement doses; primary must stay null
+    // unless something else earns it.
+    const guide = buildGuide(
+      guideContext({ available: 5, weatherKind: "cloud", uvMax: null, isDaylight: false }),
+    );
+    const movement = guide.items.find((i) => i.id.startsWith("activity:movement:"));
+    expect(movement).toBeDefined();
+    expect(movement!.score).toBeLessThan(45);
+    expect(guide.primary?.id.startsWith("activity:movement:")).not.toBe(true);
+  });
+
+  test("a movement variant already on the day suppresses the whole family", () => {
+    const base = buildGuide(guideContext());
+    const movement = base.items.find((i) => i.id.startsWith("activity:movement:"))!;
+    const guide = buildGuide(guideContext({ existingLabels: [movement.altAction!.label] }));
+    expect(guide.items.some((i) => i.id === movement.id)).toBe(false);
+  });
+
+  test("a duplicated alternative is stripped and the body stops promising it", () => {
+    const extra: GuideItem[] = [
+      {
+        id: "extra:first",
+        kind: "activity",
+        title: "First",
+        body: "Quiet pause fits.",
+        because: ["test"],
+        personalized: false,
+        action: { side: "deposit", label: "Quiet pause", cost: 5 },
+        score: 99,
+      },
+      {
+        id: "extra:dup",
+        kind: "activity",
+        title: "Second",
+        body: "Do 3 push-ups — or quiet pause if that fits better. Either counts.",
+        because: ["test"],
+        personalized: false,
+        action: { side: "deposit", label: "Do 3 push-ups", cost: 5 },
+        altAction: { side: "deposit", label: "Quiet pause", cost: 5 },
+        score: 98,
+      },
+    ];
+    const guide = buildGuide(guideContext(), extra);
+    const item = guide.items.find((i) => i.id === "extra:dup")!;
+    // "Quiet pause" was claimed by the first card, so the second loses its
+    // alternative and no longer promises one.
+    expect(item.altAction).toBeUndefined();
+    expect(item.body).not.toContain("quiet pause");
+    // The stripped copy must not mutate what other calls would see: the same
+    // context without the clash keeps its alternative.
+    const clean = buildGuide(guideContext(), [extra[1]!]);
+    expect(clean.items.find((i) => i.id === "extra:dup")?.altAction).toBeDefined();
+  });
+
+  test("full-history movement signals override day-scoped derivation", () => {
+    const stepUp = { tier: 1 as const, uses: 5, familiar: true };
+    const starter = { tier: 0 as const, uses: 0, familiar: false };
+    const guide = buildGuide(
+      guideContext({
+        movement: [
+          {
+            familyId: "pushups",
+            primary: stepUp,
+            gentler: starter,
+            because: ["You have logged push-ups 5×."],
+          },
+          { familyId: "jacks", primary: starter, gentler: starter, because: [] },
+          { familyId: "squats", primary: starter, gentler: starter, because: [] },
+        ],
+      }),
+    );
+    const pushups = guide.items.find((i) => i.id === "activity:movement:pushups");
+    if (pushups) {
+      expect(pushups.action?.label).toBe("Do 8 push-ups");
+      expect(pushups.altAction?.label).toBe("Do 5 wall push-ups");
+      expect(pushups.personalized).toBe(true);
+    } else {
+      // Rotation picked another family for this date; those must stay starter.
+      const other = guide.items.find((i) => i.id.startsWith("activity:movement:"));
+      expect(other).toBeDefined();
+      expect(other!.personalized).toBe(false);
+    }
   });
 
   test("caps the sheet and gives every item at least one concrete reason", () => {

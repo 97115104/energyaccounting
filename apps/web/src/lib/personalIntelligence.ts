@@ -6,12 +6,16 @@
  * evidence used to make it so UI surfaces can disclose rather than overclaim.
  */
 
+import { deriveMovementProgress, type MovementProgress } from "./activityCatalog";
 import { mean, weekdayName } from "./dateIso";
 
 export type IntelligenceCatalogItem = {
   side: "deposit" | "withdrawal" | string;
   label: string;
   useCount: number;
+  /** Mean 1–10 difficulty across rated uses; drives movement progression. */
+  typicalDifficulty?: number | null;
+  difficultyCount?: number;
 };
 
 export type IntelligenceDay = {
@@ -37,6 +41,8 @@ export type TipSignals = {
   recentLowFeel: boolean;
   /** How many recent rated days the low-feel check inspected (0–3). */
   recentRatedSample: number;
+  /** Per-family movement dose derived from personal history (starter by default). */
+  movement: MovementProgress[];
 };
 
 export type PersonalIntelligence = {
@@ -176,6 +182,7 @@ export function buildPersonalIntelligence(input: IntelligenceInput): PersonalInt
         forDate && heavy?.name === weekdayName(forDate) ? heavy.name : null,
       recentLowFeel,
       recentRatedSample: recentRatings.length,
+      movement: deriveMovementProgress(input.catalog),
     },
   };
 }
