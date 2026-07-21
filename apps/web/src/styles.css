@@ -75,6 +75,13 @@ body,
   min-height: 100%;
 }
 
+/* Overscroll (rubber-band) reveals the html canvas behind the fixed body
+   gradient — paint it the theme's sky color so it never flashes white. */
+html {
+  background-color: var(--bg0);
+  transition: background-color 1.2s ease;
+}
+
 body {
   margin: 0;
   font-family: var(--font);

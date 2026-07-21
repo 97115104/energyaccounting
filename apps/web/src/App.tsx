@@ -141,6 +141,14 @@ export function App() {
       if (favicon) {
         favicon.href = period === "night" ? "/favicon-moon.svg" : "/favicon-sun.svg";
       }
+      // Keep browser chrome (and iOS overscroll area) on the theme's sky color.
+      const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+      if (themeColor) {
+        const bg0 = getComputedStyle(document.documentElement)
+          .getPropertyValue("--bg0")
+          .trim();
+        if (bg0) themeColor.content = bg0;
+      }
     };
     apply();
     const id = window.setInterval(apply, 60_000);
