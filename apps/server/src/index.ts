@@ -26,6 +26,11 @@ const app = new Elysia()
   .use(audioRoutes);
 
 if (existsSync(webDist)) {
+  const indexHtml = () => Bun.file(join(webDist, "index.html"));
+  // Bare "/" and client routes — @elysiajs/static indexHTML misses these in production
+  for (const path of ["/", "/auth", "/onboarding", "/dashboard", "/settings"]) {
+    app.get(path, indexHtml);
+  }
   app.use(
     staticPlugin({
       assets: webDist,
