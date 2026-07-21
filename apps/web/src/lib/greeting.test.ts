@@ -52,4 +52,10 @@ describe("greetingDetailFor", () => {
     });
     expect(morning.text).not.toBe(night.text);
   });
+
+  test("facts stay did-you-knows and never append the display name", () => {
+    const detail = greetingDetailFor("Austin", { style: "facts" });
+    expect(detail.text.length).toBeGreaterThan(0);
+    expect(detail.text).not.toContain("Austin");
+  });
 });

@@ -263,7 +263,7 @@ describe("buildGuide", () => {
         id: "extra:dup",
         kind: "activity",
         title: "Second",
-        body: "Do 3 push-ups — or quiet pause if that fits better. Either counts.",
+        body: "Do 3 push-ups, or quiet pause if that fits better. Either counts.",
         because: ["test"],
         personalized: false,
         action: { side: "deposit", label: "Do 3 push-ups", cost: 5 },

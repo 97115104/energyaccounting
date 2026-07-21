@@ -18,6 +18,7 @@ import { liveTimezone } from "./lib/timezone";
 import { skyPeriod } from "./lib/weatherUi";
 import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
 import { NeuroMe } from "./components/IdentityMark";
+import { ButterflyStateModal } from "./components/ButterflyStateModal";
 import { useButterflyDay, usePrefersReducedMotion } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -93,12 +94,15 @@ export function App() {
   const [dekReady, setDekReady] = useState(!!getSessionDek());
   const [unlockInfo, setUnlockInfo] = useState<UnlockInfo | null>(null);
   // Mirrors AuthPage's card (sign in vs create account) so the header greeting
-  // and tagline can follow along.
-  const [authMode, setAuthMode] = useState<"login" | "register">(() =>
-    hasReturningFlag() ? "login" : "register",
-  );
+  // and tagline can follow along. Honor ?mode= from share CTAs.
+  const [authMode, setAuthMode] = useState<"login" | "register">(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("mode");
+    if (fromUrl === "login" || fromUrl === "register") return fromUrl;
+    return hasReturningFlag() ? "login" : "register";
+  });
   // One fun fact per visit under the signed-out welcome, stable across renders.
   const [welcomeFact] = useState(() => randomFact().text);
+  const [stateExplainOpen, setStateExplainOpen] = useState(false);
   const loc = useLocation();
   const navigate = useNavigate();
   const butterflyState = useButterflyDay(!!user && dekReady && !needsTotp);
@@ -331,7 +335,16 @@ export function App() {
                     {greeting?.text}
                   </h1>
                   {(loc.pathname === "/" || loc.pathname.startsWith("/you")) && (
-                    <p className="greeting-state muted">{butterflyState.label}</p>
+                    <button
+                      type="button"
+                      className="greeting-state muted"
+                      aria-haspopup="dialog"
+                      aria-expanded={stateExplainOpen}
+                      title="What this means"
+                      onClick={() => setStateExplainOpen(true)}
+                    >
+                      {butterflyState.label}
+                    </button>
                   )}
                   {greeting?.factSource && (
                     <a
@@ -512,7 +525,7 @@ export function App() {
           }
         />
         {/* Public: anyone with a live share link can view the snapshot. */}
-        <Route path="/share/:token" element={<SharePage />} />
+        <Route path="/share/:token" element={<SharePage signedIn={authed} />} />
         <Route path="*" element={<Navigate to={authed ? "/" : "/auth"} replace />} />
       </Routes>
       <footer className="site-footer">
@@ -537,6 +550,12 @@ export function App() {
           built for the neurodivergent community
         </p>
       </footer>
+      {authed && stateExplainOpen && (
+        <ButterflyStateModal
+          state={butterflyState}
+          onClose={() => setStateExplainOpen(false)}
+        />
+      )}
     </div>
   );
 }

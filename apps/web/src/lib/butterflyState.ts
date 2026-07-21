@@ -49,33 +49,65 @@ export type ButterflyState = {
   because: string[];
 };
 
-const LABELS: Record<ButterflyStateId, { label: string; summary: string; beatMs: number }> = {
+/**
+ * Display labels per pose. Mixes the simple originals with funnier, gender-neutral
+ * variants of similar length. The pick freezes for the visit (see visitSeed) so
+ * the header does not churn, but a pose change re-draws from that pool.
+ */
+export const STATE_LABEL_POOLS: Record<ButterflyStateId, readonly string[]> = {
+  resting: ["Resting", "Taking it easy", "Quiet for now", "Plenty left"],
+  steady: ["Steady", "Even keel", "In balance", "Holding steady"],
+  lively: ["Lively", "Feeling lively", "Quick wings today", "Bright beat"],
+  recovering: ["Recovering", "Soft landing", "Going gentle", "Take it slow"],
+  spent: ["Spent", "Tank's low", "Nearly empty", "Very little left"],
+};
+
+/** The plain name for each pose, always the first entry in the pool. */
+export function canonicalStateLabel(id: ButterflyStateId): string {
+  return STATE_LABEL_POOLS[id][0]!;
+}
+
+const META: Record<ButterflyStateId, { summary: string; beatMs: number }> = {
   resting: {
-    label: "Resting",
     summary: "Wings folded and calm. Plenty of energy is still available.",
     beatMs: 2600,
   },
   steady: {
-    label: "Steady",
     summary: "An even, unhurried beat. The day is in balance.",
     beatMs: 1800,
   },
   lively: {
-    label: "Lively",
     summary: "A brighter, quicker beat after adding energy or finishing tasks.",
     beatMs: 1100,
   },
   recovering: {
-    label: "Recovering",
     summary: "A slow, gentle beat. The day has asked a lot, so ease in.",
     beatMs: 3200,
   },
   spent: {
-    label: "Spent",
     summary: "Wings low and still. Very little energy remains for today.",
     beatMs: 3600,
   },
 };
+
+// Same freeze-per-visit idea as greetings: one random stream for the session.
+const visitSeed = Math.random();
+
+const STATE_ORDER: ButterflyStateId[] = [
+  "resting",
+  "steady",
+  "lively",
+  "recovering",
+  "spent",
+];
+
+function labelFor(id: ButterflyStateId): string {
+  const pool = STATE_LABEL_POOLS[id];
+  // Offset by pose ordinal so resting/recovering (same first letter) never share an index.
+  const ordinal = STATE_ORDER.indexOf(id);
+  const mixed = (visitSeed + ordinal / STATE_ORDER.length) % 1;
+  return pool[Math.floor(mixed * pool.length) % pool.length]!;
+}
 
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
@@ -83,8 +115,8 @@ function clamp01(n: number): number {
 }
 
 /**
- * Resolve the butterfly's state for the current day. Deterministic: the same
- * input always produces the same pose.
+ * Resolve the butterfly's state for the current day. Deterministic for a given
+ * visit seed: the same input always produces the same pose and label.
  *
  * Precedence: a hard, low-energy day reads as spent or recovering first, then a
  * clearly energized day reads as lively, then balance reads as steady, and an
@@ -142,10 +174,10 @@ export function resolveButterflyState(input: ButterflyStateInput): ButterflyStat
     );
   }
 
-  const meta = LABELS[id];
+  const meta = META[id];
   return {
     id,
-    label: meta.label,
+    label: labelFor(id),
     summary: meta.summary,
     beatMs: meta.beatMs,
     vitality,

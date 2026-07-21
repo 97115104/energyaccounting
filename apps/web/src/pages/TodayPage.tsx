@@ -249,7 +249,7 @@ function MicIcon() {
 
 function LightbulbIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="currentColor"
         d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2Zm-2 18a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h-4v1Z"
@@ -316,7 +316,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   } | null>(null);
   // Numeric history, feeding the planning hint and the recovery plan.
   const [statSeries, setStatSeries] = useState<StatPoint[]>([]);
-  // Full decrypted history for tipSignals — same corpus as You, not the
+  // Full decrypted history for tipSignals, same corpus as You, not the
   // day-filtered suggestions list used for add-to-day ranking.
   const [intelCatalog, setIntelCatalog] = useState<IntelligenceCatalogItem[]>([]);
   const [intelDays, setIntelDays] = useState<IntelligenceDay[]>([]);
@@ -2508,7 +2508,7 @@ function GuideCard(props: {
   );
 }
 
-/** Short label for Source: … links — mirrors greeting fact sources. */
+/** Short label for Source: … links, mirrors greeting fact sources. */
 function guideSourceLabel(url: string): string {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");

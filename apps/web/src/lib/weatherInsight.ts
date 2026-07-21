@@ -97,7 +97,7 @@ function personalizedBody(
   if (!favorite) return { body: fallback };
   return {
     activity: favorite.label,
-    body: `${favorite.label} could fit well—you've used it to add energy ${favorite.useCount}×.`,
+    body: `${favorite.label} could fit well, and you've used it to add energy ${favorite.useCount}×.`,
   };
 }
 

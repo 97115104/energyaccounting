@@ -201,7 +201,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
         suggestion.title ??
         (suggestion.familiar ? "A familiar way to add energy" : "A way to add energy that fits now"),
       body: suggestion.alternative
-        ? `${suggestion.label} — or ${suggestion.alternative.label.toLocaleLowerCase()} if that fits better. Either counts.`
+        ? `${suggestion.label}, or ${suggestion.alternative.label.toLocaleLowerCase()} if that fits better. Either counts.`
         : `${suggestion.label} fits the ${ctx.available} points available now.`,
       because: [suggestion.reason],
       // Familiar items are personal inference, not research; keep the
@@ -302,7 +302,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       const altKey = normalizedLabel(entry.altAction.label);
       if (seenLabels.has(altKey)) {
         // The card survives, but an alternative already covered elsewhere
-        // disappears — and the body stops promising it.
+        // disappears, and the body stops promising it.
         entry = {
           ...entry,
           altAction: undefined,

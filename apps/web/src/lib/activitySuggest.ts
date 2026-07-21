@@ -139,7 +139,7 @@ function movementSuggestion(
     const gentle = family.gentler.tiers[gentler.tier];
     if (dose.cost > ctx.available) continue;
     // Any same-family movement already on the day (any tier, either variant)
-    // suppresses the whole family — one movement moment per family per day.
+    // suppresses the whole family, one movement moment per family per day.
     if (otherLabels.some((label) => family.matcher.test(label))) continue;
 
     const familiar = primary.familiar || gentler.familiar;
@@ -148,7 +148,7 @@ function movementSuggestion(
         ? "Your own ratings show this dose has been comfortable, so it steps up a little."
         : familiar
           ? "The dose stays small until your own ratings show it feels easy."
-          : "Starting tiny on purpose — finishing a small set beats planning a big one.";
+          : "Starting tiny on purpose, finishing a small set beats planning a big one.";
     return {
       id: `movement:${family.id}`,
       title: family.title,

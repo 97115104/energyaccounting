@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Butterfly } from "../components/Butterfly";
 import { IdentityMark } from "../components/IdentityMark";
 import { ProfileSections } from "../components/ProfileSections";
@@ -15,7 +15,21 @@ import { parseSharePayload, type SharePayload } from "../lib/identityShare";
 import { archetypeMeta, symbolMeta } from "../lib/identity";
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 
-export function SharePage() {
+/** Quiet Apple-style nudge: value first, account second, no loud button. */
+function ShareSignupNudge() {
+  return (
+    <p className="muted share-cta">
+      Want to create your own butterfly?{" "}
+      <Link className="linkish" to="/auth?mode=register">
+        Create an account
+      </Link>
+      {" "}
+      (invite needed).
+    </p>
+  );
+}
+
+export function SharePage({ signedIn = false }: { signedIn?: boolean }) {
   const { token } = useParams<{ token: string }>();
   const [payload, setPayload] = useState<SharePayload | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "gone">("loading");
@@ -58,6 +72,7 @@ export function SharePage() {
           The person who created it may have let it expire or taken it back. That choice is
           theirs to make.
         </p>
+        {signedIn ? null : <ShareSignupNudge />}
       </div>
     );
   }
@@ -103,6 +118,7 @@ export function SharePage() {
         Shared with EAJ, an energy accounting journal for neurodivergent people. The butterfly
         is a symbol of becoming; every one is unique to its person.
       </p>
+      {signedIn ? null : <ShareSignupNudge />}
     </div>
   );
 }

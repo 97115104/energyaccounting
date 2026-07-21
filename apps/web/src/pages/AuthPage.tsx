@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   deriveKek,
@@ -13,6 +14,11 @@ import { AFFIRMATIONS, dailyAffirmation } from "../lib/affirmations";
 import { deviceTimezone } from "../lib/timezone";
 import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
+
+function authModeFromParam(raw: string | null): "login" | "register" | null {
+  if (raw === "login" || raw === "register") return raw;
+  return null;
+}
 
 type Props = {
   needsTotp: boolean;
@@ -45,9 +51,13 @@ export function AuthPage({
   onNeedsTotp,
   onModeChange,
 }: Props) {
-  // Returning devices default to sign-in; a fresh device leads with sign-up.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Share CTAs pass ?mode=register so returning devices still land on signup.
+  // Otherwise returning devices default to sign-in; a fresh device leads with sign-up.
   const [mode, setMode] = useState<"login" | "register">(
-    hasReturningFlag() ? "login" : "register",
+    () =>
+      authModeFromParam(searchParams.get("mode")) ??
+      (hasReturningFlag() ? "login" : "register"),
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,6 +72,14 @@ export function AuthPage({
   // Bumped on every check and on mode switches so a stale in-flight preflight
   // can never verify an edited/cleared code or splash its error on another card.
   const inviteReqSeq = useRef(0);
+
+  // Keep card + app header aligned with ?mode= on SPA navigations (e.g. share CTA).
+  useEffect(() => {
+    const fromUrl = authModeFromParam(searchParams.get("mode"));
+    if (!fromUrl) return;
+    setMode(fromUrl);
+    onModeChange?.(fromUrl);
+  }, [searchParams, onModeChange]);
 
   // The privacy modal is informational: focus the dialog on open, close on
   // Escape, and hand focus back to the trigger afterwards.
@@ -92,6 +110,15 @@ export function AuthPage({
     setError(null);
     setInviteCode("");
     setInviteVerified(false);
+    // Keep the URL in sync so the effect above does not fight a manual toggle.
+    setSearchParams(
+      (prev) => {
+        const nextParams = new URLSearchParams(prev);
+        nextParams.set("mode", next);
+        return nextParams;
+      },
+      { replace: true },
+    );
   }
 
   async function checkInvite() {

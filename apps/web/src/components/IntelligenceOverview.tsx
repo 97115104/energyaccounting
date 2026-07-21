@@ -89,7 +89,7 @@ export function IntelligenceOverview({
         ) : status === "ready" ? (
           <p className="muted">
             Every day begins with 100 points. After five closed days, you will also see what a
-            typical day means for you—not someone else&apos;s average.
+            typical day means for you, and not someone else&apos;s average.
           </p>
         ) : (
           <p className="muted">Personal calibration appears once your history can be read.</p>

@@ -77,8 +77,9 @@ export function greetingDetailFor(
   if (style === "facts") {
     const index = Math.floor(visitSeed * FACTS.length) % FACTS.length;
     const entry = FACTS[index] ?? FACTS[0]!;
+    // Facts are did-you-knows; trailing ", {name}" reads as nonsense.
     return {
-      text: withName(named ? entry.named : entry.anonymous),
+      text: entry.anonymous,
       factSource: entry.source,
     };
   }

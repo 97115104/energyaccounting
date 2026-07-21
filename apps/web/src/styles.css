@@ -1659,8 +1659,8 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 45px;
+  height: 45px;
   border-radius: 50% !important;
   border: 1px solid rgba(128, 128, 160, 0.45);
   /* The solid fallback comes first because color-mix is progressive enhancement. */
@@ -1670,7 +1670,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
   transition: transform 0.15s ease, box-shadow 0.25s ease;
 }
 
@@ -1678,11 +1678,11 @@ html[data-theme="night"] .tips-fab {
   background: rgba(40, 48, 80, 0.88);
   background: color-mix(in srgb, var(--panel) 88%, #fff 6%);
   border-color: rgba(200, 184, 255, 0.55);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
 }
 
 .tips-fab:hover {
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
 .tips-fab:active {
@@ -1699,19 +1699,19 @@ html[data-theme="night"] .tips-fab {
 
 .tips-badge {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 10px !important;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px !important;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 5px;
+  padding: 0 4px;
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
@@ -1728,7 +1728,7 @@ html[data-theme="night"] .tips-fab {
 .tips-sheet {
   position: fixed;
   right: 1rem;
-  bottom: 6rem;
+  bottom: 5rem;
   z-index: 41;
   width: min(360px, calc(100vw - 2rem));
   max-height: 60vh;
@@ -2914,6 +2914,52 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
 .greeting-state {
   margin: 0.15rem 0 0;
   font-size: 0.9rem;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.greeting-state:hover,
+.greeting-state:focus-visible {
+  color: inherit;
+}
+
+.butterfly-state-modal .butterfly-state-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+}
+
+.butterfly-state-modal .butterfly-state-also {
+  margin: -0.15rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.butterfly-state-modal .butterfly-state-title {
+  font-family: var(--display);
+  margin: 0 0 0.5rem;
+}
+
+.butterfly-state-modal .butterfly-state-why {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  margin: 0.85rem 0 0.35rem;
+}
+
+.butterfly-state-modal .butterfly-state-because {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
 }
 
 .auth-welcome-mark {
@@ -3561,6 +3607,11 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
 
 .share-foot {
   margin-top: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.share-cta {
+  margin-top: 0.65rem;
   font-size: 0.85rem;
 }
 

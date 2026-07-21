@@ -18,7 +18,7 @@ export type MovementTier = {
 
 export type MovementVariant = {
   name: string;
-  /** starter, steady, strong — always suggested in that order of evidence. */
+  /** starter, steady, strong, always suggested in that order of evidence. */
   tiers: [MovementTier, MovementTier, MovementTier];
 };
 
@@ -89,7 +89,7 @@ export type MovementHistoryEntry = {
 
 type VariantStats = { uses: number; ratingCount: number; ratingTotal: number };
 
-/** Conservative tier from one variant's own history — never from its sibling's. */
+/** Conservative tier from one variant's own history, never from its sibling's. */
 function variantTier(
   stats: VariantStats,
   name: string,
@@ -103,7 +103,7 @@ function variantTier(
   const ratedEnough = ratingCount >= 3 && avg != null;
   because.push(`You have logged ${name} ${uses}×.`);
 
-  // Hard ratings hold the dose small — never push through difficulty.
+  // Hard ratings hold the dose small, never push through difficulty.
   if (ratedEnough && avg! >= 7) {
     because.push(
       `You usually rate it around ${avg}/10 for difficulty, so the dose stays deliberately small.`,

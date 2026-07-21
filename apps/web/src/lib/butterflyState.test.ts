@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   effectiveBeatMs,
   resolveButterflyState,
+  STATE_LABEL_POOLS,
   type ButterflyStateInput,
 } from "./butterflyState";
 
@@ -24,6 +25,7 @@ describe("resolveButterflyState", () => {
   test("fresh day rests", () => {
     const s = resolveButterflyState(input());
     expect(s.id).toBe("resting");
+    expect(STATE_LABEL_POOLS.resting).toContain(s.label);
     expect(s.vitality).toBe(1);
     expect(s.because.length).toBeGreaterThan(0);
   });
@@ -39,6 +41,7 @@ describe("resolveButterflyState", () => {
       input({ available: 10, depositTotal: 40, completedCount: 5 }),
     );
     expect(s.id).toBe("spent");
+    expect(STATE_LABEL_POOLS.spent).toContain(s.label);
   });
 
   test("withdrawal-heavy day recovers", () => {
@@ -46,6 +49,7 @@ describe("resolveButterflyState", () => {
       input({ withdrawalHeavy: true, withdrawalTotal: 60, depositTotal: 10, available: 40 }),
     );
     expect(s.id).toBe("recovering");
+    expect(STATE_LABEL_POOLS.recovering).toContain(s.label);
     expect(s.because.join(" ")).toContain("60");
   });
 
@@ -57,6 +61,7 @@ describe("resolveButterflyState", () => {
   test("energy added makes it lively", () => {
     const s = resolveButterflyState(input({ depositTotal: 25, available: 80 }));
     expect(s.id).toBe("lively");
+    expect(STATE_LABEL_POOLS.lively).toContain(s.label);
   });
 
   test("completions make it lively", () => {
@@ -69,6 +74,7 @@ describe("resolveButterflyState", () => {
       input({ depositTotal: 10, withdrawalTotal: 12, available: 78 }),
     );
     expect(s.id).toBe("steady");
+    expect(STATE_LABEL_POOLS.steady).toContain(s.label);
   });
 
   test("lively beats faster than recovering", () => {
@@ -81,6 +87,20 @@ describe("resolveButterflyState", () => {
     const a = resolveButterflyState(input({ depositTotal: 25 }));
     const b = resolveButterflyState(input({ depositTotal: 25 }));
     expect(a).toEqual(b);
+  });
+
+  test("label pools stay gender-neutral", () => {
+    const joined = Object.values(STATE_LABEL_POOLS).flat().join(" ").toLowerCase();
+    expect(joined).not.toMatch(/\b(she|he|her|his|hers|him)\b/);
+  });
+
+  test("different state ids can pick different pool indices in one visit", () => {
+    const resting = resolveButterflyState(input());
+    const recovering = resolveButterflyState(input({ feelRating: 2, available: 60 }));
+    const restingIdx = STATE_LABEL_POOLS.resting.indexOf(resting.label);
+    const recoveringIdx = STATE_LABEL_POOLS.recovering.indexOf(recovering.label);
+    // Same first letter used to force matching indices; full-id mix should diverge.
+    expect(restingIdx).not.toBe(recoveringIdx);
   });
 });
 

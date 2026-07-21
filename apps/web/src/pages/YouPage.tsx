@@ -760,7 +760,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               <option value="day">1 day</option>
               <option value="month">30 days</option>
               <option value="quarter">90 days</option>
-              <option value="permanent">Permanent — until revoked</option>
+              <option value="permanent">Permanent, until revoked</option>
             </select>
           </div>
           {ttl === "permanent" && (
