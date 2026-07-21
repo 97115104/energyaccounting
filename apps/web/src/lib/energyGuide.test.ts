@@ -43,7 +43,9 @@ function candidate(overrides: Partial<ActivityCandidate> = {}): ActivityCandidat
 
 function statDay(date: string, overrides: Partial<StatPoint> = {}): StatPoint {
   return {
+    id: overrides.id ?? `day-${date}`,
     date,
+    startedAt: overrides.startedAt ?? `${date}T12:00:00.000Z`,
     openingBalance: 100,
     closingBalance: 100,
     attwoodNet: 0,
@@ -62,6 +64,7 @@ function statDay(date: string, overrides: Partial<StatPoint> = {}): StatPoint {
 
 function recoveryContext(overrides: Partial<RecoveryContext> = {}): RecoveryContext {
   return {
+    dayId: "day-2026-07-20",
     date: "2026-07-20",
     feelRating: 7,
     openingBalance: 100,
@@ -107,7 +110,7 @@ describe("buildGuide", () => {
       }),
     );
     const labels = guide.items
-      .filter((i) => i.action && !i.action.targetDate)
+      .filter((i) => i.action && !i.action.requiresStart)
       .map((i) => i.action!.label.toLowerCase());
     expect(labels).not.toContain("take a short walk");
     expect(new Set(labels).size).toBe(labels.length);
@@ -152,7 +155,7 @@ describe("buildGuide", () => {
     }
   });
 
-  test("tomorrow capacity uses openingBalance(100 + closing)", () => {
+  test("next ledger capacity is always 100", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -161,7 +164,8 @@ describe("buildGuide", () => {
       }),
     );
     expect(plan?.action?.label).toBe("Quiet pause");
-    expect(plan?.because.some((b) => b.includes("140"))).toBe(true);
+    expect(plan?.action?.requiresStart).toBe(true);
+    expect(plan?.because.some((b) => b.includes("100"))).toBe(true);
   });
 
   test("caps the sheet and gives every item at least one concrete reason", () => {
@@ -209,7 +213,7 @@ describe("recoveryPlan", () => {
       recoveryContext({ openingBalance: 100, closingBalance: 76 }),
     );
     expect(plan).not.toBeNull();
-    expect(plan!.because.some((b) => b.includes("24 points below"))).toBe(true);
+    expect(plan!.because.some((b) => b.includes("24 points spent"))).toBe(true);
   });
 
   test("two weak signals combine to fire", () => {
@@ -219,7 +223,7 @@ describe("recoveryPlan", () => {
     expect(plan).not.toBeNull();
   });
 
-  test("picks a familiar low-difficulty deposit that fits tomorrow's capacity", () => {
+  test("picks a familiar low-difficulty deposit for the next ledger", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -238,11 +242,11 @@ describe("recoveryPlan", () => {
       }),
     );
     expect(plan?.action?.label).toBe("Evening tea");
-    expect(plan?.action?.targetDate).toBe("2026-07-21");
+    expect(plan?.action?.requiresStart).toBe(true);
     expect(plan?.because.some((b) => b.includes("5×"))).toBe(true);
   });
 
-  test("suggests a buffer when no familiar deposit fits tomorrow opening", () => {
+  test("suggests a buffer when no familiar deposit fits the next ledger", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -252,10 +256,10 @@ describe("recoveryPlan", () => {
     );
     expect(plan).not.toBeNull();
     expect(plan!.action).toBeUndefined();
-    expect(plan!.body).toContain("buffer");
+    expect(plan!.body).toContain("fresh 100");
   });
 
-  test("negative closing still allows deposits within tomorrow opening", () => {
+  test("negative remaining still allows deposits within a fresh 100", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -264,10 +268,10 @@ describe("recoveryPlan", () => {
       }),
     );
     expect(plan?.action?.label).toBe("Quiet pause");
-    expect(plan?.because.some((b) => b.includes("95"))).toBe(true);
+    expect(plan?.because.some((b) => b.includes("100"))).toBe(true);
   });
 
-  test("a historically heavy tomorrow counts as a weak signal", () => {
+  test("a historically heavy next-start weekday counts as a weak signal", () => {
     // 2026-07-21 is a Tuesday; make Tuesdays reliably net-negative.
     const series: StatPoint[] = [];
     const start = new Date("2026-06-20T12:00:00Z");
@@ -279,7 +283,7 @@ describe("recoveryPlan", () => {
       series.push(statDay(iso, { attwoodNet: isTuesday ? -30 : 5 }));
     }
     const plan = recoveryPlan(
-      recoveryContext({ series, incompleteWithdrawals: 3 }),
+      recoveryContext({ series, incompleteWithdrawals: 3, nextStartDate: "2026-07-21" }),
     );
     expect(plan).not.toBeNull();
     expect(plan!.because.some((b) => b.includes("Tuesday"))).toBe(true);

@@ -10,7 +10,7 @@
  * labels and plaintext numbers; nothing here talks to a network.
  */
 
-import { openingBalance } from "@eaj/shared";
+import { DAILY_ENERGY } from "@eaj/shared";
 import { suggestActivities, type ActivityCandidate } from "./activitySuggest";
 import type { Insight, StatPoint } from "./insights";
 import { playCategoryTitle, suggestPlayDeposits } from "./playCategories";
@@ -22,8 +22,8 @@ export type GuideAction = {
   /** Activity label to add to the ledger. */
   label: string;
   cost: number;
-  /** ISO date to add the line to; omitted means the current day. */
-  targetDate?: string;
+  /** When true, the user must explicitly start a new ledger before this line is added. */
+  requiresStart?: boolean;
 };
 
 export type GuideKind = "event" | "recovery" | "trend" | "activity" | "play" | "context";
@@ -121,7 +121,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       id: "event:freed",
       kind: "event",
       title: "Capacity opened up",
-      body: `You freed ${ctx.justFreed} points. Spend them on something restorative, or leave them banked — the ledger won't judge either way.`,
+      body: `You freed ${ctx.justFreed} points. Spend them on something restorative, or leave them open — either is valid.`,
       because: [`You just completed a task that reserved ${ctx.justFreed} points.`],
       personalized: true,
       score: 100,
@@ -227,8 +227,8 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       seenIds.add(item.id);
       if (item.action) {
         const key = normalizedLabel(item.action.label);
-        // Cross-date actions (tomorrow) may repeat today's labels.
-        if (!item.action.targetDate && seenLabels.has(key)) return false;
+        // Cross-date duplicates are allowed; only skip labels already on this ledger.
+        if (seenLabels.has(key)) return false;
         seenLabels.add(key);
       }
       return true;
@@ -243,17 +243,17 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tomorrow recovery: the intelligent replacement for the old free-text
-// "what can I schedule tomorrow to compensate?" field.
-// ---------------------------------------------------------------------------
+// Recovery after close: suggest how to open the *next* ledger, never auto-start it.
 
 export type RecoveryContext = {
-  /** The day that just closed. */
+  /** The ledger that just closed. */
+  dayId: string;
   date: string;
+  /** Local calendar date when the user would start the next ledger (defaults to day after `date`). */
+  nextStartDate?: string;
   feelRating: number | null;
   openingBalance: number;
-  /** The actual closing balance from the close call. */
+  /** Energy remaining at close (stored as closingBalance). */
   closingBalance: number;
   plannedTotal: number;
   actualTotal: number;
@@ -281,11 +281,11 @@ function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
 
-/** Does tomorrow's weekday historically run a meaningful net drain? */
-function tomorrowRunsHeavy(series: StatPoint[], tomorrow: string): boolean {
-  const closed = series.filter((p) => p.phase === "closed" && p.date < tomorrow);
+/** Does a calendar weekday historically run a meaningful net drain? */
+function weekdayRunsHeavy(series: StatPoint[], dateIso: string): boolean {
+  const closed = series.filter((p) => p.phase === "closed" && p.date <= dateIso);
   if (closed.length < 10) return false;
-  const weekday = weekdayName(tomorrow);
+  const weekday = weekdayName(dateIso);
   const sameDay = closed.filter((p) => weekdayName(p.date) === weekday);
   const others = closed.filter((p) => weekdayName(p.date) !== weekday);
   if (sameDay.length < 3 || others.length < 5) return false;
@@ -295,14 +295,8 @@ function tomorrowRunsHeavy(series: StatPoint[], tomorrow: string): boolean {
 }
 
 /**
- * One conservative "make tomorrow gentler" recommendation, or null when today
- * gives no evidence recovery is needed. Fires on one strong signal (rough
- * feel, real deficit) or two weaker ones; never invents an activity when no
- * familiar low-cost deposit fits tomorrow's expected capacity.
- *
- * Only call this AFTER the day has closed: tomorrow's opening balance is
- * derived server-side from the last closed day, so creating tomorrow's row
- * any earlier would freeze a stale opening.
+ * One conservative "start the next ledger gently" recommendation, or null when
+ * the closed ledger gives no evidence recovery is needed.
  */
 export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
   const because: string[] = [];
@@ -313,9 +307,9 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
     because.push(`Today felt ${ctx.feelRating}/10.`);
     strong += 1;
   }
-  const deficit = ctx.openingBalance - ctx.closingBalance;
-  if (deficit >= 15) {
-    because.push(`Today is closing ${deficit} points below where it opened.`);
+  const spent = ctx.openingBalance - ctx.closingBalance;
+  if (spent >= 15) {
+    because.push(`This ledger ended with ${ctx.closingBalance} energy remaining (${spent} points spent from your daily ${DAILY_ENERGY}).`);
     strong += 1;
   }
   if (ctx.plannedTotal > 0 && ctx.actualTotal >= ctx.plannedTotal + 15) {
@@ -326,21 +320,19 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
     because.push(`${ctx.incompleteWithdrawals} withdrawals are still open.`);
     weak += 1;
   }
-  const tomorrow = nextIsoDate(ctx.date);
-  if (tomorrowRunsHeavy(ctx.series, tomorrow)) {
-    because.push(`${weekdayName(tomorrow)}s usually cost you more than they give.`);
+  const nextStart = ctx.nextStartDate ?? nextIsoDate(ctx.date);
+  if (weekdayRunsHeavy(ctx.series, nextStart)) {
+    because.push(`${weekdayName(nextStart)}s usually cost you more than they give.`);
     weak += 1;
   }
 
   if (strong === 0 && weak < 2) return null;
 
-  // Tomorrow opens at 100 + today's closing balance (see @eaj/shared).
-  const tomorrowOpening = openingBalance(ctx.closingBalance);
-  const tomorrowCapacity = Math.max(0, tomorrowOpening);
+  const nextCapacity = DAILY_ENERGY;
   const pick = ctx.candidates
     .filter((c) => {
       if (c.side !== "deposit" || !c.label?.trim()) return false;
-      if (c.typicalCost > tomorrowCapacity || c.typicalCost > 25) return false;
+      if (c.typicalCost > nextCapacity || c.typicalCost > 25) return false;
       const easyKnown =
         (c.difficultyCount ?? 0) >= 3 && c.typicalDifficulty != null && c.typicalDifficulty <= 4;
       return easyKnown || c.useCount >= 3;
@@ -357,13 +349,13 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
 
   if (pick?.label) {
     return {
-      id: `recovery:${ctx.date}`,
+      id: `recovery:${ctx.dayId}`,
       kind: "recovery",
-      title: "Make tomorrow gentler",
-      body: `Plan “${pick.label}” (${pick.typicalCost} points) for tomorrow — a familiar deposit that fits the ${tomorrowCapacity} points tomorrow should open with.`,
+      title: "Start your next ledger gently",
+      body: `When you start your next ledger, open with “${pick.label}” (${pick.typicalCost} points) — a familiar deposit that fits a fresh ${DAILY_ENERGY} points.`,
       because: [
         ...because,
-        `Tomorrow opens at ${tomorrowOpening} (100 + today's closing balance).`,
+        `Each new ledger starts at ${DAILY_ENERGY}; energy does not carry over.`,
         `You have used “${pick.label}” ${pick.useCount}× before.`,
       ],
       research,
@@ -372,17 +364,17 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
         side: "deposit",
         label: pick.label,
         cost: pick.typicalCost,
-        targetDate: tomorrow,
+        requiresStart: true,
       },
       score: 90,
     };
   }
 
   return {
-    id: `recovery:${ctx.date}`,
+    id: `recovery:${ctx.dayId}`,
     kind: "recovery",
-    title: "Make tomorrow gentler",
-    body: "Tomorrow deserves a buffer: plan fewer withdrawal points than usual and leave room for the balance to recover.",
+    title: "Start your next ledger gently",
+    body: "When you start again, plan fewer withdrawal points than usual and leave room in your fresh 100.",
     because,
     research,
     personalized: true,

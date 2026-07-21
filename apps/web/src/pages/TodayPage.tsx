@@ -84,6 +84,7 @@ type Suggestion = {
 type DayPayload = {
   id: string;
   date: string;
+  startedAt: string;
   openingBalance: number;
   closingBalance: number | null;
   projectedClosing: number;
@@ -121,21 +122,22 @@ type SpeechRec = {
   stop: () => void;
 };
 
-async function fetchRecentStats(date: string): Promise<StatPoint[]> {
-  const from = new Date(date + "T12:00:00Z");
+async function fetchRecentStats(): Promise<StatPoint[]> {
+  const to = isoDate();
+  const from = new Date(to + "T12:00:00Z");
   from.setUTCDate(from.getUTCDate() - 60);
   const fromIso = from.toISOString().slice(0, 10);
-  const res = await api<{ series: StatPoint[] }>(`/api/stats?from=${fromIso}&to=${date}`);
+  const res = await api<{ series: StatPoint[] }>(`/api/stats?from=${fromIso}&to=${to}`);
   return res.series;
 }
 
-function guideDismissKey(date: string): string {
-  return `eaj-guide-dismissed:${date}`;
+function guideDismissKey(dayId: string): string {
+  return `eaj-guide-dismissed:${dayId}`;
 }
 
-function loadDismissedGuideIds(date: string): Set<string> {
+function loadDismissedGuideIds(dayId: string): Set<string> {
   try {
-    const raw = localStorage.getItem(guideDismissKey(date));
+    const raw = localStorage.getItem(guideDismissKey(dayId));
     if (!raw) return new Set();
     const parsed: unknown = JSON.parse(raw);
     return new Set(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
@@ -168,15 +170,12 @@ function LightbulbIcon() {
 
 export function TodayPage({ user }: { user: UserProfile }) {
   const [params, setSearchParams] = useSearchParams();
-  const dateParam = params.get("date");
-  // URL is source of truth so Dashboard deep-links and the Today nav stay aligned.
-  const date =
-    dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : isoDate();
-  function setDate(next: string) {
-    if (next === isoDate()) setSearchParams({}, { replace: true });
-    else setSearchParams({ date: next }, { replace: true });
-  }
+  const historyDayId = params.get("day");
+  const isHistoryView = !!historyDayId;
   const [day, setDay] = useState<DayPayload | null>(null);
+  const [noActive, setNoActive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
@@ -226,11 +225,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   useEffect(() => {
     setJustFreed(undefined);
-    setCloseCelebration(null);
     setStatSeries([]);
     setDetailLineId(null);
-    setDismissedGuideIds(loadDismissedGuideIds(date));
-  }, [date]);
+    if (day?.id) setDismissedGuideIds(loadDismissedGuideIds(day.id));
+  }, [day?.id, historyDayId]);
 
   useEffect(() => {
     return () => {
@@ -251,11 +249,39 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forcedDayId?: string) => {
     setError(null);
+    setLoading(true);
     const dek = getSessionDek();
-    if (!dek) return;
-    const d = await api<DayPayload>(`/api/days/${date}`);
+    if (!dek) {
+      setLoading(false);
+      return;
+    }
+    let d: DayPayload | null;
+    if (forcedDayId) {
+      d = await api<DayPayload>(`/api/days/${forcedDayId}`);
+      setNoActive(false);
+    } else if (historyDayId) {
+      d = await api<DayPayload>(`/api/days/${historyDayId}`);
+      // History deep-links are read-only by contract; a still-open ledger
+      // belongs on the active view instead.
+      if (d && d.phase !== "closed") {
+        setSearchParams({}, { replace: true });
+        setLoading(false);
+        return;
+      }
+      setNoActive(false);
+    } else {
+      const active = await api<{ day: DayPayload | null }>(`/api/days/active`);
+      d = active.day;
+      setNoActive(d === null);
+    }
+    if (!d) {
+      setDay(null);
+      setSuggestions([]);
+      setLoading(false);
+      return;
+    }
     const lines: Line[] = [];
     for (const l of d.lines) {
       try {
@@ -279,6 +305,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
     }
     setDay({ ...d, lines });
+    setDismissedGuideIds(loadDismissedGuideIds(d.id));
     if (d.journalCiphertext && d.journalIv) {
       try {
         setJournal(await decryptText(dek, d.journalCiphertext, d.journalIv, "eaj-journal"));
@@ -287,7 +314,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
     } else setJournal("");
 
-    const sug = await api<{ suggestions: Suggestion[] }>(`/api/suggestions/${date}`);
+    const sug = await api<{ suggestions: Suggestion[] }>(`/api/suggestions/${d.id}`);
     const decrypted: Suggestion[] = [];
     for (const s of sug.suggestions) {
       try {
@@ -298,18 +325,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
     }
     setSuggestions(decrypted);
-  }, [date]);
+    setLoading(false);
+  }, [historyDayId, setSearchParams]);
 
   useEffect(() => {
-    void load().catch((e) => setError(e instanceof Error ? e.message : "Load failed"));
+    void load().catch((e) => {
+      setError(e instanceof Error ? e.message : "Load failed");
+      setLoading(false);
+    });
   }, [load]);
 
   // Numeric history feeds the planning hint during plan.
   const dayPhase = day?.phase;
   useEffect(() => {
-    if (dayPhase !== "plan" && dayPhase !== "audit") return;
+    if (!day || dayPhase !== "plan" && dayPhase !== "audit") return;
     let cancelled = false;
-    void fetchRecentStats(date)
+    void fetchRecentStats()
       .then((series) => {
         if (!cancelled) setStatSeries(series);
       })
@@ -319,7 +350,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => {
       cancelled = true;
     };
-  }, [dayPhase, date]);
+  }, [dayPhase, day?.id]);
 
   // Escape closes the celebration modal; Tab stays inside it.
   useEffect(() => {
@@ -527,9 +558,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   // Trend hint while planning; recovery only at close (never during audit,
   // so tomorrow's day row is not created before today locks).
+  const ledgerDate = day?.date ?? isoDate();
+  const spansMidnight = !!day && !isHistoryView && day.date < isoDate() && day.phase !== "closed";
+
   const hint = useMemo(
-    () => (dayPhase === "plan" ? planningHint(statSeries, date) : null),
-    [dayPhase, statSeries, date],
+    () => (dayPhase === "plan" && day ? planningHint(statSeries, day.date) : null),
+    [dayPhase, statSeries, day],
   );
 
   const guide = useMemo(() => {
@@ -550,7 +584,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
     return buildGuide(
       {
-        date,
+        date: day.date,
         available: day.availableCapacity,
         depositTotal: day.attwood.depositTotal,
         withdrawalTotal: day.attwood.withdrawalTotal,
@@ -569,7 +603,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     );
   }, [
     day,
-    date,
     withdrawals,
     weatherKind,
     uvMax,
@@ -611,11 +644,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
       return;
     }
+    if (!day) return;
     setDismissedGuideIds((prev) => {
       const next = new Set(prev);
       next.add(id);
       try {
-        localStorage.setItem(guideDismissKey(date), JSON.stringify([...next]));
+        localStorage.setItem(guideDismissKey(day.id), JSON.stringify([...next]));
       } catch {
         // Storage unavailable; the item can reappear after reload.
       }
@@ -628,13 +662,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
     label: string,
     cost: number,
     hash?: string,
-    targetDate?: string,
+    dayId?: string,
   ): Promise<boolean> {
     const dek = getSessionDek();
-    if (!dek || !day) return false;
-    const crossDay = !!targetDate && targetDate !== date;
-    // The server re-checks capacity for any date; this is just a faster error.
-    if (!crossDay && cost > day.availableCapacity) {
+    const ledgerId = dayId ?? day?.id;
+    if (!dek || !ledgerId) return false;
+    if (!dayId && day && cost > day.availableCapacity) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
       );
@@ -643,7 +676,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const { ciphertext, iv } = await encryptText(dek, label.trim(), "eaj-label");
     const lh = hash ?? (await labelHash(label));
     try {
-      await api(`/api/days/${targetDate ?? date}/lines`, {
+      await api(`/api/days/${ledgerId}/lines`, {
         method: "POST",
         body: JSON.stringify({
           side,
@@ -657,19 +690,49 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setError(e instanceof Error ? e.message : "Could not add the item.");
       return false;
     }
-    if (!crossDay) await load();
+    await load();
     return true;
+  }
+
+  async function startNewDay(): Promise<string | null> {
+    setStarting(true);
+    setError(null);
+    try {
+      setSearchParams({}, { replace: true });
+      const created = await api<DayPayload>("/api/days/start", {
+        method: "POST",
+        body: JSON.stringify({ date: isoDate() }),
+      });
+      setNoActive(false);
+      setCloseCelebration(null);
+      await load(created.id);
+      return created.id;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start a new ledger.");
+      return null;
+    } finally {
+      setStarting(false);
+    }
   }
 
   /** Apply a guide action; returns whether the line was added. */
   async function applyGuideAction(item: GuideItem): Promise<boolean> {
     if (!item.action) return false;
+    let ledgerId = day?.id;
+    if (item.action.requiresStart) {
+      if (day && day.phase !== "closed") {
+        setError("Close your active ledger before starting a new one.");
+        return false;
+      }
+      ledgerId = (await startNewDay()) ?? undefined;
+      if (!ledgerId) return false;
+    }
     const ok = await addLine(
       item.action.side,
       item.action.label,
       item.action.cost,
       undefined,
-      item.action.targetDate,
+      ledgerId,
     );
     if (ok) dismissGuideItem(item.id);
     return ok;
@@ -690,7 +753,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function updateActual(line: Line, actual: number | null) {
-    await api(`/api/days/${date}/lines/${line.id}`, {
+    if (!day) return;
+    await api(`/api/days/${day.id}/lines/${line.id}`, {
       method: "PATCH",
       body: JSON.stringify({ actualCost: actual }),
     });
@@ -698,9 +762,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function toggleComplete(line: Line) {
+    if (!day) return;
     const next = !line.completed;
     if (next) setJustFreed(line.plannedCost);
-    await api(`/api/days/${date}/lines/${line.id}`, {
+    await api(`/api/days/${day.id}/lines/${line.id}`, {
       method: "PATCH",
       body: JSON.stringify({ completed: next }),
     });
@@ -719,7 +784,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const encrypted = text
         ? await encryptText(dek, text, "eaj-task-details")
         : { ciphertext: null, iv: null };
-      await api(`/api/days/${date}/lines/${detailLine.id}`, {
+      await api(`/api/days/${day.id}/lines/${detailLine.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           difficulty: detailDifficulty,
@@ -735,23 +800,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function removeLine(id: string) {
-    await api(`/api/days/${date}/lines/${id}`, { method: "DELETE" });
+    await api(`/api/days/${day!.id}/lines/${id}`, { method: "DELETE" });
     await load();
   }
 
   async function setPhase(phase: "plan" | "audit" | "closed") {
+    if (!day) return;
     if (phase === "closed") {
       await saveJournal();
-      const res = await api<{ closingBalance: number }>(`/api/days/${date}/close`, {
+      const res = await api<{ closingBalance: number }>(`/api/days/${day.id}/close`, {
         method: "POST",
       });
-      // Recovery is offered at close with final numbers, so the "plan
-      // tomorrow" prompt reflects what actually happened, not projections.
-      const recoveryId = `recovery:${date}`;
+      const recoveryId = `recovery:${day.id}`;
       const closedRecovery =
-        day && !dismissedGuideIds.has(recoveryId)
+        !dismissedGuideIds.has(recoveryId)
           ? recoveryPlan({
-              date,
+              dayId: day.id,
+              date: day.date,
+              nextStartDate: isoDate(),
               feelRating: day.feelRating,
               openingBalance: day.openingBalance,
               closingBalance: res.closingBalance,
@@ -768,22 +834,44 @@ export function TodayPage({ user }: { user: UserProfile }) {
             })
           : null;
       try {
-        const series = await fetchRecentStats(date);
+        const series = await fetchRecentStats();
+        setDay((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase: "closed",
+                closingBalance: res.closingBalance,
+                projectedClosing: res.closingBalance,
+              }
+            : prev,
+        );
+        setNoActive(true);
         setCloseCelebration({
           closingBalance: res.closingBalance,
-          insights: closeDayInsights(series, date),
+          insights: closeDayInsights(series, day.id),
           recovery: closedRecovery,
         });
       } catch {
-        // The day still closed; skip the celebration if stats are unavailable.
+        setDay((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase: "closed",
+                closingBalance: res.closingBalance,
+                projectedClosing: res.closingBalance,
+              }
+            : prev,
+        );
+        setNoActive(true);
         setCloseCelebration({
           closingBalance: res.closingBalance,
           insights: [],
           recovery: closedRecovery,
         });
       }
+      return;
     } else {
-      await api(`/api/days/${date}`, {
+      await api(`/api/days/${day.id}`, {
         method: "PATCH",
         body: JSON.stringify({ phase }),
       });
@@ -793,11 +881,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   async function saveJournal() {
     const dek = getSessionDek();
-    if (!dek) return;
+    if (!dek || !day) return;
     const j = await encryptText(dek, journalRef.current, "eaj-journal");
-    // Compensate fields are omitted on purpose: the server keeps whatever was
-    // stored before the manual note was replaced by the recovery plan.
-    await api(`/api/days/${date}`, {
+    await api(`/api/days/${day.id}`, {
       method: "PATCH",
       body: JSON.stringify({
         journalCiphertext: j.ciphertext,
@@ -808,7 +894,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function setFeel(n: number) {
-    await api(`/api/days/${date}`, {
+    if (!day) return;
+    await api(`/api/days/${day.id}`, {
       method: "PATCH",
       body: JSON.stringify({ feelRating: n }),
     });
@@ -909,7 +996,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     window.setTimeout(() => {
       suppressOpenRef.current = false;
     }, 200);
-    if (!day || day.phase === "closed" || dndBusy) return;
+    if (!day || day.phase === "closed" || isHistoryView || dndBusy) return;
     setDndBusy(true);
     try {
       const activeId = String(e.active.id);
@@ -949,7 +1036,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         );
         await Promise.all(
           reordered.map((l, i) =>
-            api(`/api/days/${date}/lines/${l.id}`, {
+            api(`/api/days/${day.id}/lines/${l.id}`, {
               method: "PATCH",
               body: JSON.stringify({ sort: i, side: l.side }),
             }),
@@ -963,13 +1050,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
           { ...line, side: targetSide },
           ...without.slice(insertAt),
         ];
-        await api(`/api/days/${date}/lines/${activeId}`, {
+        await api(`/api/days/${day.id}/lines/${activeId}`, {
           method: "PATCH",
           body: JSON.stringify({ side: targetSide, sort: insertAt }),
         });
         await Promise.all(
           next.map((l, i) =>
-            api(`/api/days/${date}/lines/${l.id}`, {
+            api(`/api/days/${day.id}/lines/${l.id}`, {
               method: "PATCH",
               body: JSON.stringify({ sort: i, side: targetSide }),
             }),
@@ -982,32 +1069,174 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
   }
 
-  if (!day) {
-    return <p className="muted">Loading today’s ledger… counting every last point.</p>;
+  const closeCelebrationModal =
+    closeCelebration && (
+      <div
+        className="insight-scrim"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setCloseCelebration(null);
+        }}
+      >
+        <div
+          id="insight-modal"
+          className="panel insight-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="insight-title"
+        >
+          <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+            Ledger closed
+          </h2>
+          <p className="muted">
+            Ended with {closeCelebration.closingBalance} energy remaining. Your next ledger starts
+            fresh at 100 when you start it.
+          </p>
+          {closeCelebration.insights.map((i) => (
+            <div key={i.id} className={`tip-card insight-${i.tone}`}>
+              <p style={{ margin: 0 }}>{i.text}</p>
+            </div>
+          ))}
+          {closeCelebration.insights.length === 0 && (
+            <p className="muted">The sheet is locked. Rest is also productive.</p>
+          )}
+          {closeCelebration.recovery && (
+            <GuideCard
+              item={closeCelebration.recovery}
+              closed={false}
+              actionLabel="Start new day with this deposit"
+              onAction={(item) => {
+                void applyGuideAction(item).then((ok) => {
+                  if (ok) {
+                    setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
+                  }
+                });
+              }}
+              onDismiss={(id) => {
+                dismissGuideItem(id);
+                setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
+              }}
+              dismissLabel="Not now"
+            />
+          )}
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn accent"
+              disabled={starting}
+              onClick={() => {
+                setCloseCelebration(null);
+                void startNewDay();
+              }}
+            >
+              {starting ? "Starting…" : "Start new day"}
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setCloseCelebration(null)}
+            >
+              Rest for now
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  if (loading && !closeCelebration) {
+    return <p className="muted">Loading your ledger…</p>;
   }
 
-  const closed = day.phase === "closed";
+  if (noActive && !isHistoryView && !closeCelebration) {
+    return (
+      <div className="panel today-start">
+        <p className="ob-eyebrow">Your day, your boundary</p>
+        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Start when you&apos;re ready</h2>
+        <p className="muted">
+          Your energy day follows you, not the clock. Irregular sleep, long focus stretches, shift
+          work, and time blindness are all normal here — there is no missed-day penalty. Start a
+          ledger when you want to plan; it stays open until you close it, even across midnight.
+        </p>
+        {error && <p className="error">{error}</p>}
+        <button
+          type="button"
+          className="btn accent"
+          disabled={starting}
+          onClick={() => void startNewDay()}
+        >
+          {starting ? "Starting…" : "Start new day"}
+        </button>
+      </div>
+    );
+  }
+
+  if (!day && closeCelebration) {
+    return <div className="today-root">{closeCelebrationModal}</div>;
+  }
+
+  if (!day) {
+    return (
+      <div className="panel">
+        <p className="muted">
+          {isHistoryView ? "That ledger could not be found." : "Nothing to show yet."}
+        </p>
+        {isHistoryView && (
+          <button
+            type="button"
+            className="btn secondary"
+            style={{ marginTop: "1rem" }}
+            onClick={() => setSearchParams({}, { replace: true })}
+          >
+            Back to active ledger
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const closed = day?.phase === "closed";
+  const readOnly = !!day && day.phase === "closed";
   const activeLine = activeDragId ? day.lines.find((l) => l.id === activeDragId) : null;
 
   return (
     <div className="today-root">
       <div
         aria-hidden={
-          closeCelebration || detailLineId || guideOpen || (draftSide && !closed)
+          closeCelebration || detailLineId || guideOpen || (draftSide && !readOnly)
             ? true
             : undefined
         }
       >
       <div className="panel">
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label htmlFor="day">Date</label>
-          <input
-            id="day"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
+        <p className="ob-eyebrow">Energy ledger · started {ledgerDate}</p>
+        {spansMidnight && (
+          <p className="muted ledger-span-note">
+            Still your active energy day — close it when your day is actually done.
+          </p>
+        )}
+        {isHistoryView && closed && (
+          <div style={{ marginBottom: "0.75rem" }}>
+            <p className="muted">Viewing a closed ledger from history.</p>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setSearchParams({}, { replace: true })}
+            >
+              Back to active ledger
+            </button>
+          </div>
+        )}
+        {isHistoryView && day && !closed && (
+          <div style={{ marginBottom: "0.75rem" }}>
+            <p className="muted">Viewing your active ledger from the dashboard.</p>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setSearchParams({}, { replace: true })}
+            >
+              Open on Today
+            </button>
+          </div>
+        )}
         <p className="muted" style={{ marginTop: "0.75rem" }}>
           Signed in as {user.email}
           {day.isHoliday ? " · Holiday" : ""}
@@ -1033,9 +1262,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <div className="stats" style={{ marginTop: "1rem" }}>
           <div className="stat">
             <div className="label">
-              Opening
-              <HelpTip label="opening balance">
-                Where the battery started today: yesterday’s closing balance, carried forward.
+              Daily energy
+              <HelpTip label="daily energy">
+                Your full daily charge: 100 points, fresh for each ledger you start. Energy does not
+                carry between ledgers.
               </HelpTip>
             </div>
             <div className="value">{day.openingBalance}</div>
@@ -1052,10 +1282,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
           </div>
           <div className="stat">
             <div className="label">
-              Projected close
-              <HelpTip label="projected close">
-                Where today lands if every planned line costs what you estimated. Closing the day
-                locks the real number in.
+              Projected remaining
+              <HelpTip label="projected remaining">
+                Energy left at close if every planned line costs what you estimated. Closing the
+                ledger locks the real number in.
               </HelpTip>
             </div>
             <div className="value">{day.projectedClosing}</div>
@@ -1082,7 +1312,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className={`btn secondary${day.phase === "plan" ? " phase-active" : ""}`}
             aria-pressed={day.phase === "plan"}
-            disabled={closed}
+            disabled={readOnly}
             onClick={() => void setPhase("plan")}
           >
             Morning plan
@@ -1091,7 +1321,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className={`btn secondary${day.phase === "audit" ? " phase-active" : ""}`}
             aria-pressed={day.phase === "audit"}
-            disabled={closed}
+            disabled={readOnly}
             onClick={() => void setPhase("audit")}
           >
             Evening audit
@@ -1100,20 +1330,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
             type="button"
             className="btn accent"
             aria-pressed={closed}
-            disabled={closed}
+            disabled={readOnly}
             onClick={() => void setPhase("closed")}
           >
-            {closed ? "Day closed" : "Close day"}
+            {closed ? "Ledger closed" : "Close ledger"}
           </button>
           <HelpTip label="the daily rhythm">
-            Plan the day’s deposits and withdrawals in the morning, audit real costs and how it
-            felt in the evening, then close to lock the sheet and carry the balance into tomorrow.
+            Plan deposits and withdrawals, audit real costs and how it felt, then close to lock the
+            sheet. Your next ledger starts fresh at 100 when you choose to start it.
           </HelpTip>
         </div>
-        {guide.primary && !closed && (
+        {guide.primary && !readOnly && (
           <GuideCard
             item={guide.primary}
-            closed={closed}
+            closed={readOnly}
             onAction={(item) => void applyGuideAction(item)}
             onDismiss={dismissGuideItem}
           />
@@ -1153,7 +1383,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             className={`withdraw-col${mobileCol !== "withdrawal" ? " mobile-hidden" : ""}`}
             lines={withdrawals}
             suggestions={suggestions.filter((s) => s.side === "withdrawal")}
-            closed={closed}
+            closed={readOnly}
             audit={day.phase === "audit"}
             onAdd={() => setDraftSide("withdrawal")}
             onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
@@ -1169,7 +1399,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
             suggestions={suggestions.filter((s) => s.side === "deposit")}
-            closed={closed}
+            closed={readOnly}
             audit={day.phase === "audit"}
             onAdd={() => setDraftSide("deposit")}
             onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
@@ -1188,7 +1418,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </DragOverlay>
       </DndContext>
 
-      {(day.phase === "audit" || closed) && (
+      {(day.phase === "audit" || closed) && !isHistoryView && (
         <div className="panel" style={{ marginTop: "1rem" }}>
           <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Evening audit</h2>
           <p className="muted">How do you feel, on a scale from 1 to 10?</p>
@@ -1198,7 +1428,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 key={n}
                 type="button"
                 className={`btn ${day.feelRating === n ? "accent" : "secondary"}`}
-                disabled={closed}
+                disabled={readOnly}
                 onClick={() => void setFeel(n)}
               >
                 {n}
@@ -1210,7 +1440,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <textarea
               id="journal"
               value={journal}
-              disabled={closed}
+              disabled={readOnly}
               onChange={(e) => setJournal(e.target.value)}
               placeholder="What shaped your energy today?"
             />
@@ -1223,7 +1453,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <button
                 type="button"
                 className="btn secondary mic-btn"
-                disabled={closed}
+                disabled={readOnly}
                 title="Typing is hard sometimes. Talk instead."
                 aria-label="Dictate journal"
                 onClick={() => startLiveSpeech("journal")}
@@ -1243,7 +1473,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <button
               type="button"
               className="btn secondary"
-              disabled={closed}
+              disabled={readOnly}
               onClick={() => void saveJournal()}
             >
               Save journal
@@ -1313,7 +1543,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <GuideCard
                 key={item.id}
                 item={item}
-                closed={closed}
+                closed={readOnly}
                 inSheet
                 onAction={(entry) => {
                   void applyGuideAction(entry).then((ok) => {
@@ -1332,7 +1562,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
       )}
 
-      {draftSide && !closed && (
+      {draftSide && !readOnly && (
         <div
           className="insight-scrim"
           onClick={(e) => {
@@ -1420,7 +1650,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 : ""}
               {detailLine.completed ? " · Done" : " · Pending"}
             </p>
-            <fieldset className="difficulty-field" disabled={closed}>
+            <fieldset className="difficulty-field" disabled={readOnly}>
               <legend>How hard was this for you? Optional</legend>
               <div className="difficulty-scale" aria-label="Difficulty from 1 easy to 10 hard">
                 {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -1452,7 +1682,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <textarea
                 id="task-details"
                 value={detailText}
-                disabled={closed}
+                disabled={readOnly}
                 maxLength={DETAILS_MAX}
                 placeholder="What made this easier or harder? Add any context worth remembering."
                 onChange={(e) => {
@@ -1475,7 +1705,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   {detailNotice}
                 </p>
               )}
-              {!closed && (
+              {!readOnly && (
                 <div className="detail-dictate-row">
                   {listening !== "details" ? (
                     <button
@@ -1506,7 +1736,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
             {detailError && <p className="error">{detailError}</p>}
             <div className="modal-actions">
-              {!closed && (
+              {!readOnly && (
                 <button type="submit" className="btn accent">
                   Save task details
                 </button>
@@ -1519,70 +1749,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   setDetailLineId(null);
                 }}
               >
-                {closed ? "Done" : "Cancel"}
+                {readOnly ? "Done" : "Cancel"}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {closeCelebration && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setCloseCelebration(null);
-          }}
-        >
-          <div
-            id="insight-modal"
-            className="panel insight-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="insight-title"
-          >
-            <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
-              Day closed
-            </h2>
-            <p className="muted">
-              Closing balance {closeCelebration.closingBalance}, carried into tomorrow.
-            </p>
-            {closeCelebration.insights.map((i) => (
-              <div key={i.id} className={`tip-card insight-${i.tone}`}>
-                <p style={{ margin: 0 }}>{i.text}</p>
-              </div>
-            ))}
-            {closeCelebration.insights.length === 0 && (
-              <p className="muted">The sheet is locked. Rest is also productive.</p>
-            )}
-            {closeCelebration.recovery && (
-              <GuideCard
-                item={closeCelebration.recovery}
-                closed={false}
-                actionLabel="Plan for tomorrow"
-                onAction={(item) => {
-                  void applyGuideAction(item).then((ok) => {
-                    if (ok) {
-                      setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
-                    }
-                  });
-                }}
-                onDismiss={(id) => {
-                  dismissGuideItem(id);
-                  setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
-                }}
-                dismissLabel="Not now"
-              />
-            )}
-            <button
-              type="button"
-              className="btn accent"
-              onClick={() => setCloseCelebration(null)}
-            >
-              Good night, ledger
-            </button>
-          </div>
-        </div>
-      )}
+      {closeCelebrationModal}
     </div>
   );
 }
@@ -1622,9 +1796,9 @@ function GuideCard(props: {
             onClick={() => props.onAction(item)}
           >
             {props.actionLabel ??
-              `Add ${item.action.label} · ${item.action.cost}${
-                item.action.targetDate ? " tomorrow" : ""
-              }`}
+              (item.action.requiresStart
+                ? `Start new day with ${item.action.label} · ${item.action.cost}`
+                : `Add ${item.action.label} · ${item.action.cost}`)}
           </button>
         )}
         <button

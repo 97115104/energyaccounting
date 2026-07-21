@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS day_table (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES user_table(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
   opening_balance REAL NOT NULL,
   closing_balance REAL,
   phase TEXT NOT NULL DEFAULT 'plan',
@@ -148,7 +149,6 @@ CREATE TABLE IF NOT EXISTS day_table (
   compensate_note_ciphertext TEXT,
   compensate_note_iv TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS day_user_date ON day_table(user_id, date);
 
 CREATE TABLE IF NOT EXISTS task_line_table (
   id TEXT PRIMARY KEY,
@@ -189,6 +189,51 @@ CREATE TABLE IF NOT EXISTS weather_cache_table (
   payload TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS weather_loc_date ON weather_cache_table(lat_key, lon_key, date);
+`);
+
+// Run after table creation: old databases still have the date-unique index and
+// cannot accept the new duplicate-date model until that index is removed.
+sqlite.exec("DROP INDEX IF EXISTS day_user_date");
+try {
+  sqlite.exec("ALTER TABLE day_table ADD COLUMN started_at INTEGER");
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (!msg.includes("duplicate column name")) throw e;
+}
+sqlite.exec(`
+UPDATE day_table
+SET started_at =
+  COALESCE(CAST(strftime('%s', date || 'T12:00:00Z') AS INTEGER) * 1000, 0)
+  + (rowid % 1000)
+WHERE started_at IS NULL;
+
+-- If legacy data has several open dates, retain only the most recently started.
+UPDATE day_table AS day
+SET
+  phase = 'closed',
+  closing_balance = COALESCE(closing_balance, opening_balance)
+WHERE phase <> 'closed'
+  AND EXISTS (
+    SELECT 1
+    FROM day_table AS newer
+    WHERE newer.user_id = day.user_id
+      AND newer.phase <> 'closed'
+      AND (
+        newer.started_at > day.started_at
+        OR (newer.started_at = day.started_at AND newer.id > day.id)
+      )
+  );
+
+-- Active legacy rows belong to the finite-day model immediately.
+UPDATE day_table
+SET opening_balance = 100
+WHERE phase <> 'closed' AND opening_balance <> 100;
+
+CREATE INDEX IF NOT EXISTS day_user_started_at
+  ON day_table(user_id, started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS day_one_active_per_user
+  ON day_table(user_id)
+  WHERE phase <> 'closed';
 `);
 
 export const db = drizzle(sqlite, { schema });

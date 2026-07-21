@@ -18,7 +18,9 @@ type ExportLine = {
 };
 
 type ExportDay = {
+  id: string;
   date: string;
+  startedAt: string;
   openingBalance: number;
   closingBalance: number | null;
   projectedClosing: number;
@@ -119,7 +121,9 @@ export async function downloadTrainingCorpus(): Promise<void> {
       }
     }
     days.push({
+      id: d.id,
       date: d.date,
+      startedAt: d.startedAt,
       openingBalance: d.openingBalance,
       closingBalance: d.closingBalance,
       projectedClosing: d.projectedClosing,

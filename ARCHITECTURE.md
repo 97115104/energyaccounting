@@ -14,7 +14,7 @@ flowchart TB
   end
   subgraph server [Server: apps/server, Elysia on Bun]
     authr["/api/auth: register, login, TOTP, profile"]
-    daysr["/api/days, /api/stats, /api/suggestions/:date, /api/export/days"]
+    daysr["/api/days/active, /api/days/start, /api/days/:dayId, /api/stats, /api/export/days"]
     shared["packages/shared: balance math"]
   end
   db[("bun:sqlite file under DATA_DIR")]
@@ -35,14 +35,14 @@ flowchart TB
 |------|------|
 | `apps/web` | React client, Vite build, all encryption and decryption |
 | `apps/server` | Elysia routes, Drizzle schema, session and TOTP handling |
-| `packages/shared` | Balance math (`openingBalance`, `closingBalance`, Attwood totals), used by both sides |
+| `packages/shared` | Balance math (`DAILY_ENERGY`, `openingBalance`, `closingBalance`, Attwood totals), used by both sides |
 | `data/` (or `DATA_DIR`) | SQLite file |
 
 The root `package.json` defines the workspace scripts. `bun run dev` starts the API, `bun run dev:web` starts Vite, `bun test` runs the shared, server, and web-lib test suites, and `bun run build` produces `apps/web/dist`, which the server serves as static assets when present.
 
 ## Request lifecycle
 
-A request from the client carries an httpOnly session cookie. The server resolves the session in `apps/server/src/lib/session.ts`, loads the user, and hands the route handler a full user row. Day routes go through `ensureDay`, which creates the row for a date on first touch, computes the opening balance from the last closed day, and attaches weather from Open-Meteo when the profile has coordinates. Balance math lives in `packages/shared/src/balance.ts` so the server and the client compute identical numbers by construction.
+A request from the client carries an httpOnly session cookie. The server resolves the session in `apps/server/src/lib/session.ts`, loads the user, and hands the route handler a full user row. Day routes never auto-create a ledger on read: the client calls `POST /api/days/start` explicitly, and `GET /api/days/active` returns the one open ledger or `null`. Ledgers are identified by `id`; `date` is the local start label and may repeat across closed ledgers. A partial unique index enforces at most one non-closed ledger per user. Balance math lives in `packages/shared/src/balance.ts` so the server and the client compute identical numbers by construction.
 
 ## The encryption boundary
 
@@ -57,15 +57,17 @@ flowchart LR
   subgraph wire [Crosses the network and rests in SQLite]
     cipher["AES-GCM ciphertext + IV"]
     hash["SHA-256 label hash (correlation handle)"]
-    numbers["Costs, balances, completion flags, difficulty, feel rating, phase, weather, dates"]
+    numbers["Costs, balances, completion flags, difficulty, feel rating, phase, weather, dates, startedAt"]
   end
   labels --> cipher
   labels --> hash
   journalText --> cipher
 ```
 
-The label hash deserves a note: it is a SHA-256 of the normalized label, stored so the suggestion catalog can recognize a repeated activity without decrypting it. It is a correlation handle, and never plaintext. Trend features, including the dashboard charts and the local insight engine in `apps/web/src/lib/insights.ts`, work exclusively from the numeric column set on the right side of the diagram, so no analytics path requires the DEK. Contextual activity ranking runs only after unlock in `apps/web/src/lib/activitySuggest.ts`; the server returns encrypted catalog entries plus non-sensitive frequency and weekday metadata. All recommendation surfaces flow through the Energy Guide in `apps/web/src/lib/energyGuide.ts`, a deterministic on-device ranker whose every item carries the concrete signals that produced it, so "why this?" is answerable without any server round trip. The legacy compensate-note columns remain in the schema and the corpus export for old data, but the UI now generates a tomorrow-recovery recommendation instead of asking for a free-text note.
+The label hash deserves a note: it is a SHA-256 of the normalized label, stored so the suggestion catalog can recognize a repeated activity without decrypting it. It is a correlation handle, and never plaintext. Trend features, including the dashboard charts and the local insight engine in `apps/web/src/lib/insights.ts`, work exclusively from the numeric column set on the right side of the diagram, so no analytics path requires the DEK. Contextual activity ranking runs only after unlock in `apps/web/src/lib/activitySuggest.ts`; the server returns encrypted catalog entries plus non-sensitive frequency and weekday metadata. All recommendation surfaces flow through the Energy Guide in `apps/web/src/lib/energyGuide.ts`, a deterministic on-device ranker whose every item carries the concrete signals that produced it, so "why this?" is answerable without any server round trip. The legacy compensate-note columns remain in the schema and the corpus export for old data, but the UI now generates a next-ledger recovery recommendation instead of asking for a free-text note.
 
-## A day's life
+## A ledger's life
 
-A day moves through three phases, namely `plan`, `audit`, and `closed`. Planning adds deposit and withdrawal lines, each reserving points against the opening balance. The audit phase records actual costs, a feel rating from 1 to 10, and an encrypted journal entry. Closing recomputes the opening balance from the previous closed day, persists the closing balance, locks the sheet against edits, and carries the result into tomorrow. `GET /api/stats` aggregates per-day plaintext numbers (balances, task and completion counts, planned and actual totals) that the client-side insight rules turn into end-of-day observations.
+A ledger moves through three phases, namely `plan`, `audit`, and `closed`. The user starts it explicitly; it opens with `DAILY_ENERGY` (100) and may remain active across calendar midnights until closed. Planning adds deposit and withdrawal lines, each reserving points against that finite supply. Completing a task frees its reservation back into available capacity. The audit phase records actual costs, a feel rating from 1 to 10, and an encrypted journal entry. Closing locks the sheet, records energy remaining at close, and does not create another ledger. The next ledger begins only when the user chooses **Start new day**, again at 100 with no carry-over. `GET /api/stats` aggregates per-ledger plaintext numbers (energy remaining, task and completion counts, planned and actual totals, `startedAt`) that the client-side insight rules turn into end-of-day observations.
+
+The lifecycle is intentionally decoupled from midnight because calendar boundaries are unreliable for many neurodivergent schedules — irregular sleep, long hyperfocus sessions, shift work, and time blindness are first-class cases, not edge cases to punish.

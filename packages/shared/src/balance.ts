@@ -1,4 +1,6 @@
-/** Daily energy math: opening = 100 + prior closing; Attwood column totals alongside. */
+/** Daily energy math uses a fresh finite supply; Attwood column totals sit alongside it. */
+
+export const DAILY_ENERGY = 100;
 
 export type TaskSide = "deposit" | "withdrawal";
 
@@ -51,10 +53,9 @@ export function attwoodTotals(tasks: TaskCosts[]): {
   };
 }
 
-/** Opening for a day: first day is 100; later days carry prior closing. */
-export function openingBalance(previousClosing: number | null): number {
-  if (previousClosing === null) return 100;
-  return 100 + previousClosing;
+/** Every started day receives the same supply; prior results remain historical context only. */
+export function openingBalance(_previousClosing: number | null = null): number {
+  return DAILY_ENERGY;
 }
 
 export function closingBalance(

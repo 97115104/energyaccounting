@@ -1,4 +1,5 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { index, sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const userTable = sqliteTable("user_table", {
   id: text("id").primaryKey(),
@@ -42,6 +43,7 @@ export const dayTable = sqliteTable(
       .notNull()
       .references(() => userTable.id, { onDelete: "cascade" }),
     date: text("date").notNull(),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
     openingBalance: real("opening_balance").notNull(),
     closingBalance: real("closing_balance"),
     phase: text("phase").notNull().default("plan"),
@@ -55,7 +57,13 @@ export const dayTable = sqliteTable(
     compensateNoteCiphertext: text("compensate_note_ciphertext"),
     compensateNoteIv: text("compensate_note_iv"),
   },
-  (t) => [uniqueIndex("day_user_date").on(t.userId, t.date)],
+  (t) => [
+    index("day_user_started_at").on(t.userId, t.startedAt),
+    // SQLite's partial index is the final guard against concurrent starts.
+    uniqueIndex("day_one_active_per_user")
+      .on(t.userId)
+      .where(sql`${t.phase} <> 'closed'`),
+  ],
 );
 
 export const taskLineTable = sqliteTable("task_line_table", {

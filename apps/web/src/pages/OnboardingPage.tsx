@@ -82,15 +82,22 @@ const STEPS: Step[] = [
     eyebrow: "The idea",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow, like money with no outside bank.",
+      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Each ledger starts with 100 points of energy. Deposits add capacity back; withdrawals and tasks spend it. Completing a task frees its reserved points.",
     glyph: <SunGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
+  },
+  {
+    eyebrow: "Your day, your boundary",
+    thesis: "Close it when you're done.",
+    whisper:
+      "Your day ends when you close it — not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open ledger stays active across calendar days with no penalty. When you're ready, close it and start the next ledger fresh at 100.",
+    glyph: <LedgerGlyph />,
   },
   {
     eyebrow: "The rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Plan the day's deposits and withdrawals in the morning, audit how it actually felt in the evening, then close the day to carry the balance forward. Completing a task frees its reserved points — the little ? marks on the ledger explain every number as you go.",
+      "Plan deposits and withdrawals, audit how it actually felt, then close the ledger to lock the sheet. The little ? marks on Today explain every number as you go.",
     glyph: <LedgerGlyph />,
   },
   {

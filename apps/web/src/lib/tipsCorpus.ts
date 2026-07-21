@@ -52,7 +52,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "uv-moderate-outside",
     title: "Outdoor window is open",
-    body: "Today's UV peaks in the moderate range — outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which is tomorrow's opening balance.",
+    body: "Today's UV peaks in the moderate range — outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which can make the next ledger's 100 points easier to protect.",
     research:
       "Morning/afternoon daylight advances circadian phase and improves sleep quality (Wright et al. 2013); moderate UV (3–5) is safe with basic shade.",
     priority: 6,
@@ -104,7 +104,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "rebalance-play",
     title: "Withdrawals are ahead",
-    body: "The ledger is tilting toward withdrawals. A play deposit isn't slacking — it's how the balance carries into tomorrow above zero.",
+    body: "The ledger is tilting toward withdrawals. A play deposit isn't slacking — it helps you finish the day with more energy remaining.",
     research:
       "Attwood's Energy Accounting frames deliberate deposits as the corrective for withdrawal-heavy days; play styles follow Stuart Brown's taxonomy.",
     priority: 7,

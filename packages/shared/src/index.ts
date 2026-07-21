@@ -6,6 +6,7 @@ export type {
 } from "./balance";
 
 export {
+  DAILY_ENERGY,
   clampCost,
   clampDifficulty,
   effectiveCost,

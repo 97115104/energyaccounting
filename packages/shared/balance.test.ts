@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DAILY_ENERGY,
   attwoodTotals,
   closingBalance,
   openingBalance,
@@ -12,13 +13,14 @@ import {
 } from "./src/balance";
 
 describe("energy balance math", () => {
-  test("opening is 100 on first day", () => {
-    expect(openingBalance(null)).toBe(100);
+  test("opening uses the finite daily supply", () => {
+    expect(DAILY_ENERGY).toBe(100);
+    expect(openingBalance()).toBe(DAILY_ENERGY);
   });
 
-  test("opening carries prior closing plus 100", () => {
-    expect(openingBalance(-20)).toBe(80);
-    expect(openingBalance(40)).toBe(140);
+  test("opening never carries a prior closing", () => {
+    expect(openingBalance(-20)).toBe(DAILY_ENERGY);
+    expect(openingBalance(40)).toBe(DAILY_ENERGY);
   });
 
   test("attwood totals and closing", () => {

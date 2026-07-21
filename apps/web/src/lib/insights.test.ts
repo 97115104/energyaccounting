@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
   closeDayInsights,
-  closedStreak,
   planningHint,
+  recentClosedCount,
   type StatPoint,
 } from "./insights";
 
 function day(date: string, overrides: Partial<StatPoint> = {}): StatPoint {
   return {
+    id: overrides.id ?? `day-${date}`,
     date,
+    startedAt: overrides.startedAt ?? `${date}T12:00:00.000Z`,
     openingBalance: 100,
     closingBalance: 100,
     attwoodNet: 0,
@@ -39,7 +41,7 @@ function history(end: string, n: number, overrides: Partial<StatPoint> = {}): St
 
 describe("closeDayInsights", () => {
   test("returns nothing for a day missing from the series", () => {
-    expect(closeDayInsights([], "2026-07-20")).toEqual([]);
+    expect(closeDayInsights([], "day-2026-07-20")).toEqual([]);
   });
 
   test("thin history produces no averages-based noise", () => {
@@ -47,7 +49,7 @@ describe("closeDayInsights", () => {
       ...history("2026-07-20", 2),
       day("2026-07-20", { completedCount: 9 }),
     ];
-    const ids = closeDayInsights(series, "2026-07-20").map((i) => i.id);
+    const ids = closeDayInsights(series, "day-2026-07-20").map((i) => i.id);
     expect(ids).not.toContain("above-average-completed");
   });
 
@@ -56,7 +58,7 @@ describe("closeDayInsights", () => {
       ...history("2026-07-20", 10, { completedCount: 2 }),
       day("2026-07-20", { completedCount: 6 }),
     ];
-    const ids = closeDayInsights(series, "2026-07-20").map((i) => i.id);
+    const ids = closeDayInsights(series, "day-2026-07-20").map((i) => i.id);
     expect(ids).toContain("above-average-completed");
   });
 
@@ -69,13 +71,13 @@ describe("closeDayInsights", () => {
         completedCount: 3,
       }),
     ];
-    const ids = closeDayInsights(series, "2026-07-20").map((i) => i.id);
+    const ids = closeDayInsights(series, "day-2026-07-20").map((i) => i.id);
     expect(ids).toContain("hard-and-done");
   });
 
   test("a deficit day with no other wins gets the gentle framing, never shame", () => {
     const series = [day("2026-07-20", { openingBalance: 100, closingBalance: 70 })];
-    const insights = closeDayInsights(series, "2026-07-20");
+    const insights = closeDayInsights(series, "day-2026-07-20");
     expect(insights).toHaveLength(1);
     expect(insights[0]!.id).toBe("showed-up");
     expect(insights[0]!.tone).toBe("gentle");
@@ -94,21 +96,30 @@ describe("closeDayInsights", () => {
         depositTotal: 40,
       }),
     ];
-    const insights = closeDayInsights(series, "2026-07-20");
+    const insights = closeDayInsights(series, "day-2026-07-20");
     expect(insights.length).toBeLessThanOrEqual(3);
     expect(insights[0]!.tone).toBe("celebrate");
   });
 });
 
-describe("closedStreak", () => {
-  test("counts consecutive closed days through the given date", () => {
-    const series = [...history("2026-07-21", 3), day("2026-07-21")];
-    expect(closedStreak(series, "2026-07-21")).toBe(4);
+describe("recentClosedCount", () => {
+  test("counts closed ledgers started within the window", () => {
+    const now = Date.now();
+    const recent = new Date(now - 2 * 86_400_000).toISOString();
+    const old = new Date(now - 10 * 86_400_000).toISOString();
+    const series = [
+      day("2026-07-18", { startedAt: old }),
+      day("2026-07-19", { startedAt: recent }),
+      day("2026-07-20", { startedAt: recent }),
+      day("2026-07-21", { startedAt: recent }),
+    ];
+    expect(recentClosedCount(series, 7)).toBe(3);
   });
 
-  test("a gap breaks the streak", () => {
-    const series = [day("2026-07-18"), day("2026-07-20")];
-    expect(closedStreak(series, "2026-07-20")).toBe(1);
+  test("ignores open ledgers", () => {
+    const recent = new Date().toISOString();
+    const series = [day("2026-07-20", { startedAt: recent, phase: "plan" })];
+    expect(recentClosedCount(series, 7)).toBe(0);
   });
 });
 

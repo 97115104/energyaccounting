@@ -300,7 +300,7 @@ export function App() {
               <h1 className="brand">Your Energy Matters</h1>
               <p className="tagline">
                 EAJ is for neurodivergent productivity 💖 Plan deposits and withdrawals, audit the
-                day, and carry the balance forward.
+                day, and close it when your day is actually done.
               </p>
             </>
           )}

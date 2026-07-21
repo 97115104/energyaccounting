@@ -70,6 +70,12 @@ function bucketSeries(series: Point[]): Point[] {
   return [...groups.values()].map(summarizeGroup);
 }
 
+function ledgerLabel(p: Pick<Point, "date" | "startedAt">): string {
+  const start = new Date(p.startedAt);
+  const time = start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${p.date} · ${time}`;
+}
+
 function rangeBounds(kind: Range): { from: string; to: string } {
   const to = isoDate();
   const d = new Date(to + "T12:00:00");
@@ -125,13 +131,19 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     : 0;
 
   const insights = useMemo<Insight[]>(() => {
-    const lastClosed = [...insightSeries].reverse().find((p) => p.phase === "closed");
-    const out = lastClosed ? closeDayInsights(insightSeries, lastClosed.date) : [];
+    const lastClosed = [...insightSeries]
+      .filter((p) => p.phase === "closed")
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+      .at(-1);
+    const out = lastClosed ? closeDayInsights(insightSeries, lastClosed.id) : [];
     const hint = planningHint(insightSeries, isoDate());
     if (hint && !out.some((i) => i.id === hint.id)) out.push(hint);
     return out.slice(0, 3);
   }, [insightSeries]);
-  const latest = series.find((p) => p.date === isoDate()) ?? series.at(-1);
+  const latest = useMemo(() => {
+    const active = [...series].reverse().find((p) => p.phase !== "closed");
+    return active ?? series.at(-1);
+  }, [series]);
   const bucketing = displayed.length < series.length;
   const completionRate = series.reduce((sum, point) => sum + point.taskCount, 0)
     ? Math.round(
@@ -141,10 +153,12 @@ export function DashboardPage({ user }: { user: UserProfile }) {
       )
     : 0;
   const takeaway = latest
-    ? latest.closingBalance >= avgClose
-      ? `Latest close is ${latest.closingBalance}, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
-      : `Latest close is ${latest.closingBalance}, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
-    : "Close a day to begin building a useful energy history.";
+    ? latest.phase === "closed"
+      ? latest.closingBalance >= avgClose
+        ? `Latest ledger ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
+        : `Latest ledger ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
+      : `${latest.availableCapacity ?? 0} points available now · ${latest.closingBalance} projected remaining if plans hold.`
+    : "Close a ledger to begin building a useful energy history.";
 
   return (
     <div className="dashboard">
@@ -172,7 +186,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         <div className="dashboard-primary">
           <div>
             <span className="dashboard-value">{latest?.closingBalance ?? "—"}</span>
-            <span className="muted">latest closing balance</span>
+            <span className="muted">latest energy remaining</span>
           </div>
           <p>{completionRate}% of planned lines completed in this period.</p>
         </div>
@@ -181,8 +195,8 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           role="group"
           aria-label={
             bucketing
-              ? "Weekly average closing balance by week"
-              : "Signed closing balance by date"
+              ? "Weekly average energy remaining by week"
+              : "Energy remaining at ledger close"
           }
         >
           <div className="balance-zero" aria-hidden="true" />
@@ -192,20 +206,20 @@ export function DashboardPage({ user }: { user: UserProfile }) {
             const weekLabel = bucketing ? weekStartIso(p.date) : p.date;
             return (
               <button
-                key={p.date}
+                key={p.id}
                 type="button"
                 className={`balance-mark ${positive ? "positive" : "negative"} ${p.isHoliday ? "holiday" : ""}`}
                 aria-label={
                   bucketing
-                    ? `Week of ${weekLabel}, average close ${p.closingBalance}. Opens ${p.date}.`
-                    : `${p.date}, closing balance ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
+                    ? `Week of ${weekLabel}, average energy remaining ${p.closingBalance}.`
+                    : `${ledgerLabel(p)}, energy remaining ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
                 }
                 title={
                   bucketing
-                    ? `Week of ${weekLabel}: avg close ${p.closingBalance} (opens ${p.date})`
-                    : `${p.date}: close ${p.closingBalance}, net ${p.attwoodNet}`
+                    ? `Week of ${weekLabel}: avg remaining ${p.closingBalance}`
+                    : `${ledgerLabel(p)}: remaining ${p.closingBalance}, net ${p.attwoodNet}`
                 }
-                onClick={() => navigate(`/?date=${p.date}`)}
+                onClick={() => navigate(`/?day=${p.id}`)}
               >
                 <span
                   className="balance-mark-bar"
@@ -221,7 +235,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         </div>
         <div className="chart-caption">
           <span>Negative</span>
-          <span>{bucketing ? "Calendar-week averages" : "Daily closes"}</span>
+          <span>{bucketing ? "Calendar-week averages" : "Per ledger"}</span>
           <span>Positive</span>
         </div>
       </section>
@@ -230,10 +244,10 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         <div>
           <p className="ob-eyebrow">Reusable capacity</p>
           <h2>Completed work releases reservations for reuse.</h2>
-          <p className="muted">Freed points are throughput, and they do not increase the balance.</p>
+          <p className="muted">Freed points are throughput within the same ledger; they do not add to energy remaining.</p>
         </div>
         <div className="capacity-values">
-          <div><strong>{latest?.availableCapacity ?? 0}</strong><span>Available on latest day</span></div>
+          <div><strong>{latest?.availableCapacity ?? 0}</strong><span>Available on latest ledger</span></div>
           <div><strong>{latest?.pendingReservedEnergy ?? 0}</strong><span>Still reserved</span></div>
           <div><strong>{latest?.completedFreedEnergy ?? 0}</strong><span>Freed on that day</span></div>
         </div>
@@ -252,7 +266,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
 
       <section className="panel dashboard-days">
         <div className="dashboard-heading">
-          <h2>All days</h2>
+          <h2>All ledgers</h2>
           <button type="button" className="btn secondary" onClick={() => setDetailsOpen((open) => !open)}>
             {detailsOpen ? "Hide details" : "Show details"}
           </button>
@@ -262,7 +276,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Date", "Close", "Attwood", "Feel", "Weather", "Holiday"].map((h) => (
+                {["Started", "Left", "Attwood", "Feel", "Weather", "Holiday"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -279,20 +293,22 @@ export function DashboardPage({ user }: { user: UserProfile }) {
             <tbody>
               {series.map((p) => (
                 <tr
-                  key={p.date}
+                  key={p.id}
                   className="dashboard-day-row"
                   tabIndex={0}
                   role="link"
-                  aria-label={`Open ledger for ${p.date}`}
-                  onClick={() => navigate(`/?date=${p.date}`)}
+                  aria-label={`Open ledger ${ledgerLabel(p)}`}
+                  onClick={() => navigate(`/?day=${p.id}`)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      navigate(`/?date=${p.date}`);
+                      navigate(`/?day=${p.id}`);
                     }
                   }}
                 >
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>{p.date}</td>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
+                    {ledgerLabel(p)}
+                  </td>
                   <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.closingBalance}
                   </td>

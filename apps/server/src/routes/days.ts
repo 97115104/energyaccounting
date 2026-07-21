@@ -1,22 +1,22 @@
 import {
+  DAILY_ENERGY,
   attwoodTotals,
   availableCapacity,
   clampCost,
   clampDifficulty,
   closingBalance,
   completedFreedEnergy,
-  openingBalance,
   reservedCapacity,
   type AllocatableTask,
   type TaskCosts,
 } from "@eaj/shared";
-import { and, desc, eq, gte, lt, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "../db/index.ts";
 import { dayTable, taskCatalogTable, taskLineTable, userTable } from "../db/schema.ts";
 import { holidayForDate } from "../lib/holidays.ts";
 import { assertIsoDate, newId, requireFullUser } from "../lib/session.ts";
-import { WEATHER_PAYLOAD_VERSION, fetchDayWeather } from "../lib/weather.ts";
+import { fetchDayWeather } from "../lib/weather.ts";
 
 function weekdayBit(dateIso: string): number {
   const d = new Date(dateIso + "T12:00:00Z");
@@ -63,74 +63,85 @@ function pairedDetails(
   return { ok: true, ciphertext, iv };
 }
 
-/** Last closed day strictly before dateIso (no row-count cap). */
-async function previousClosing(userId: string, dateIso: string): Promise<number | null> {
-  const rows = await db
-    .select()
-    .from(dayTable)
-    .where(
-      and(
-        eq(dayTable.userId, userId),
-        lt(dayTable.date, dateIso),
-        eq(dayTable.phase, "closed"),
-      ),
-    )
-    .orderBy(desc(dayTable.date))
-    .limit(1);
-  const row = rows[0];
-  if (!row || row.closingBalance === null) return null;
-  return row.closingBalance;
+async function ownedDay(userId: string, dayId: string) {
+  return db.query.dayTable.findFirst({
+    where: and(eq(dayTable.id, dayId), eq(dayTable.userId, userId)),
+  });
 }
 
-async function ensureDay(userId: string, dateIso: string) {
-  let day = await db.query.dayTable.findFirst({
-    where: and(eq(dayTable.userId, userId), eq(dayTable.date, dateIso)),
-  });
-  const user = await db.query.userTable.findFirst({ where: eq(userTable.id, userId) });
+async function linesForDay(dayId: string) {
+  return db
+    .select()
+    .from(taskLineTable)
+    .where(eq(taskLineTable.dayId, dayId))
+    .orderBy(taskLineTable.sort);
+}
 
-  if (day) {
-    const weather = day.weatherJson ? (JSON.parse(day.weatherJson) as Record<string, unknown>) : {};
-    const weatherStale = weather.tempMax == null || weather.v !== WEATHER_PAYLOAD_VERSION;
-    if (user?.lat != null && user?.lon != null && weatherStale) {
-      const fresh = await fetchDayWeather(user.lat, user.lon, dateIso);
-      // Only rewrite when Open-Meteo answered — otherwise leave stale JSON
-      // alone so we don't busy-loop retries on every ensureDay.
-      if (fresh) {
-        const hol = holidayForDate(dateIso, user.country ?? "US");
-        const payload = { ...fresh, holidayName: hol.name };
-        await db
-          .update(dayTable)
-          .set({
-            weatherJson: JSON.stringify(payload),
-            isHoliday: hol.isHoliday,
-          })
-          .where(eq(dayTable.id, day.id));
-        day = (await db.query.dayTable.findFirst({ where: eq(dayTable.id, day.id) }))!;
-      }
-    }
-    return day;
-  }
+/** Plaintext stat row for one ledger — shared by /stats and export. */
+async function statPointForDay(d: typeof dayTable.$inferSelect) {
+  const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
+  const tasks: AllocatableTask[] = lines.map((l) => ({
+    side: l.side as TaskCosts["side"],
+    planned: l.plannedCost,
+    actual: l.actualCost,
+    completed: l.completed,
+  }));
+  const attwood = attwoodTotals(tasks);
+  const plannedTotal = lines.reduce((a, l) => a + l.plannedCost, 0);
+  const actualTotal = lines.reduce((a, l) => a + (l.actualCost ?? l.plannedCost), 0);
+  const rated = lines.filter((l) => l.difficulty !== null);
+  const pendingReservedEnergy = reservedCapacity(tasks);
+  return {
+    id: d.id,
+    date: d.date,
+    startedAt: d.startedAt.toISOString(),
+    openingBalance: d.openingBalance,
+    closingBalance: d.closingBalance ?? closingBalance(d.openingBalance, tasks),
+    attwoodNet: attwood.attwoodNet,
+    depositTotal: attwood.depositTotal,
+    withdrawalTotal: attwood.withdrawalTotal,
+    isHoliday: d.isHoliday,
+    weather: d.weatherJson ? JSON.parse(d.weatherJson) : null,
+    feelRating: d.feelRating,
+    phase: d.phase,
+    taskCount: lines.length,
+    completedCount: lines.filter((l) => l.completed).length,
+    pendingReservedEnergy,
+    completedFreedEnergy: completedFreedEnergy(tasks),
+    availableCapacity: availableCapacity(d.openingBalance, tasks),
+    avgDifficulty:
+      rated.length > 0
+        ? Math.round(
+            (rated.reduce((sum, line) => sum + (line.difficulty ?? 0), 0) / rated.length) * 10,
+          ) / 10
+        : null,
+    difficultyRatedCount: rated.length,
+    plannedTotal,
+    actualTotal,
+  };
+}
 
-  const opening = openingBalance(await previousClosing(userId, dateIso));
-  const hol = holidayForDate(dateIso, user?.country ?? "US");
+async function createDay(user: typeof userTable.$inferSelect, dateIso: string) {
+  const hol = holidayForDate(dateIso, user.country ?? "US");
   let weather: Record<string, unknown> | null = null;
-  if (user?.lat != null && user?.lon != null) {
+  if (user.lat != null && user.lon != null) {
     weather = await fetchDayWeather(user.lat, user.lon, dateIso);
   }
   const id = newId();
+  const startedAt = new Date();
   await db.insert(dayTable).values({
     id,
-    userId,
+    userId: user.id,
     date: dateIso,
-    openingBalance: opening,
+    startedAt,
+    openingBalance: DAILY_ENERGY,
     phase: "plan",
     isHoliday: hol.isHoliday,
     weatherJson: weather
       ? JSON.stringify({ ...weather, holidayName: hol.name })
       : JSON.stringify({ holidayName: hol.name }),
   });
-  day = await db.query.dayTable.findFirst({ where: eq(dayTable.id, id) });
-  return day!;
+  return (await db.query.dayTable.findFirst({ where: eq(dayTable.id, id) }))!;
 }
 
 function serializeDay(
@@ -148,6 +159,7 @@ function serializeDay(
   return {
     id: day.id,
     date: day.date,
+    startedAt: day.startedAt.toISOString(),
     openingBalance: day.openingBalance,
     closingBalance: day.closingBalance,
     projectedClosing: projected,
@@ -181,27 +193,67 @@ function serializeDay(
 }
 
 export const dayRoutes = new Elysia({ prefix: "/api" })
-  .get("/days/:date", async ({ params, request, set }) => {
+  .get("/days/active", async ({ request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    let date: string;
-    try {
-      date = assertIsoDate(params.date);
-    } catch {
-      set.status = 400;
-      return { error: "Invalid date." };
+    const day = await db.query.dayTable.findFirst({
+      where: and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")),
+      orderBy: [desc(dayTable.startedAt), desc(dayTable.id)],
+    });
+    if (!day) return { day: null };
+    if (day.openingBalance !== DAILY_ENERGY) {
+      // This also repairs an active row created by an older process during rollout.
+      await db
+        .update(dayTable)
+        .set({ openingBalance: DAILY_ENERGY })
+        .where(eq(dayTable.id, day.id));
+      day.openingBalance = DAILY_ENERGY;
     }
-    const day = await ensureDay(user.id, date);
-    const lines = await db
-      .select()
-      .from(taskLineTable)
-      .where(eq(taskLineTable.dayId, day.id))
-      .orderBy(taskLineTable.sort);
-    return serializeDay(day, lines);
+    const lines = await linesForDay(day.id);
+    return { day: serializeDay(day, lines) };
   })
+  .post(
+    "/days/start",
+    async ({ body, request, set }) => {
+      const user = await requireFullUser(request);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      let date: string;
+      try {
+        date = assertIsoDate(body.date);
+      } catch {
+        set.status = 400;
+        return { error: "Invalid date." };
+      }
+      const active = await db.query.dayTable.findFirst({
+        where: and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")),
+      });
+      if (active) {
+        set.status = 409;
+        return { error: "An energy day is already active.", dayId: active.id };
+      }
+      try {
+        const day = await createDay(user, date);
+        set.status = 201;
+        return serializeDay(day, []);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.includes("day_one_active_per_user") || message.includes("UNIQUE constraint")) {
+          set.status = 409;
+          return { error: "An energy day is already active." };
+        }
+        throw e;
+      }
+    },
+    {
+      body: t.Object({ date: t.String() }),
+    },
+  )
   .get(
     "/days",
     async ({ query, request, set }) => {
@@ -220,11 +272,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
             query.to ? lte(dayTable.date, query.to) : undefined,
           ),
         )
-        .orderBy(dayTable.date);
+        .orderBy(dayTable.startedAt, dayTable.id);
       return {
         days: rows.map((d) => ({
           id: d.id,
           date: d.date,
+          startedAt: d.startedAt.toISOString(),
           openingBalance: d.openingBalance,
           closingBalance: d.closingBalance,
           phase: d.phase,
@@ -241,6 +294,19 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }),
     },
   )
+  .get("/days/:dayId", async ({ params, request, set }) => {
+    const user = await requireFullUser(request);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
+    }
+    return serializeDay(day, await linesForDay(day.id));
+  })
   .get("/export/days", async ({ request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
@@ -251,7 +317,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .select()
       .from(dayTable)
       .where(eq(dayTable.userId, user.id))
-      .orderBy(dayTable.date);
+      .orderBy(dayTable.startedAt, dayTable.id);
     const out = [];
     for (const d of days) {
       const lines = await db
@@ -266,7 +332,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .from(taskCatalogTable)
       .where(eq(taskCatalogTable.userId, user.id));
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -293,21 +359,18 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     };
   })
   .post(
-    "/days/:date/lines",
+    "/days/:dayId/lines",
     async ({ params, body, request, set }) => {
       const user = await requireFullUser(request);
       if (!user) {
         set.status = 401;
         return { error: "Unauthorized" };
       }
-      let date: string;
-      try {
-        date = assertIsoDate(params.date);
-      } catch {
-        set.status = 400;
-        return { error: "Invalid date." };
+      const day = await ownedDay(user.id, params.dayId);
+      if (!day) {
+        set.status = 404;
+        return { error: "Day not found." };
       }
-      const day = await ensureDay(user.id, date);
       if (day.phase === "closed") {
         set.status = 400;
         return { error: "Day is closed." };
@@ -356,7 +419,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         detailsCiphertext: details.ciphertext,
         detailsIv: details.iv,
       });
-      const bit = weekdayBit(date);
+      const bit = weekdayBit(day.date);
       const catalog = await db.query.taskCatalogTable.findFirst({
         where: and(
           eq(taskCatalogTable.userId, user.id),
@@ -372,7 +435,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
             useCount: catalog.useCount + 1,
             difficultyTotal: catalog.difficultyTotal + (difficulty ?? 0),
             difficultyCount: catalog.difficultyCount + (difficulty === null ? 0 : 1),
-            lastUsed: date,
+            lastUsed: day.date,
             weekdayMask: catalog.weekdayMask | bit,
             labelCiphertext: body.labelCiphertext,
             labelIv: body.labelIv,
@@ -391,7 +454,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           useCount: 1,
           difficultyTotal: difficulty ?? 0,
           difficultyCount: difficulty === null ? 0 : 1,
-          lastUsed: date,
+          lastUsed: day.date,
         });
       }
       return { id };
@@ -411,21 +474,18 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     },
   )
   .patch(
-    "/days/:date/lines/:lineId",
+    "/days/:dayId/lines/:lineId",
     async ({ params, body, request, set }) => {
       const user = await requireFullUser(request);
       if (!user) {
         set.status = 401;
         return { error: "Unauthorized" };
       }
-      let date: string;
-      try {
-        date = assertIsoDate(params.date);
-      } catch {
-        set.status = 400;
-        return { error: "Invalid date." };
+      const day = await ownedDay(user.id, params.dayId);
+      if (!day) {
+        set.status = 404;
+        return { error: "Day not found." };
       }
-      const day = await ensureDay(user.id, date);
       if (day.phase === "closed") {
         set.status = 400;
         return { error: "Day is closed." };
@@ -563,20 +623,17 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }),
     },
   )
-  .delete("/days/:date/lines/:lineId", async ({ params, request, set }) => {
+  .delete("/days/:dayId/lines/:lineId", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    let date: string;
-    try {
-      date = assertIsoDate(params.date);
-    } catch {
-      set.status = 400;
-      return { error: "Invalid date." };
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
     }
-    const day = await ensureDay(user.id, date);
     if (day.phase === "closed") {
       set.status = 400;
       return { error: "Day is closed." };
@@ -597,21 +654,18 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     return { ok: true };
   })
   .patch(
-    "/days/:date",
+    "/days/:dayId",
     async ({ params, body, request, set }) => {
       const user = await requireFullUser(request);
       if (!user) {
         set.status = 401;
         return { error: "Unauthorized" };
       }
-      let date: string;
-      try {
-        date = assertIsoDate(params.date);
-      } catch {
-        set.status = 400;
-        return { error: "Invalid date." };
+      const day = await ownedDay(user.id, params.dayId);
+      if (!day) {
+        set.status = 404;
+        return { error: "Day not found." };
       }
-      const day = await ensureDay(user.id, date);
       if (day.phase === "closed") {
         set.status = 400;
         return { error: "Day is closed." };
@@ -653,20 +707,17 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }),
     },
   )
-  .post("/days/:date/close", async ({ params, request, set }) => {
+  .post("/days/:dayId/close", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    let date: string;
-    try {
-      date = assertIsoDate(params.date);
-    } catch {
-      set.status = 400;
-      return { error: "Invalid date." };
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
     }
-    const day = await ensureDay(user.id, date);
     if (day.phase === "closed") {
       set.status = 400;
       return { error: "Day is already closed." };
@@ -677,7 +728,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       planned: l.plannedCost,
       actual: l.actualCost,
     }));
-    const opening = openingBalance(await previousClosing(user.id, date));
+    const opening = DAILY_ENERGY;
     const closing = closingBalance(opening, tasks);
     await db
       .update(dayTable)
@@ -685,23 +736,20 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .where(eq(dayTable.id, day.id));
     return { closingBalance: closing, openingBalance: opening, attwood: attwoodTotals(tasks) };
   })
-  .get("/suggestions/:date", async ({ params, request, set }) => {
+  .get("/suggestions/:dayId", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    let date: string;
-    try {
-      date = assertIsoDate(params.date);
-    } catch {
-      set.status = 400;
-      return { error: "Invalid date." };
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
     }
-    const day = await ensureDay(user.id, date);
     const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, day.id));
     const existingHashes = new Set(lines.map((l) => l.labelHash).filter(Boolean));
-    const bit = weekdayBit(date);
+    const bit = weekdayBit(day.date);
     const catalog = await db
       .select()
       .from(taskCatalogTable)
@@ -735,60 +783,33 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         set.status = 401;
         return { error: "Unauthorized" };
       }
-      const days = await db
+      const fromAt = query.from ? new Date(`${query.from}T00:00:00.000Z`) : undefined;
+      const toAt = query.to ? new Date(`${query.to}T23:59:59.999Z`) : undefined;
+      let days = await db
         .select()
         .from(dayTable)
         .where(
           and(
             eq(dayTable.userId, user.id),
-            query.from ? gte(dayTable.date, query.from) : undefined,
-            query.to ? lte(dayTable.date, query.to) : undefined,
+            fromAt ? gte(dayTable.startedAt, fromAt) : undefined,
+            toAt ? lte(dayTable.startedAt, toAt) : undefined,
           ),
         )
-        .orderBy(dayTable.date);
+        .orderBy(dayTable.startedAt, dayTable.id);
+
+      // Spanning ledgers can start before the visible range but still be the live sheet.
+      const active = await db.query.dayTable.findFirst({
+        where: and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")),
+      });
+      if (active && !days.some((d) => d.id === active.id)) {
+        days = [...days, active].sort(
+          (a, b) => a.startedAt.getTime() - b.startedAt.getTime() || a.id.localeCompare(b.id),
+        );
+      }
 
       const series = [];
       for (const d of days) {
-        const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
-        const tasks: AllocatableTask[] = lines.map((l) => ({
-          side: l.side as TaskCosts["side"],
-          planned: l.plannedCost,
-          actual: l.actualCost,
-          completed: l.completed,
-        }));
-        const attwood = attwoodTotals(tasks);
-        // Plaintext aggregates only — labels stay ciphertext; the client-side
-        // insight engine works from these numbers alone.
-        const plannedTotal = lines.reduce((a, l) => a + l.plannedCost, 0);
-        const actualTotal = lines.reduce((a, l) => a + (l.actualCost ?? l.plannedCost), 0);
-        const rated = lines.filter((l) => l.difficulty !== null);
-        const pendingReservedEnergy = reservedCapacity(tasks);
-        series.push({
-          date: d.date,
-          openingBalance: d.openingBalance,
-          closingBalance: d.closingBalance ?? closingBalance(d.openingBalance, tasks),
-          attwoodNet: attwood.attwoodNet,
-          depositTotal: attwood.depositTotal,
-          withdrawalTotal: attwood.withdrawalTotal,
-          isHoliday: d.isHoliday,
-          weather: d.weatherJson ? JSON.parse(d.weatherJson) : null,
-          feelRating: d.feelRating,
-          phase: d.phase,
-          taskCount: lines.length,
-          completedCount: lines.filter((l) => l.completed).length,
-          pendingReservedEnergy,
-          completedFreedEnergy: completedFreedEnergy(tasks),
-          availableCapacity: availableCapacity(d.openingBalance, tasks),
-          avgDifficulty:
-            rated.length > 0
-              ? Math.round(
-                  (rated.reduce((sum, line) => sum + (line.difficulty ?? 0), 0) / rated.length) * 10,
-                ) / 10
-              : null,
-          difficultyRatedCount: rated.length,
-          plannedTotal,
-          actualTotal,
-        });
+        series.push(await statPointForDay(d));
       }
       return { series };
     },

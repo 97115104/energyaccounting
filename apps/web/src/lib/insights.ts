@@ -8,7 +8,9 @@
 // up anyway" framing. Nothing here shames.
 
 export type StatPoint = {
+  id: string;
   date: string;
+  startedAt: string;
   openingBalance: number;
   closingBalance: number;
   attwoodNet: number;
@@ -31,11 +33,14 @@ export type StatPoint = {
 export type InsightTone = "celebrate" | "notice" | "gentle";
 export type Insight = { id: string; tone: InsightTone; text: string };
 
-/** Closed days strictly before `date`, oldest first. */
+/** Closed ledgers strictly before the target row, oldest first. */
 const MIN_HISTORY = 5;
 
-function historyBefore(series: StatPoint[], date: string): StatPoint[] {
-  return series.filter((p) => p.phase === "closed" && p.date < date);
+function historyBefore(series: StatPoint[], target: StatPoint): StatPoint[] {
+  const targetStart = Date.parse(target.startedAt);
+  return series.filter(
+    (p) => p.phase === "closed" && Date.parse(p.startedAt) < targetStart,
+  );
 }
 
 function mean(xs: number[]): number {
@@ -49,34 +54,21 @@ function weekdayName(dateIso: string): string {
   });
 }
 
-function prevIsoDate(dateIso: string): string {
-  const d = new Date(dateIso + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Consecutive closed calendar days ending at `date` (inclusive). */
-export function closedStreak(series: StatPoint[], date: string): number {
-  const closedDates = new Set(
-    series.filter((p) => p.phase === "closed").map((p) => p.date),
-  );
-  let streak = 0;
-  let cursor = date;
-  while (closedDates.has(cursor)) {
-    streak += 1;
-    cursor = prevIsoDate(cursor);
-  }
-  return streak;
+export function recentClosedCount(series: StatPoint[], withinDays = 7): number {
+  const cutoff = Date.now() - withinDays * 86_400_000;
+  return series.filter(
+    (p) => p.phase === "closed" && Date.parse(p.startedAt) >= cutoff,
+  ).length;
 }
 
 /**
  * Insights for the moment a day is closed. `series` should include the just
  * closed day. Returns the top few, best first; empty when history is thin.
  */
-export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
-  const today = series.find((p) => p.date === date);
+export function closeDayInsights(series: StatPoint[], dayId: string): Insight[] {
+  const today = series.find((p) => p.id === dayId);
   if (!today) return [];
-  const history = historyBefore(series, date);
+  const history = historyBefore(series, today);
   const recent = history.slice(-30);
   const out: Insight[] = [];
 
@@ -92,13 +84,13 @@ export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
       });
     }
 
-    // Personal best closing balance in the recent window.
+    // Personal best energy remaining in the recent window.
     const best = Math.max(...recent.slice(-21).map((p) => p.closingBalance));
     if (today.closingBalance > best) {
       out.push({
         id: "best-balance",
         tone: "celebrate",
-        text: `Highest closing balance in ${Math.min(recent.length, 21)} closed days. The bank approves.`,
+        text: `Most energy left at day's end in ${Math.min(recent.length, 21)} closed ledgers. That margin is real.`,
       });
     }
 
@@ -123,7 +115,7 @@ export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
       out.push({
         id: "deposit-discipline",
         tone: "celebrate",
-        text: `You banked more recharge today than you usually do (${today.depositTotal} vs a typical ${Math.round(avgDeposit)}).`,
+        text: `You logged more recharge today than you usually do (${today.depositTotal} vs a typical ${Math.round(avgDeposit)}).`,
       });
     }
 
@@ -144,13 +136,13 @@ export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
     }
   }
 
-  // Streak needs its own consecutive-days check, no average required.
-  const streak = closedStreak(series, date);
-  if (streak >= 3) {
+  // Recent closes: count by ledger start time, not calendar gaps.
+  const recentClosed = recentClosedCount(series, 7);
+  if (recentClosed >= 3) {
     out.push({
       id: "streak",
       tone: "celebrate",
-      text: `That's ${streak} days audited in a row. The ledger notices consistency.`,
+      text: `That's ${recentClosed} ledgers closed in the last week. The practice is sticking.`,
     });
   }
 
@@ -174,7 +166,7 @@ export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
  * pattern isn't there.
  */
 export function planningHint(series: StatPoint[], date: string): Insight | null {
-  const history = historyBefore(series, date);
+  const history = series.filter((p) => p.phase === "closed");
   if (history.length < 10) return null;
   const weekday = weekdayName(date);
   const sameDay = history.filter((p) => weekdayName(p.date) === weekday);
