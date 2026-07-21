@@ -540,14 +540,16 @@ function outlinePath(outline: WingOutline, edge: WingEdge): string {
 // --- Tails -------------------------------------------------------------------
 
 /**
- * Tail streamers grow from the hindwing's lowest landmark and overlap it, so
- * the join disappears under the shared fill and the tail reads as one wing.
+ * Tail streamers anchor on real hindwing landmarks and start a few units above
+ * them, so the join disappears under the shared fill and reads as one wing.
+ * Twin uses the two deepest landmarks: the deepest carries the primary tail,
+ * the next-deepest carries the shorter second streamer.
  */
 function tailPaths(tail: WingTail, hind: WingOutline, tailLen: number): string[] {
   if (tail === "none") return [];
-  const anchor = hind.points.reduce((low, p) => (p.y > low.y ? p : low));
-  const ax = anchor.x;
-  const ay = anchor.y - 4;
+  const byDepth = [...hind.points].sort((a, b) => b.y - a.y);
+  const anchor = byDepth[0]!;
+  const second = byDepth[1] ?? anchor;
   const drop = { short: 16, long: 34, twin: 24 }[tail] * (0.75 + tailLen * 0.5);
   const streamer = (x: number, y: number, len: number, halfW: number) =>
     `M${r(x - halfW)} ${r(y)} C${r(x - halfW - 2)} ${r(y + len * 0.45)}, ${r(
@@ -557,12 +559,11 @@ function tailPaths(tail: WingTail, hind: WingOutline, tailLen: number): string[]
     )} ${r(y + len * 0.35)}, ${r(x + halfW)} ${r(y)} Z`;
   if (tail === "twin") {
     return [
-      streamer(ax, ay, drop, 5),
-      // Second streamer sits along the margin toward the body, slightly shorter.
-      streamer(ax + 12, ay - 3, drop * 0.7, 4),
+      streamer(anchor.x, anchor.y - 4, drop, 5),
+      streamer(second.x, second.y - 4, drop * 0.7, 4),
     ];
   }
-  return [streamer(ax, ay, drop, 6)];
+  return [streamer(anchor.x, anchor.y - 4, drop, 6)];
 }
 
 // --- Interior marks ----------------------------------------------------------

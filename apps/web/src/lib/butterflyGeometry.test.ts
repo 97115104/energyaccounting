@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  WING_EDGES,
   WING_FAMILIES,
   buildWingRender,
   compatibleTraits,
@@ -55,6 +56,31 @@ describe("wing geometry", () => {
     expect(hindDepth("owl")).toBeGreaterThan(hindDepth("longwing"));
     expect(hindDepth("owl")).toBeGreaterThan(hindDepth("glasswing"));
     expect(hindDepth("owl")).toBeGreaterThan(hindDepth("monarch"));
+
+    // Swallowtail's forewing apex is a sharp point; monarch's is broad.
+    const apexAngle = (f: string) => {
+      const pts = sil[f]!.fore.points;
+      const i = pts.reduce((best, p, idx) => (p.x < pts[best]!.x ? idx : best), 0);
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const c = pts[i + 1]!;
+      const v1 = Math.atan2(a.y - b.y, a.x - b.x);
+      const v2 = Math.atan2(c.y - b.y, c.x - b.x);
+      let deg = (Math.abs(v1 - v2) * 180) / Math.PI;
+      if (deg > 180) deg = 360 - deg;
+      return deg;
+    };
+    expect(apexAngle("swallowtail")).toBeLessThan(60);
+    expect(apexAngle("monarch")).toBeGreaterThan(70);
+
+    // Peacock's forewing margin doubles back on itself: the built-in notch.
+    const peacock = sil.peacock!.fore;
+    const [mFrom, mTo] = peacock.margin;
+    const marginXs = peacock.points.slice(mFrom, mTo + 1).map((p) => p.x);
+    const outwardThenBack = marginXs.some(
+      (x, i) => i >= 1 && i < marginXs.length - 1 && x > marginXs[i - 1]! && x > marginXs[i + 1]!,
+    );
+    expect(outwardThenBack).toBe(true);
   });
 
   test("edge trait reshapes the filled outline, not just decorations", () => {
@@ -108,20 +134,53 @@ describe("wing geometry", () => {
     expect(render.tails).toEqual([]);
   });
 
-  test("swallowtail tails attach at the hindwing's lowest landmark", () => {
+  test("swallowtail tails anchor on real hindwing landmarks", () => {
+    const sil = familySilhouette("swallowtail", 12 * V.spread, 8 * V.aspect);
+    const byDepth = [...sil.hind.points].sort((a, b) => b.y - a.y);
     for (const tail of ["short", "long", "twin"] as const) {
       const render = buildWingRender(
         { family: "swallowtail", edge: "angular", tail, pattern: "banded", complexity: 2 },
         V,
       );
       expect(render.tails.length).toBe(tail === "twin" ? 2 : 1);
-      // Each tail starts overlapping the wing (above the lowest point), so the
-      // fill joins seamlessly.
-      const sil = familySilhouette("swallowtail", 12 * V.spread, 8 * V.aspect);
-      const lowest = Math.max(...sil.hind.points.map((p) => p.y));
-      for (const d of render.tails) {
-        const startY = Number(d.split(" ")[1]);
-        expect(startY).toBeLessThan(lowest);
+      render.tails.forEach((d, i) => {
+        // Each streamer's top edge is centered on its anchor landmark and
+        // starts above it, so the shapes overlap and fill as one wing.
+        const anchor = byDepth[i]!;
+        const [x0, y0] = d.replace("M", "").split(" ").map(Number) as [number, number];
+        const halfW = anchor.x - x0;
+        expect(halfW).toBeGreaterThan(2);
+        expect(halfW).toBeLessThan(8);
+        expect(y0).toBe(anchor.y - 4);
+      });
+    }
+  });
+
+  test("all rendered outlines stay inside the viewBox and left of the body", () => {
+    // Sample the extreme corners of the variation space with every edge, and
+    // bound every coordinate that appears in the serialized paths. Control
+    // points can overshoot the landmarks slightly, so the bounds include a
+    // small tolerance while still catching runaway math.
+    const extremes: WingVariation[] = [
+      { ...V, spread: 0.35, aspect: 0 },
+      { ...V, spread: 0.35, aspect: 1 },
+      { ...V, spread: 0.85, aspect: 0 },
+      { ...V, spread: 0.85, aspect: 1 },
+    ];
+    for (const family of WING_FAMILIES) {
+      for (const edge of WING_EDGES) {
+        for (const variation of extremes) {
+          const render = buildWingRender({ family, ...NEUTRAL, edge }, variation);
+          for (const d of [render.forewing, render.hindwing, ...render.tails]) {
+            const coords = d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+            for (let i = 0; i < coords.length; i += 2) {
+              expect(coords[i]!).toBeGreaterThanOrEqual(0);
+              expect(coords[i]!).toBeLessThanOrEqual(100);
+              expect(coords[i + 1]!).toBeGreaterThanOrEqual(0);
+              expect(coords[i + 1]!).toBeLessThanOrEqual(210);
+            }
+          }
+        }
       }
     }
   });
