@@ -1,6 +1,8 @@
 import { isoDate } from "@eaj/shared";
 import { useEffect, useMemo, useState } from "react";
+import type { UserProfile } from "../App";
 import { api } from "../lib/api";
+import { defaultTemperatureUnit, formatTemp } from "../lib/weatherUi";
 
 type Point = {
   date: string;
@@ -27,10 +29,11 @@ function rangeBounds(kind: Range): { from: string; to: string } {
   return { from: isoDate(d), to };
 }
 
-export function DashboardPage() {
+export function DashboardPage({ user }: { user: UserProfile }) {
   const [range, setRange] = useState<Range>("week");
   const [series, setSeries] = useState<Point[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const tempUnit = user.temperatureUnit ?? defaultTemperatureUnit(user.country);
 
   useEffect(() => {
     const { from, to } = rangeBounds(range);
@@ -97,7 +100,7 @@ export function DashboardPage() {
                 className={`bar ${p.closingBalance < 0 ? "neg" : ""} ${p.isHoliday ? "holiday" : ""}`}
                 style={{ height: h }}
                 title={`${p.date}: close ${p.closingBalance}, net ${p.attwoodNet}${
-                  p.weather?.tempMax != null ? `, max ${p.weather.tempMax}°C` : ""
+                  p.weather?.tempMax != null ? `, max ${formatTemp(p.weather.tempMax, tempUnit)}` : ""
                 }`}
               />
             );
@@ -117,7 +120,7 @@ export function DashboardPage() {
                     key={h}
                     style={{
                       textAlign: "left",
-                      borderBottom: "2px solid var(--line)",
+                      borderBottom: "1px solid var(--line)",
                       padding: "0.5rem",
                     }}
                   >
@@ -129,22 +132,22 @@ export function DashboardPage() {
             <tbody>
               {series.map((p) => (
                 <tr key={p.date}>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>{p.date}</td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>{p.date}</td>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.closingBalance}
                   </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.attwoodNet}
                   </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.feelRating ?? "-"}
                   </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.weather?.tempMax != null
-                      ? `${p.weather.tempMax}°C${p.weather.precip != null ? `, ${p.weather.precip}mm` : ""}`
+                      ? `${formatTemp(p.weather.tempMax, tempUnit)}${p.weather.precip != null ? `, ${p.weather.precip}mm` : ""}`
                       : "-"}
                   </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid #ccd8d1" }}>
+                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.isHoliday ? p.weather?.holidayName || "Yes" : "-"}
                   </td>
                 </tr>

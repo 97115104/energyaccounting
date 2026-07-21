@@ -22,7 +22,6 @@ import type { UserProfile } from "../App";
 import { api } from "../lib/api";
 import {
   decryptText,
-  encryptBytes,
   encryptText,
   getSessionDek,
   labelHash,
@@ -30,7 +29,15 @@ import {
 import { playCategoryTitle, suggestPlayDeposits } from "../lib/playCategories";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { buildTips } from "../lib/tips";
-import { weatherKindFromCode, weatherLabel } from "../lib/weatherUi";
+import {
+  defaultTemperatureUnit,
+  formatTemp,
+  formatTempRange,
+  isDaylightPeriod,
+  skyPeriod,
+  weatherKindFromCode,
+  weatherLabel,
+} from "../lib/weatherUi";
 
 type Line = {
   id: string;
@@ -89,6 +96,28 @@ type SpeechRec = {
   stop: () => void;
 };
 
+function MicIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"
+      />
+    </svg>
+  );
+}
+
+function LightbulbIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2Zm-2 18a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h-4v1Z"
+      />
+    </svg>
+  );
+}
+
 export function TodayPage({ user }: { user: UserProfile }) {
   const [date, setDate] = useState(isoDate());
   const [day, setDay] = useState<DayPayload | null>(null);
@@ -96,14 +125,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
   const [compensate, setCompensate] = useState("");
-  const [recording, setRecording] = useState(false);
   const [listening, setListening] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
   const [justFreed, setJustFreed] = useState<number | undefined>();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dndBusy, setDndBusy] = useState(false);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const speechRef = useRef<SpeechRec | null>(null);
   const journalBaseRef = useRef("");
   const journalRef = useRef("");
@@ -119,6 +145,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
   useEffect(() => {
     setJustFreed(undefined);
   }, [date]);
+
+  useEffect(() => {
+    return () => {
+      speechRef.current?.stop();
+      speechRef.current = null;
+    };
+  }, []);
 
   const [draftSide, setDraftSide] = useState<"deposit" | "withdrawal" | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
@@ -210,6 +243,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
   );
 
   const weatherKind = weatherKindFromCode(day?.weather?.weathercode);
+  const uvMax = typeof day?.weather?.uvMax === "number" ? day.weather.uvMax : null;
+  const tempUnit = user.temperatureUnit ?? defaultTemperatureUnit(user.country);
+
+  // Let the global sky scene react to today's conditions.
+  useEffect(() => {
+    document.documentElement.dataset.weather = weatherKind;
+    return () => {
+      delete document.documentElement.dataset.weather;
+    };
+  }, [weatherKind]);
+
   const playHeavy = day ? isWithdrawalHeavy(day.attwood) : false;
   const playSuggestions = useMemo(() => {
     if (!day || !playHeavy) return [];
@@ -222,15 +266,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const tips = useMemo(() => {
     if (!day) return [];
+    const period = skyPeriod(
+      user.lat,
+      user.lon,
+      user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
     return buildTips({
       available: day.availableCapacity,
       depositTotal: day.attwood.depositTotal,
       withdrawalTotal: day.attwood.withdrawalTotal,
       incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
       weatherKind,
+      uvMax,
+      isDaylight: isDaylightPeriod(period),
       justFreed,
     });
-  }, [day, withdrawals, weatherKind, justFreed]);
+  }, [day, withdrawals, weatherKind, uvMax, justFreed, user.lat, user.lon, user.timezone]);
 
   async function addLine(
     side: "deposit" | "withdrawal",
@@ -338,7 +389,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec })
         .webkitSpeechRecognition;
     if (!SR) {
-      setError("Live speech is not available in this browser. You can still use Whisper record.");
+      setError("Dictation is not available in this browser. The keyboard still believes in you.");
       return;
     }
     journalBaseRef.current = journal;
@@ -369,65 +420,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   function stopLiveSpeech() {
     speechRef.current?.stop();
     setListening(false);
-  }
-
-  async function startRec() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const rec = new MediaRecorder(stream);
-    chunksRef.current = [];
-    rec.ondataavailable = (e) => {
-      if (e.data.size) chunksRef.current.push(e.data);
-    };
-    rec.onstop = () => {
-      void (async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        stream.getTracks().forEach((t) => t.stop());
-        const fd = new FormData();
-        fd.append("audio", blob, "journal.webm");
-        try {
-          const { text } = await api<{ text: string }>("/api/transcribe", {
-            method: "POST",
-            body: fd,
-          });
-          setJournal((j) => (j ? `${j}\n${text}` : text));
-        } catch (e) {
-          setError(
-            e instanceof Error
-              ? e.message
-              : "Transcription unavailable. You can still type your journal.",
-          );
-        }
-        const dek = getSessionDek();
-        if (dek) {
-          const buf = await blob.arrayBuffer();
-          const enc = await encryptBytes(dek, buf);
-          const afd = new FormData();
-          afd.append("ciphertext", enc.ciphertext, "audio.bin");
-          afd.append("iv", enc.iv);
-          const stored = await api<{ audioPath: string; audioIv: string }>(
-            `/api/days/${date}/audio`,
-            { method: "POST", body: afd },
-          );
-          await api(`/api/days/${date}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              audioPath: stored.audioPath,
-              audioIv: stored.audioIv,
-            }),
-          });
-        }
-        await saveJournal();
-        await load();
-      })();
-    };
-    mediaRef.current = rec;
-    rec.start();
-    setRecording(true);
-  }
-
-  function stopRec() {
-    mediaRef.current?.stop();
-    setRecording(false);
   }
 
   function onDragStart(e: DragStartEvent) {
@@ -510,14 +502,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   if (!day) {
-    return <p className="muted">Loading today’s ledger…</p>;
+    return <p className="muted">Loading today’s ledger… counting every last point.</p>;
   }
 
   const closed = day.phase === "closed";
   const activeLine = activeDragId ? day.lines.find((l) => l.id === activeDragId) : null;
 
   return (
-    <div className={`today-root weather-${weatherKind}`}>
+    <div className="today-root">
       <div className="panel">
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="day">Date</label>
@@ -539,12 +531,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
             {day.weather && typeof day.weather.tempMax === "number" ? (
               <span>
                 {" "}
-                {String(day.weather.tempMin)}–{String(day.weather.tempMax)}°C
+                {typeof day.weather.tempMin === "number"
+                  ? formatTempRange(day.weather.tempMin, day.weather.tempMax, tempUnit)
+                  : formatTemp(day.weather.tempMax, tempUnit)}
                 {typeof day.weather.precip === "number" ? ` · ${day.weather.precip} mm` : ""}
               </span>
             ) : (
               <span> Set location in settings for live weather.</span>
             )}
+            {uvMax != null && <span>{` · UV ${Math.round(uvMax)}`}</span>}
           </div>
         </div>
         <div className="stats" style={{ marginTop: "1rem" }}>
@@ -720,35 +715,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
               onChange={(e) => setJournal(e.target.value)}
               placeholder="What shaped your energy today?"
             />
-            {listening && <p className="listening-pill">Listening · speech appears as you talk</p>}
+            {listening && <p className="listening-pill">Listening · your words appear as you talk</p>}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
             {!listening ? (
               <button
                 type="button"
-                className="btn secondary"
+                className="btn secondary mic-btn"
                 disabled={closed}
+                title="Typing is hard sometimes. Talk instead."
                 onClick={startLiveSpeech}
               >
-                Live dictate
+                <MicIcon /> Dictate
               </button>
             ) : (
-              <button type="button" className="btn danger" onClick={stopLiveSpeech}>
-                Stop live dictate
-              </button>
-            )}
-            {!recording ? (
-              <button
-                type="button"
-                className="btn secondary"
-                disabled={closed}
-                onClick={() => void startRec()}
-              >
-                Whisper enhance
-              </button>
-            ) : (
-              <button type="button" className="btn danger" onClick={stopRec}>
-                Stop and transcribe
+              <button type="button" className="btn danger mic-btn" onClick={stopLiveSpeech}>
+                <span className="rec-dot" aria-hidden="true" /> Stop dictating
               </button>
             )}
             <button
@@ -769,20 +751,25 @@ export function TodayPage({ user }: { user: UserProfile }) {
               onChange={(e) => setCompensate(e.target.value)}
             />
           </div>
-          {day.audioPath && <p className="muted">Encrypted voice recording saved for this day.</p>}
         </div>
       )}
 
       <button
         type="button"
-        className="tips-fab"
+        className={`tips-fab${tipsOpen ? " open" : ""}`}
         aria-label="Open tips"
+        title="Tips"
         onClick={() => {
           prefetchSuggestModel();
           setTipsOpen((o) => !o);
         }}
       >
-        Tips
+        <LightbulbIcon />
+        {tips.length > 0 && !tipsOpen && (
+          <span className="tips-badge" aria-hidden="true">
+            {tips.length}
+          </span>
+        )}
       </button>
       {tipsOpen && (
         <div className="tips-sheet panel" role="dialog" aria-label="Tips">
@@ -917,7 +904,11 @@ function Column(props: {
         </div>
       ))}
       {!props.lines.length && !props.suggestions.length && !props.playSuggestions?.length && (
-        <p className="muted">No entries yet. Tap + to add one.</p>
+        <p className="muted">
+          {props.side === "withdrawal"
+            ? "Nothing draining yet. Suspiciously well-rested."
+            : "No deposits yet. Your battery has questions."}
+        </p>
       )}
     </div>
   );

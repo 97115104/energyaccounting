@@ -7,6 +7,9 @@ function roundCoord(n: number): string {
   return n.toFixed(2);
 }
 
+/** Bump when the payload shape changes so stale cache rows get refetched. */
+export const WEATHER_PAYLOAD_VERSION = 2;
+
 export async function fetchDayWeather(
   lat: number,
   lon: number,
@@ -23,7 +26,8 @@ export async function fetchDayWeather(
   });
   if (cached) {
     try {
-      return JSON.parse(cached.payload) as Record<string, unknown>;
+      const payload = JSON.parse(cached.payload) as Record<string, unknown>;
+      if (payload.v === WEATHER_PAYLOAD_VERSION) return payload;
     } catch {
       /* refetch */
     }
@@ -31,7 +35,7 @@ export async function fetchDayWeather(
 
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum` +
+    `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,uv_index_max,sunrise,sunset` +
     `&timezone=auto&start_date=${date}&end_date=${date}`;
 
   try {
@@ -44,16 +48,23 @@ export async function fetchDayWeather(
         temperature_2m_max?: number[];
         temperature_2m_min?: number[];
         precipitation_sum?: number[];
+        uv_index_max?: number[];
+        sunrise?: string[];
+        sunset?: string[];
       };
     };
     const daily = raw.daily;
     if (!daily?.time?.[0]) return null;
     const payload = {
+      v: WEATHER_PAYLOAD_VERSION,
       date: daily.time[0],
       weathercode: daily.weathercode?.[0] ?? null,
       tempMax: daily.temperature_2m_max?.[0] ?? null,
       tempMin: daily.temperature_2m_min?.[0] ?? null,
       precip: daily.precipitation_sum?.[0] ?? null,
+      uvMax: daily.uv_index_max?.[0] ?? null,
+      sunrise: daily.sunrise?.[0] ?? null,
+      sunset: daily.sunset?.[0] ?? null,
       source: "Open-Meteo",
     };
     const existing = await db.query.weatherCacheTable.findFirst({

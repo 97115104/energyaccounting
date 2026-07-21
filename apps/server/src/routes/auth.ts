@@ -86,6 +86,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lat: null,
           lon: null,
           country: "US",
+          temperatureUnit: null,
           onboardingCompleted: false,
           locationPrompted: false,
         },
@@ -134,6 +135,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lat: user.lat,
           lon: user.lon,
           country: user.country,
+          temperatureUnit: user.temperatureUnit,
           onboardingCompleted: user.onboardingCompleted,
           locationPrompted: user.locationPrompted,
         },
@@ -195,6 +197,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lat: auth.user.lat,
           lon: auth.user.lon,
           country: auth.user.country,
+          temperatureUnit: auth.user.temperatureUnit,
           onboardingCompleted: auth.user.onboardingCompleted,
           locationPrompted: auth.user.locationPrompted,
         },
@@ -228,6 +231,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         lat: auth.user.lat,
         lon: auth.user.lon,
         country: auth.user.country,
+        temperatureUnit: auth.user.temperatureUnit,
         onboardingCompleted: auth.user.onboardingCompleted,
         locationPrompted: auth.user.locationPrompted,
       },
@@ -322,6 +326,10 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lat: body.lat !== undefined ? body.lat : auth.user.lat,
           lon: body.lon !== undefined ? body.lon : auth.user.lon,
           country: body.country ?? auth.user.country,
+          temperatureUnit:
+            body.temperatureUnit === undefined
+              ? auth.user.temperatureUnit
+              : body.temperatureUnit,
           onboardingCompleted:
             body.onboardingCompleted === undefined
               ? auth.user.onboardingCompleted
@@ -340,6 +348,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         lat: t.Optional(t.Union([t.Number(), t.Null()])),
         lon: t.Optional(t.Union([t.Number(), t.Null()])),
         country: t.Optional(t.String()),
+        temperatureUnit: t.Optional(t.Union([t.Literal("C"), t.Literal("F"), t.Null()])),
         onboardingCompleted: t.Optional(t.Boolean()),
         locationPrompted: t.Optional(t.Boolean()),
       }),

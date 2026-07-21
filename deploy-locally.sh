@@ -6,9 +6,6 @@
 #   HEALTH_TIMEOUT   Seconds to wait for primary URL (default: 60)
 #   PORT             API port (default: 3000)
 #   DATA_DIR         SQLite and audio directory (default: ./data)
-#   WHISPER_BIN      whisper.cpp CLI binary (optional)
-#   WHISPER_MODEL    path to ggml model (optional)
-#   FFMPEG_BIN       ffmpeg for webm to wav (optional, default: ffmpeg)
 #
 # Usage: ./deploy-locally.sh
 # Stop: Ctrl+C (trap stops background processes started by this script)

@@ -182,9 +182,8 @@ export function AuthPage({ needsTotp, onAuthed, onNeedsTotp }: Props) {
             )}
           </p>
           <p className="muted" style={{ fontSize: "0.85rem" }}>
-            Journal labels, notes, and voice recordings are encrypted on your device before they
-            reach the server. The server stores ciphertext and cannot read those fields without your
-            password-derived key.
+            Journal labels and notes are encrypted on your device before they reach the server. The
+            server stores ciphertext and cannot read those fields without your password-derived key.
           </p>
         </>
       )}

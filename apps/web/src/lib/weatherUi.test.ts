@@ -1,0 +1,39 @@
+import { describe, expect, test } from "bun:test";
+import { skyPeriod, sunTimesForUtcDay } from "./weatherUi.ts";
+
+describe("skyPeriod / sunTimes", () => {
+  test("Tokyo morning (06:00 JST) is day, not night", () => {
+    // 2026-07-20 21:00 UTC = 2026-07-21 06:00 JST — UTC calendar day still 20th.
+    const now = new Date("2026-07-20T21:00:00Z");
+    expect(skyPeriod(35.68, 139.65, "Asia/Tokyo", now)).toBe("day");
+  });
+
+  test("Sydney morning (07:00 AEST) is daylight, not night", () => {
+    const now = new Date("2026-07-20T21:00:00Z"); // 07:00 AEST Jul 21
+    const period = skyPeriod(-33.87, 151.21, "Australia/Sydney", now);
+    expect(period === "day" || period === "dawn").toBe(true);
+  });
+
+  test("San Francisco evening after sunset is night", () => {
+    // Midsummer SF sunset ~20:30 PDT; 05:00 UTC Jul 21 = 22:00 PDT Jul 20.
+    const now = new Date("2026-07-21T05:00:00Z");
+    const period = skyPeriod(37.77, -122.42, "America/Los_Angeles", now);
+    expect(period === "night" || period === "dusk").toBe(true);
+  });
+
+  test("polar day returns alwaysUp", () => {
+    // Tromsø midsummer — sun never sets.
+    const midsummer = new Date("2026-06-21T12:00:00Z");
+    const result = sunTimesForUtcDay(69.65, 18.96, midsummer);
+    expect(result.kind).toBe("polar");
+    if (result.kind === "polar") expect(result.alwaysUp).toBe(true);
+    expect(skyPeriod(69.65, 18.96, "Europe/Oslo", midsummer)).toBe("day");
+  });
+
+  test("no location falls back to timezone hours", () => {
+    const noon = new Date("2026-07-20T19:00:00Z"); // 12:00 PDT
+    expect(skyPeriod(null, null, "America/Los_Angeles", noon)).toBe("day");
+    const late = new Date("2026-07-21T05:00:00Z"); // 22:00 PDT
+    expect(skyPeriod(null, null, "America/Los_Angeles", late)).toBe("night");
+  });
+});

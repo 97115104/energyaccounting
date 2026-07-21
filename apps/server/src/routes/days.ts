@@ -14,7 +14,7 @@ import { db } from "../db/index.ts";
 import { dayTable, taskCatalogTable, taskLineTable, userTable } from "../db/schema.ts";
 import { holidayForDate } from "../lib/holidays.ts";
 import { assertIsoDate, newId, requireFullUser } from "../lib/session.ts";
-import { fetchDayWeather } from "../lib/weather.ts";
+import { WEATHER_PAYLOAD_VERSION, fetchDayWeather } from "../lib/weather.ts";
 
 function weekdayBit(dateIso: string): number {
   const d = new Date(dateIso + "T12:00:00Z");
@@ -48,20 +48,23 @@ async function ensureDay(userId: string, dateIso: string) {
 
   if (day) {
     const weather = day.weatherJson ? (JSON.parse(day.weatherJson) as Record<string, unknown>) : {};
-    if (user?.lat != null && user?.lon != null && weather.tempMax == null) {
+    const weatherStale = weather.tempMax == null || weather.v !== WEATHER_PAYLOAD_VERSION;
+    if (user?.lat != null && user?.lon != null && weatherStale) {
       const fresh = await fetchDayWeather(user.lat, user.lon, dateIso);
-      const hol = holidayForDate(dateIso, user.country ?? "US");
-      const payload = fresh
-        ? { ...fresh, holidayName: hol.name }
-        : { ...weather, holidayName: hol.name };
-      await db
-        .update(dayTable)
-        .set({
-          weatherJson: JSON.stringify(payload),
-          isHoliday: hol.isHoliday,
-        })
-        .where(eq(dayTable.id, day.id));
-      day = (await db.query.dayTable.findFirst({ where: eq(dayTable.id, day.id) }))!;
+      // Only rewrite when Open-Meteo answered — otherwise leave stale JSON
+      // alone so we don't busy-loop retries on every ensureDay.
+      if (fresh) {
+        const hol = holidayForDate(dateIso, user.country ?? "US");
+        const payload = { ...fresh, holidayName: hol.name };
+        await db
+          .update(dayTable)
+          .set({
+            weatherJson: JSON.stringify(payload),
+            isHoliday: hol.isHoliday,
+          })
+          .where(eq(dayTable.id, day.id));
+        day = (await db.query.dayTable.findFirst({ where: eq(dayTable.id, day.id) }))!;
+      }
     }
     return day;
   }

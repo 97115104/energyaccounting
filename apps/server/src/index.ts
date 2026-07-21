@@ -4,8 +4,8 @@ import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { authRoutes } from "./routes/auth.ts";
+import { audioRoutes } from "./routes/audio.ts";
 import { dayRoutes } from "./routes/days.ts";
-import { audioRoutes, transcribeRoutes } from "./routes/transcribe.ts";
 
 const port = Number(process.env.PORT ?? 3000);
 const webDist = join(import.meta.dir, "../../web/dist");
@@ -23,7 +23,6 @@ const app = new Elysia()
   }))
   .use(authRoutes)
   .use(dayRoutes)
-  .use(transcribeRoutes)
   .use(audioRoutes);
 
 if (existsSync(webDist)) {

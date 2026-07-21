@@ -5,7 +5,8 @@ html[data-theme="day"] {
   --ink: #2a2208;
   --muted: #5c4e20;
   --panel: #fffdf3;
-  --line: #2a2208;
+  /* Soft, translucent hairlines so panels blend into the sky. */
+  --line: rgba(42, 34, 8, 0.22);
   --deposit: #2f6b3a;
   --deposit-soft: #d8f0c8;
   --withdraw: #9a3d28;
@@ -15,9 +16,29 @@ html[data-theme="day"] {
   --danger: #9b1c1c;
   --shadow: 0 12px 40px rgba(42, 34, 8, 0.14);
   --sky-glow: rgba(255, 220, 80, 0.45);
-  --font: "DM Sans", system-ui, sans-serif;
-  --display: "Fraunces", Georgia, serif;
+  --sun-face: #ffcf3d;
+  --sun-halo: rgba(255, 200, 60, 0.4);
+  --cloud-tint: rgba(255, 255, 255, 0.9);
+  --font: "Times New Roman", Times, serif;
+  --display: "Times New Roman", Times, serif;
   --radius: 0;
+}
+
+/* Golden hours: warm sunrise/sunset gradients over the day palette. */
+html[data-theme="dawn"] {
+  --bg0: #ffd9b8;
+  --bg1: #f8ad76;
+  --sky-glow: rgba(255, 170, 90, 0.5);
+  --sun-face: #ffb347;
+  --sun-halo: rgba(255, 150, 70, 0.45);
+}
+
+html[data-theme="dusk"] {
+  --bg0: #f8b880;
+  --bg1: #c96f8e;
+  --sky-glow: rgba(255, 140, 100, 0.5);
+  --sun-face: #ff9e3d;
+  --sun-halo: rgba(255, 120, 70, 0.5);
 }
 
 html[data-theme="night"] {
@@ -26,7 +47,7 @@ html[data-theme="night"] {
   --ink: #e8e4f8;
   --muted: #a8a0c8;
   --panel: #1c2240;
-  --line: #c8b8ff;
+  --line: rgba(200, 184, 255, 0.28);
   --deposit: #6fd39a;
   --deposit-soft: #1e3a32;
   --withdraw: #f0a090;
@@ -36,6 +57,7 @@ html[data-theme="night"] {
   --danger: #ff8a8a;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   --sky-glow: rgba(120, 80, 200, 0.35);
+  --cloud-tint: rgba(150, 150, 190, 0.35);
 }
 
 * {
@@ -85,30 +107,46 @@ a {
   pointer-events: none;
   position: fixed;
   inset: 0;
-  z-index: 0;
+  /* Below all app content (panels, chrome) but above the body gradient,
+     so clouds/rain never wash over the UI. */
+  z-index: -1;
   overflow: hidden;
 }
 
-html[data-theme="day"] .sky-layer::before {
-  content: "";
-  position: absolute;
-  top: 4%;
-  right: 8%;
-  width: 72px;
-  height: 72px;
-  background: radial-gradient(circle at 35% 35%, #fff7a8, #ffcc33 55%, #e09a10 100%);
-  box-shadow: 0 0 40px rgba(255, 200, 40, 0.55);
-  animation: sun-pulse 8s ease-in-out infinite;
+/* Children do not inherit pointer-events — pin them closed so the full-viewport
+   layers never steal clicks from the app chrome. */
+.sky-layer .sky-clouds,
+.sky-layer .sky-precip {
+  pointer-events: none;
 }
 
-html[data-theme="night"] .sky-layer::before {
+/* ---------------------------------------------------------------------------
+   Sky scenes. data-theme (day/dawn/dusk/night) sets the light; data-weather
+   (sun/cloud/rain/snow/fog/thunder) sets the condition, Apple-Weather style.
+   Layers: ::before = sun or moon · .sky-clouds = clouds/fog · .sky-precip =
+   rain/snow streaks · ::after = stars (night only).
+--------------------------------------------------------------------------- */
+
+/* Sun: a simple flat disc with a soft halo — same visual language as the moon. */
+.sky-layer::before {
   content: "";
   position: absolute;
+  top: 5%;
+  right: 9%;
+  width: 64px;
+  height: 64px;
+  border-radius: 50% !important;
+  background: var(--sun-face);
+  box-shadow: 0 0 48px 12px var(--sun-halo);
+  transition: opacity 1.2s ease, background 1.2s ease;
+}
+
+/* Moon: flat disc with a crescent bite, unchanged. */
+html[data-theme="night"] .sky-layer::before {
   top: 6%;
   right: 10%;
   width: 48px;
   height: 48px;
-  border-radius: 50% !important;
   background: #f0e8ff;
   box-shadow: -12px 0 0 -2px #12182e, 0 0 24px rgba(200, 180, 255, 0.5);
 }
@@ -128,13 +166,141 @@ html[data-theme="night"] .sky-layer::after {
   animation: stars-twinkle 6s ease-in-out infinite;
 }
 
-@keyframes sun-pulse {
-  0%,
-  100% {
-    transform: scale(1);
+/* Sun/moon dims behind weather. */
+html[data-weather="cloud"] .sky-layer::before,
+html[data-weather="rain"] .sky-layer::before,
+html[data-weather="snow"] .sky-layer::before,
+html[data-weather="thunder"] .sky-layer::before {
+  opacity: 0.35;
+}
+
+html[data-weather="fog"] .sky-layer::before {
+  opacity: 0.2;
+}
+
+/* Clouds: three soft blurred puffs drifting slowly across the sky. */
+.sky-clouds {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+
+.sky-clouds::before,
+.sky-clouds::after {
+  content: "";
+  position: absolute;
+  border-radius: 50% !important;
+  background: var(--cloud-tint);
+  filter: blur(18px);
+}
+
+.sky-clouds::before {
+  top: 6%;
+  left: -10%;
+  width: 340px;
+  height: 90px;
+  box-shadow: 60px 30px 0 -8px var(--cloud-tint);
+  animation: clouds-drift 90s linear infinite;
+}
+
+.sky-clouds::after {
+  top: 18%;
+  left: -25%;
+  width: 260px;
+  height: 70px;
+  box-shadow: -40px 24px 0 -6px var(--cloud-tint);
+  animation: clouds-drift 140s linear infinite reverse;
+}
+
+html[data-weather="cloud"] .sky-clouds,
+html[data-weather="rain"] .sky-clouds,
+html[data-weather="snow"] .sky-clouds,
+html[data-weather="thunder"] .sky-clouds {
+  opacity: 1;
+}
+
+/* Fog: the cloud layer becomes a full-height haze. */
+html[data-weather="fog"] .sky-clouds {
+  opacity: 1;
+  background: linear-gradient(180deg, var(--cloud-tint), transparent 70%);
+  backdrop-filter: blur(2px);
+}
+
+/* Precipitation layer. */
+.sky-precip {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+
+html[data-weather="rain"] .sky-precip,
+html[data-weather="thunder"] .sky-precip {
+  opacity: 0.5;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0px,
+    transparent 42px,
+    rgba(120, 150, 200, 0.55) 42px,
+    rgba(120, 150, 200, 0.55) 44px
+  );
+  animation: rain-fall 0.7s linear infinite;
+}
+
+html[data-weather="snow"] .sky-precip {
+  opacity: 0.8;
+  background-image:
+    radial-gradient(3px 3px at 15% 10%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 42% 28%, #fff 50%, transparent 51%),
+    radial-gradient(3px 3px at 68% 12%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 85% 34%, #fff 50%, transparent 51%),
+    radial-gradient(2.5px 2.5px at 28% 55%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 58% 72%, #fff 50%, transparent 51%);
+  background-size: 100% 100vh;
+  animation: snow-fall 14s linear infinite;
+}
+
+/* Thunder: occasional whole-sky flash on top of the rain. */
+html[data-weather="thunder"] .sky-layer {
+  animation: thunder-flash 9s ease-in-out infinite;
+}
+
+@keyframes clouds-drift {
+  from {
+    transform: translateX(0);
   }
-  50% {
-    transform: scale(1.06);
+  to {
+    transform: translateX(60vw);
+  }
+}
+
+@keyframes rain-fall {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -12px 60px;
+  }
+}
+
+@keyframes snow-fall {
+  from {
+    background-position: 0 -100vh;
+  }
+  to {
+    background-position: 20px 0;
+  }
+}
+
+@keyframes thunder-flash {
+  0%,
+  94%,
+  100% {
+    background: transparent;
+  }
+  95% {
+    background: rgba(255, 255, 255, 0.12);
   }
 }
 
@@ -149,8 +315,13 @@ html[data-theme="night"] .sky-layer::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html[data-theme="day"] .sky-layer::before,
-  html[data-theme="night"] .sky-layer::after,
+  .sky-layer,
+  .sky-layer::before,
+  .sky-layer::after,
+  .sky-clouds::before,
+  .sky-clouds::after,
+  .sky-precip,
+  .weather-chip[data-kind="rain"] .weather-glyph,
   body {
     animation: none !important;
     transition: none !important;
@@ -183,7 +354,7 @@ html[data-theme="night"] .sky-layer::after {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
   cursor: pointer;
@@ -197,10 +368,16 @@ html[data-theme="night"] .sky-layer::after {
 
 .brand {
   font-family: var(--display);
-  font-size: clamp(2rem, 6vw, 3rem);
+  font-size: clamp(1.35rem, 4.5vw, 2.75rem);
   letter-spacing: -0.02em;
   margin: 0;
-  line-height: 1.05;
+  line-height: 1.1;
+}
+
+@media (max-width: 420px) {
+  .brand {
+    font-size: 1.2rem;
+  }
 }
 
 .tagline {
@@ -214,14 +391,14 @@ html[data-theme="night"] .sky-layer::after {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 1.25rem 0 1.5rem;
-  border-bottom: 2px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 0.75rem;
 }
 
 .nav a {
   appearance: none;
   background: transparent;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   color: var(--ink);
   padding: 0.55rem 0.85rem;
   text-decoration: none;
@@ -240,13 +417,19 @@ html[data-theme="night"] .sky-layer::after {
 
 .panel {
   background: var(--panel);
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   box-shadow: var(--shadow);
   padding: 1rem;
 }
 
 .panel + .panel {
   margin-top: 1rem;
+}
+
+/* Grid gap already spaces panels; the sibling margin above would push the
+   second column down and misalign Withdrawals/Deposits. */
+.grid-2 > .panel + .panel {
+  margin-top: 0;
 }
 
 .grid-2 {
@@ -256,16 +439,23 @@ html[data-theme="night"] .sky-layer::after {
   align-items: stretch;
 }
 
+/* Always two equal tracks so Withdrawals and Deposits share width and height
+   at every viewport; stretch + flex column keeps frames identical. */
+.grid-2.equal-cols {
+  grid-template-columns: 1fr 1fr;
+}
+
+.equal-cols > .column-panel {
+  height: 100%;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 @media (min-width: 720px) {
   .grid-2 {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .equal-cols > .column-panel {
-    height: 100%;
-    min-height: 280px;
-    display: flex;
-    flex-direction: column;
   }
 }
 
@@ -285,11 +475,13 @@ html[data-theme="night"] .sky-layer::after {
 
 .deposit-col {
   border-color: var(--deposit);
+  border-color: color-mix(in srgb, var(--deposit) 40%, transparent);
   background: linear-gradient(180deg, var(--deposit-soft), var(--panel));
 }
 
 .withdraw-col {
   border-color: var(--withdraw);
+  border-color: color-mix(in srgb, var(--withdraw) 40%, transparent);
   background: linear-gradient(180deg, var(--withdraw-soft), var(--panel));
 }
 
@@ -299,7 +491,7 @@ html[data-theme="night"] .sky-layer::after {
 
 .btn {
   appearance: none;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--ink);
   color: var(--accent-ink);
   padding: 0.65rem 1rem;
@@ -351,7 +543,7 @@ html[data-theme="night"] .sky-layer::after {
 .field input,
 .field textarea,
 .field select {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: #fff;
   color: #14241f;
   padding: 0.7rem 0.75rem;
@@ -376,7 +568,7 @@ html[data-theme="night"] .field select {
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
   align-items: center;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: #fff;
   color: #14241f;
   padding: 0.65rem 0.75rem;
@@ -447,7 +639,7 @@ html[data-theme="night"] .task-row.suggestion {
 .task-actual-input {
   width: 100%;
   margin-top: 0.35rem;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: #fff;
   color: #14241f;
   padding: 0.45rem 0.5rem;
@@ -477,7 +669,7 @@ html[data-theme="night"] .task-actual-input {
 }
 
 .stat {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.75rem;
   background: #fff;
   color: #14241f;
@@ -506,7 +698,7 @@ html[data-theme="night"] .stat {
   align-items: center;
   gap: 0.75rem;
   margin-top: 0.85rem;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.65rem 0.85rem;
   background: #fff;
   color: #14241f;
@@ -533,6 +725,22 @@ html[data-theme="night"] .weather-chip {
 .weather-chip[data-kind="cloud"] .weather-glyph {
   background: #c8c8d0;
   box-shadow: none;
+}
+
+.weather-chip[data-kind="snow"] .weather-glyph {
+  background: radial-gradient(circle, #fff 40%, #cfe0f0 100%);
+  box-shadow: 0 0 10px rgba(200, 220, 255, 0.7);
+}
+
+.weather-chip[data-kind="fog"] .weather-glyph {
+  background: linear-gradient(180deg, #d8d8de, #b0b0bc);
+  box-shadow: none;
+  filter: blur(1px);
+}
+
+.weather-chip[data-kind="thunder"] .weather-glyph {
+  background: linear-gradient(180deg, #667, #334);
+  box-shadow: 0 0 12px rgba(255, 230, 120, 0.8);
 }
 
 .weather-chip[data-kind="unknown"] .weather-glyph {
@@ -573,7 +781,7 @@ html[data-theme="night"] .weather-chip {
   align-items: flex-end;
   gap: 4px;
   height: 160px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.5rem;
   background: #fff;
   overflow-x: auto;
@@ -603,7 +811,7 @@ html[data-theme="night"] .weather-chip {
 
 .auth-card {
   max-width: 420px;
-  margin: 2rem auto;
+  margin: 2rem 0;
 }
 
 .phase-bar {
@@ -617,20 +825,80 @@ html[data-theme="night"] .weather-chip {
   flex: 1 1 auto;
 }
 
+/* Tips FAB: frosted-glass circular button, understated Apple-style. */
 .tips-fab {
   position: fixed;
   right: 1rem;
   bottom: 1.25rem;
   z-index: 40;
   appearance: none;
-  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50% !important;
+  border: 1px solid rgba(128, 128, 160, 0.45);
+  /* Solid fallback first — color-mix is progressive enhancement. */
+  background: rgba(255, 253, 243, 0.82);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.25s ease;
+}
+
+html[data-theme="night"] .tips-fab {
+  background: rgba(40, 48, 80, 0.88);
+  background: color-mix(in srgb, var(--panel) 88%, #fff 6%);
+  border-color: rgba(200, 184, 255, 0.55);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.tips-fab:hover {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+
+.tips-fab:active {
+  transform: scale(0.94);
+}
+
+.tips-fab.open {
+  color: var(--accent);
+}
+
+.tips-fab svg {
+  animation: tip-glow 5s ease-in-out infinite;
+}
+
+.tips-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px !important;
   background: var(--accent);
   color: var(--accent-ink);
-  font-weight: 800;
-  min-width: 64px;
-  min-height: 64px;
-  cursor: pointer;
-  box-shadow: var(--shadow);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+@keyframes tip-glow {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .tips-sheet {
@@ -641,10 +909,22 @@ html[data-theme="night"] .weather-chip {
   width: min(360px, calc(100vw - 2rem));
   max-height: 60vh;
   overflow: auto;
+  animation: sheet-in 0.22s cubic-bezier(0.32, 0.72, 0.35, 1.1);
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .tip-card {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.75rem;
   margin-bottom: 0.65rem;
   background: #fff;
@@ -670,7 +950,7 @@ html[data-theme="night"] .tip-card {
 .site-footer {
   margin-top: 3rem;
   padding-top: 1rem;
-  border-top: 2px solid var(--line);
+  border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.9rem;
 }
@@ -680,6 +960,188 @@ html[data-theme="night"] .tip-card {
   font-weight: 600;
 }
 
-.today-root.weather-rain .sky-layer {
-  /* rain handled globally via chip animation */
+/* Text-style buttons (quiet actions). */
+.linkish {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  /* Keep inline in paragraphs; touch-friendly padding only when block-ish. */
+  line-height: inherit;
+  min-height: 0;
+}
+
+.ob-quiet-actions .linkish {
+  padding: 0.65rem 0.5rem;
+  min-height: 44px;
+}
+
+/* Dictation control. */
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50% !important;
+  background: #ff3b30;
+  box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.35);
+  animation: rec-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Onboarding: full-slide layout with big glyph, headline, and progress dots.
+--------------------------------------------------------------------------- */
+.ob-root {
+  max-width: 560px;
+  margin: 2.5rem auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-height: 55vh;
+}
+
+.ob-slide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ob-slide-in 0.45s cubic-bezier(0.25, 0.8, 0.35, 1);
+  width: 100%;
+}
+
+.ob-glyph {
+  width: 96px;
+  height: 96px;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+}
+
+.ob-title {
+  font-family: var(--display);
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  margin: 0 0 0.75rem;
+  line-height: 1.1;
+}
+
+.ob-body {
+  font-size: 1.08rem;
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: 30rem;
+  margin: 0;
+}
+
+.ob-location {
+  margin-top: 1.5rem;
+  width: 100%;
+  max-width: 26rem;
+  text-align: left;
+}
+
+.ob-location-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .ob-location-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ob-dots {
+  display: flex;
+  gap: 0.35rem;
+  margin: 2rem 0 1.5rem;
+}
+
+.ob-dot {
+  appearance: none;
+  border: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ob-dot::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50% !important;
+  background: var(--muted);
+  opacity: 0.45;
+  transition: opacity 0.25s ease, transform 0.25s ease, background 0.25s ease;
+}
+
+.ob-dot.active::after {
+  opacity: 1;
+  background: var(--accent);
+  transform: scale(1.3);
+}
+
+.ob-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.ob-continue {
+  width: min(280px, 100%);
+  font-size: 1.05rem;
+}
+
+.ob-quiet-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+@keyframes ob-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-slide,
+  .ob-dot,
+  .tips-fab,
+  .tips-fab svg,
+  .tips-sheet,
+  .rec-dot {
+    animation: none !important;
+    transition: none !important;
+  }
 }

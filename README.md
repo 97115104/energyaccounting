@@ -10,7 +10,7 @@ Energy Accounting as described by Maja Toudal and Dr. Tony Attwood ([energyaccou
 
 ## Stack
 
-Bun, Elysia, React, Drizzle, `bun:sqlite`. One self-hosted SQLite file under `DATA_DIR`. Optional TOTP. Optional server Whisper (`whisper.cpp`) for journal enhance, with live browser speech for realtime dictate. In-browser Transformers.js embeddings suggest costs from your personal catalog when available.
+Bun, Elysia, React, Drizzle, `bun:sqlite`. One self-hosted SQLite file under `DATA_DIR`. Optional TOTP. Browser speech recognition for journal dictation. In-browser Transformers.js embeddings suggest costs from your personal catalog when available.
 
 ## Local development
 
@@ -26,10 +26,8 @@ This installs dependencies if needed, starts the API on port 3000 and the Vite U
 | `HEALTH_TIMEOUT` | `60` | Seconds to wait for readiness |
 | `PORT` | `3000` | API port |
 | `DATA_DIR` | `./data` | SQLite and encrypted audio |
-| `WHISPER_BIN` | `whisper-cli` | Optional whisper.cpp binary |
-| `WHISPER_MODEL` | `$DATA_DIR/models/ggml-tiny.bin` | Whisper model path |
 
-Without Whisper installed, typing and live dictate still work. Whisper enhance returns a clear error when the binary is missing.
+Typing and browser dictation both work without any extra binaries.
 
 ## Production notes
 
@@ -44,8 +42,6 @@ Serve behind TLS at `eaj.97115104.com`. The server serves `apps/web/dist` when p
 ## Security model
 
 Password verified with Argon2id on the server. A data encryption key (DEK) is generated in the browser, wrapped with a password-derived KEK, and stored as ciphertext. Activity labels, journal text, and voice blobs are AES-GCM encrypted client-side. Numeric energy costs and balances stay clear so dashboards can chart without reading activity names. A SHA-256 of the normalized label is stored so recurring suggestions can dedupe without decrypting. It is a correlation handle, and not plaintext.
-
-`/api/transcribe` may see plaintext audio briefly after ffmpeg converts webm to wav, then discards it. Encrypted audio is what persists.
 
 ## Training corpus export
 

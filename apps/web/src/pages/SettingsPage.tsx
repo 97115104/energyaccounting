@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
+import { defaultTemperatureUnit } from "../lib/weatherUi";
 
 type Props = {
   user: UserProfile;
@@ -13,6 +14,10 @@ export function SettingsPage({ user, onUser }: Props) {
   const [lat, setLat] = useState(String(user.lat ?? ""));
   const [lon, setLon] = useState(String(user.lon ?? ""));
   const [country, setCountry] = useState(user.country ?? "US");
+  // Defaults to the region-appropriate unit until the user picks one explicitly.
+  const [tempUnit, setTempUnit] = useState<"C" | "F">(
+    user.temperatureUnit ?? defaultTemperatureUnit(user.country),
+  );
   const [timezone, setTimezone] = useState(
     user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
@@ -34,6 +39,7 @@ export function SettingsPage({ user, onUser }: Props) {
           lat: lat === "" ? null : Number(lat),
           lon: lon === "" ? null : Number(lon),
           country,
+          temperatureUnit: tempUnit,
           timezone,
         }),
       });
@@ -42,6 +48,7 @@ export function SettingsPage({ user, onUser }: Props) {
         lat: lat === "" ? null : Number(lat),
         lon: lon === "" ? null : Number(lon),
         country,
+        temperatureUnit: tempUnit,
         timezone,
       });
       setMsg("Profile saved.");
@@ -127,6 +134,17 @@ export function SettingsPage({ user, onUser }: Props) {
           <select id="country" value={country} onChange={(e) => setCountry(e.target.value)}>
             <option value="US">United States</option>
             <option value="OTHER">Other (New Year / Christmas only)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="temp-unit">Temperature unit</label>
+          <select
+            id="temp-unit"
+            value={tempUnit}
+            onChange={(e) => setTempUnit(e.target.value as "C" | "F")}
+          >
+            <option value="C">Celsius (°C)</option>
+            <option value="F">Fahrenheit (°F)</option>
           </select>
         </div>
         <button type="button" className="btn accent" onClick={() => void saveProfile()}>
@@ -225,7 +243,8 @@ export function SettingsPage({ user, onUser }: Props) {
       <div className="panel" style={{ marginTop: "1rem" }}>
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>About</h2>
         <p>
-          EAJ is an open-source energy accounting journal for neurodivergent productivity. It draws on
+          Your Energy Matters is an open-source energy accounting journal for neurodivergent
+          productivity. It draws on
           Energy Accounting as described by Maja Toudal and Dr. Tony Attwood (
           <a href="https://energyaccounting.com/" target="_blank" rel="noreferrer">
             energyaccounting.com
