@@ -260,7 +260,7 @@ export function App() {
     : null;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${authed ? "" : " app-shell-auth"}`}>
       <div className="sky-layer" aria-hidden="true">
         <div className="sky-clouds" />
         <div className="sky-precip" />

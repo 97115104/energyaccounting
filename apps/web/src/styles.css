@@ -69,7 +69,13 @@ html[data-theme="night"] {
   border-radius: var(--radius) !important;
 }
 
-html,
+/* html needs a definite height: percentage min-heights resolve to auto against
+   an auto-height parent, which left short pages (login) with the body gradient
+   ending mid-screen and the flat html color showing beneath. */
+html {
+  height: 100%;
+}
+
 body,
 #root {
   min-height: 100%;
@@ -377,6 +383,17 @@ html[data-weather="thunder"] .sky-layer {
 .top-bar-centered {
   justify-content: center;
   text-align: center;
+}
+
+/* Signed-out shell: stack brand + card and center the group vertically, so the
+   sign-in view sits mid-screen on any viewport instead of hugging the top. */
+.app-shell-auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1.5rem 1rem;
 }
 
 .top-bar-centered .tagline {
