@@ -1749,10 +1749,19 @@ html[data-theme="night"] .tip-card {
 }
 
 @media (max-width: 640px) {
+  .ob-root {
+    margin-top: 1rem;
+  }
+
   .ob-card {
     grid-template-columns: 1fr;
-    gap: 1.25rem;
-    height: min(62vh, 560px);
+    gap: 1rem;
+    /* Natural height on phones: the page scrolls instead of an inner scrollbox,
+       and the floor keeps the dots/button from jumping much between slides. */
+    height: auto;
+    min-height: min(44dvh, 420px);
+    overflow: visible;
+    align-content: center;
   }
 
   .ob-aside {
@@ -1760,8 +1769,12 @@ html[data-theme="night"] .tip-card {
   }
 
   .ob-glyph {
-    width: 72px;
-    height: 72px;
+    width: 64px;
+    height: 64px;
+  }
+
+  .ob-whisper {
+    margin-top: 1rem;
   }
 }
 
@@ -1810,8 +1823,25 @@ html[data-theme="night"] .tip-card {
 
 .ob-dots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.2rem;
   margin: 1.25rem 0;
+  max-width: 100%;
+}
+
+/* 9 steps at 44px would overflow a 390px phone; 36px still clears the
+   ~32px minimum tap target while fitting one row. */
+@media (max-width: 640px) {
+  .ob-dots {
+    gap: 0;
+    margin: 0.75rem 0;
+  }
+
+  .ob-dot {
+    width: 36px;
+    height: 40px;
+  }
 }
 
 .ob-dot {

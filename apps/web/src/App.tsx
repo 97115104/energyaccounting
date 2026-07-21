@@ -265,6 +265,8 @@ export function App() {
         <div className="sky-clouds" />
         <div className="sky-precip" />
       </div>
+      {/* Onboarding slides get the full viewport: no greeting header or nav. */}
+      {!(authed && onOnboardingRoute) && (
       <header className={`top-bar${authed ? "" : " top-bar-centered"}`}>
         <div className="top-bar-brand">
           {authed ? (
@@ -327,7 +329,8 @@ export function App() {
           </div>
         )}
       </header>
-      {authed && !needsOnboarding && (
+      )}
+      {authed && !needsOnboarding && !onOnboardingRoute && (
         <nav className="nav">
           <Link className={loc.pathname === "/" ? "active" : ""} to="/">
             Today
