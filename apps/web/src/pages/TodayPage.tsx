@@ -39,6 +39,7 @@ import {
   type Insight,
   type StatPoint,
 } from "../lib/insights";
+import { recentDisabledReason, repeatActionVisible } from "../lib/planShortcuts";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import {
   defaultTemperatureUnit,
@@ -81,6 +82,18 @@ type Suggestion = {
   label?: string;
 };
 
+/** Slim shape of the suggestions API `recent` collection (prior-ledger lines). */
+type RecentActivity = {
+  id: string;
+  side: "deposit" | "withdrawal";
+  labelCiphertext: string;
+  labelIv: string;
+  labelHash: string;
+  typicalCost: number;
+  lastUsed: string;
+  label?: string;
+};
+
 type DayPayload = {
   id: string;
   date: string;
@@ -99,6 +112,8 @@ type DayPayload = {
   isHoliday: boolean;
   attwood: { depositTotal: number; withdrawalTotal: number; attwoodNet: number };
   lines: Line[];
+  /** True when a prior closed ledger with tasks exists to copy from. */
+  repeatAvailable: boolean;
 };
 
 // Details are capped so one note cannot balloon the encrypted payload; the
@@ -178,6 +193,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  // Per-side recent activities shown inside the add dialog (server-ranked by ledger recency).
+  const [recent, setRecent] = useState<RecentActivity[]>([]);
+  // Guards against double taps while the previous plan copies over. The ref
+  // is the synchronous lock; the state only drives the button rendering.
+  const [repeating, setRepeating] = useState(false);
+  const repeatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
   // Which surface the microphone is feeding, or null when idle.
@@ -260,13 +281,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftCost, setDraftCost] = useState("20");
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
+  // Which recent row is mid-add, so a slow request cannot be double-tapped.
+  // The ref is the synchronous lock; the state drives the busy rendering.
+  const [addingRecentId, setAddingRecentId] = useState<string | null>(null);
+  const addingRecentRef = useRef(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const load = useCallback(async (forcedDayId?: string) => {
+  const load = useCallback(async (forcedDayId?: string, opts?: { soft?: boolean }) => {
     const generation = ++loadGenerationRef.current;
-    setError(null);
-    setLoading(true);
+    // A soft load refreshes data in place without blanking the page or the
+    // error banner, e.g. after a repeat conflict.
+    if (!opts?.soft) {
+      setError(null);
+      setLoading(true);
+    }
     const dek = getSessionDek();
     if (!dek) {
       setLoading(false);
@@ -297,6 +326,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     if (!d) {
       setDay(null);
       setSuggestions([]);
+      setRecent([]);
       setLoading(false);
       return;
     }
@@ -341,18 +371,28 @@ export function TodayPage({ user }: { user: UserProfile }) {
     if (generation !== loadGenerationRef.current) return;
     setJournal(decryptedJournal);
 
-    const sug = await api<{ suggestions: Suggestion[] }>(`/api/suggestions/${d.id}`);
-    const decrypted: Suggestion[] = [];
-    for (const s of sug.suggestions) {
-      try {
-        const label = await decryptText(dek, s.labelCiphertext, s.labelIv, "eaj-label");
-        decrypted.push({ ...s, label });
-      } catch {
-        /* skip */
+    const sug = await api<{ suggestions: Suggestion[]; recent?: RecentActivity[] }>(
+      `/api/suggestions/${d.id}`,
+    );
+    const decryptAll = async <T extends { labelCiphertext: string; labelIv: string; label?: string }>(
+      items: T[],
+    ) => {
+      const out: T[] = [];
+      for (const s of items) {
+        try {
+          const label = await decryptText(dek, s.labelCiphertext, s.labelIv, "eaj-label");
+          out.push({ ...s, label });
+        } catch {
+          /* skip */
+        }
       }
-    }
+      return out;
+    };
+    const decrypted = await decryptAll(sug.suggestions);
+    const decryptedRecent = await decryptAll(sug.recent ?? []);
     if (generation !== loadGenerationRef.current) return;
     setSuggestions(decrypted);
+    setRecent(decryptedRecent);
     setLoading(false);
   }, [historyDayId, setSearchParams]);
 
@@ -466,19 +506,56 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [closeCelebration]);
 
-  // Escape closes the add-item modal.
+  // Escape closes the add-item sheet; Tab stays inside (same contract as the
+  // other dialogs). Initial focus lands on the first useful control: the
+  // first addable Recent row when one exists, otherwise the label field.
   useEffect(() => {
     if (!draftSide) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("add-item-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => !el.hasAttribute("disabled"))
+        : [];
+
+    const focusId = window.requestAnimationFrame(() => {
+      const list = focusables();
+      const firstUseful = list.find((el) => el.getAttribute("aria-disabled") !== "true");
+      (firstUseful ?? list[0])?.focus();
+    });
+
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setDraftSide(null);
         setDraftLabel("");
         setDraftCost("20");
         setSuggestNote(null);
+        setAddingRecentId(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      window.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
   }, [draftSide]);
 
   // Escape closes task details; Tab stays inside the dialog (same contract as close celebration).
@@ -763,6 +840,26 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return true;
   }
 
+  /** Copy the most recently closed ledger's plan into this empty day, all or nothing. */
+  async function repeatPreviousPlan() {
+    if (!day || repeatingRef.current) return;
+    repeatingRef.current = true;
+    setRepeating(true);
+    setError(null);
+    try {
+      await api(`/api/days/${day.id}/repeat-previous`, { method: "POST" });
+      await load(undefined, { soft: true });
+    } catch (e) {
+      // A conflict usually means the plan already landed (double submit or
+      // another tab); refresh so the ledger shows reality, then report.
+      await load(undefined, { soft: true }).catch(() => {});
+      setError(e instanceof Error ? e.message : "Could not copy your previous plan.");
+    } finally {
+      repeatingRef.current = false;
+      setRepeating(false);
+    }
+  }
+
   async function startNewDay(): Promise<string | null> {
     setStarting(true);
     setError(null);
@@ -826,6 +923,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setDraftLabel("");
     setDraftCost("20");
     setSuggestNote(null);
+    setAddingRecentId(null);
   }
 
   async function submitDraft() {
@@ -833,6 +931,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const cost = Math.max(0, Math.min(100, Number(draftCost) || 20));
     await addLine(draftSide, draftLabel, cost);
     closeDraft();
+  }
+
+  /** One-tap add from the Recent list. The sheet closes only on success, so a
+   * failure leaves it open with the error visible for another try. */
+  async function addRecent(s: RecentActivity) {
+    if (!s.label || addingRecentRef.current) return;
+    addingRecentRef.current = true;
+    setAddingRecentId(s.id);
+    try {
+      const ok = await addLine(s.side, s.label, s.typicalCost, s.labelHash);
+      if (ok) closeDraft();
+    } finally {
+      addingRecentRef.current = false;
+      setAddingRecentId(null);
+    }
   }
 
   async function updateActual(line: Line, actual: number | null) {
@@ -1446,6 +1559,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
             when you choose to start it.
           </HelpTip>
         </div>
+        {repeatActionVisible(day, isHistoryView) && (
+          <div className="repeat-plan">
+            <button
+              type="button"
+              className="btn secondary repeat-plan-btn"
+              disabled={repeating}
+              aria-busy={repeating || undefined}
+              onClick={() => void repeatPreviousPlan()}
+            >
+              {repeating ? "Copying your plan…" : "Use previous plan"}
+            </button>
+            <p className="muted repeat-plan-note">
+              Copies the plan from your last closed day. You can still edit or add more.
+            </p>
+          </div>
+        )}
         {guide.primary && !closed && (
           <GuideCard
             item={guide.primary}
@@ -1488,11 +1617,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
             droppableId="col-withdrawal"
             className={`withdraw-col${mobileCol !== "withdrawal" ? " mobile-hidden" : ""}`}
             lines={withdrawals}
-            suggestions={suggestions.filter((s) => s.side === "withdrawal")}
             closed={readOnly}
             audit={day.phase === "audit" || (closed && amending)}
             onAdd={() => setDraftSide("withdrawal")}
-            onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
@@ -1504,11 +1631,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
             droppableId="col-deposit"
             className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
-            suggestions={suggestions.filter((s) => s.side === "deposit")}
             closed={readOnly}
             audit={day.phase === "audit" || (closed && amending)}
             onAdd={() => setDraftSide("deposit")}
-            onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
@@ -1676,6 +1801,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           }}
         >
           <form
+            id="add-item-modal"
             className="panel insight-modal"
             role="dialog"
             aria-modal="true"
@@ -1689,13 +1815,68 @@ export function TodayPage({ user }: { user: UserProfile }) {
               {draftSide === "deposit" ? "Add energy" : "Use energy"}
             </h2>
             <p className="muted">Available to allocate · {day.availableCapacity}</p>
+            {(() => {
+              const recentForSide = recent.filter((s) => s.side === draftSide && s.label);
+              if (recentForSide.length === 0) return null;
+              return (
+                <div className="recent-block">
+                  <h3 className="recent-heading" id="recent-heading">
+                    Recent
+                  </h3>
+                  <ul className="recent-list" aria-labelledby="recent-heading">
+                    {recentForSide.map((s) => {
+                      const reason = recentDisabledReason(
+                        s.typicalCost,
+                        day.availableCapacity,
+                        day.phase,
+                      );
+                      const busy = addingRecentId === s.id;
+                      const reasonId = reason ? `recent-reason-${s.id}` : undefined;
+                      // Over-capacity rows use aria-disabled instead of
+                      // disabled so they stay reachable and the visible
+                      // reason is announced via aria-describedby.
+                      return (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            className="recent-row"
+                            disabled={!reason && !!addingRecentId}
+                            aria-disabled={reason ? true : undefined}
+                            aria-describedby={reasonId}
+                            aria-label={
+                              reason
+                                ? `${s.label}, ${s.typicalCost} points`
+                                : `Add ${s.label}, ${s.typicalCost} points`
+                            }
+                            onClick={() => {
+                              if (reason) return;
+                              void addRecent(s);
+                            }}
+                          >
+                            <span className="recent-label">{s.label}</span>
+                            <span className="recent-points">{s.typicalCost}</span>
+                            <span className="recent-add" aria-hidden="true">
+                              {busy ? "…" : "+"}
+                            </span>
+                          </button>
+                          {reason && (
+                            <p id={reasonId} className="recent-reason">
+                              {reason}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })()}
             <div className="field">
               <label htmlFor="draft-label">Activity / experience</label>
               <input
                 id="draft-label"
                 value={draftLabel}
                 onChange={(e) => setDraftLabel(e.target.value)}
-                autoFocus
               />
             </div>
             <div className="field">
@@ -1710,6 +1891,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
               />
               {suggestNote && <p className="muted">{suggestNote}</p>}
             </div>
+            {/* Failures keep the sheet open, so the message must show here. */}
+            {error && <p className="error">{error}</p>}
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button type="submit" className="btn accent">
                 Save to day
@@ -2000,11 +2183,9 @@ function Column(props: {
   droppableId: string;
   className: string;
   lines: Line[];
-  suggestions: Suggestion[];
   closed: boolean;
   audit: boolean;
   onAdd: () => void;
-  onConfirm: (s: Suggestion) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line) => void;
   onRemove: (id: string) => void;
@@ -2046,30 +2227,7 @@ function Column(props: {
           />
         ))}
       </SortableContext>
-      {props.suggestions.map((s) => (
-        <div key={s.id} className="task-row suggestion">
-          <button
-            type="button"
-            className="btn plus confirm-add"
-            disabled={props.closed}
-            aria-label={
-              props.side === "deposit"
-                ? `Add energy: ${s.label}`
-                : `Use energy: ${s.label}`
-            }
-            onClick={() => props.onConfirm(s)}
-          >
-            +
-          </button>
-          <div>
-            <div>{s.label}</div>
-            <div className="task-meta">
-              Suggested {s.typicalCost} · used {s.useCount}×
-            </div>
-          </div>
-        </div>
-      ))}
-      {!props.lines.length && !props.suggestions.length && (
+      {!props.lines.length && (
         <p className="muted">
           {props.side === "withdrawal"
             ? "Nothing using energy yet. Suspiciously well-rested."

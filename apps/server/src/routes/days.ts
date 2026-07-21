@@ -10,7 +10,7 @@ import {
   type AllocatableTask,
   type TaskCosts,
 } from "@eaj/shared";
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, lt, lte, ne, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "../db/index.ts";
 import { dayTable, taskCatalogTable, taskLineTable, userTable } from "../db/schema.ts";
@@ -70,6 +70,102 @@ async function ownedDay(userId: string, dayId: string) {
 }
 
 type WriteDb = Pick<typeof db, "select" | "insert" | "update" | "delete">;
+
+/** Record one live use of an activity, shared by manual line adds and plan repeats. */
+async function upsertCatalogUse(
+  userId: string,
+  day: typeof dayTable.$inferSelect,
+  line: {
+    side: string;
+    labelCiphertext: string;
+    labelIv: string;
+    labelHash: string;
+    plannedCost: number;
+    difficulty: number | null;
+  },
+  executor: WriteDb = db,
+) {
+  if (!line.labelHash) return;
+  const bit = weekdayBit(day.date);
+  const [catalog] = await executor
+    .select()
+    .from(taskCatalogTable)
+    .where(
+      and(
+        eq(taskCatalogTable.userId, userId),
+        eq(taskCatalogTable.labelHash, line.labelHash),
+        eq(taskCatalogTable.side, line.side),
+      ),
+    );
+  if (catalog) {
+    await executor
+      .update(taskCatalogTable)
+      .set({
+        typicalCost: line.plannedCost,
+        useCount: catalog.useCount + 1,
+        difficultyTotal: catalog.difficultyTotal + (line.difficulty ?? 0),
+        difficultyCount: catalog.difficultyCount + (line.difficulty === null ? 0 : 1),
+        lastUsed: day.date,
+        weekdayMask: catalog.weekdayMask | bit,
+        labelCiphertext: line.labelCiphertext,
+        labelIv: line.labelIv,
+      })
+      .where(eq(taskCatalogTable.id, catalog.id));
+  } else {
+    await executor.insert(taskCatalogTable).values({
+      id: newId(),
+      userId,
+      side: line.side,
+      labelCiphertext: line.labelCiphertext,
+      labelIv: line.labelIv,
+      labelHash: line.labelHash,
+      typicalCost: line.plannedCost,
+      weekdayMask: bit,
+      useCount: 1,
+      difficultyTotal: line.difficulty ?? 0,
+      difficultyCount: line.difficulty === null ? 0 : 1,
+      lastUsed: day.date,
+    });
+  }
+}
+
+/** Ledgers strictly earlier than `day` in lifecycle order (startedAt, then id). */
+function strictlyEarlierThan(day: typeof dayTable.$inferSelect) {
+  return or(
+    lt(dayTable.startedAt, day.startedAt),
+    and(eq(dayTable.startedAt, day.startedAt), lt(dayTable.id, day.id)),
+  );
+}
+
+/** Bound history scans so repeat/recent work stays a small ordered window. */
+const PRIOR_LEDGER_WINDOW = 30;
+
+async function priorClosedLedgers(day: typeof dayTable.$inferSelect) {
+  return db
+    .select()
+    .from(dayTable)
+    .where(
+      and(
+        eq(dayTable.userId, day.userId),
+        eq(dayTable.phase, "closed"),
+        strictlyEarlierThan(day),
+      ),
+    )
+    .orderBy(desc(dayTable.startedAt), desc(dayTable.id))
+    .limit(PRIOR_LEDGER_WINDOW);
+}
+
+/**
+ * Repeat source: the most recently closed prior ledger that actually has
+ * tasks. Empty closed ledgers are skipped rather than blocking repeat.
+ */
+async function previousPlanSource(day: typeof dayTable.$inferSelect) {
+  for (const candidate of await priorClosedLedgers(day)) {
+    const lines = await linesForDay(candidate.id);
+    if (lines.length > 0) return { day: candidate, lines };
+  }
+  return null;
+}
 
 async function linesForDay(dayId: string, executor: WriteDb = db) {
   return executor
@@ -257,6 +353,20 @@ function serializeDay(
   };
 }
 
+/**
+ * Serialize plus repeat availability, so every path that can render the
+ * editable day (active, ID fetch, start, repeat) reports the same metadata.
+ * The history scan only runs for an empty planning day.
+ */
+async function serializeDayWithRepeat(
+  day: typeof dayTable.$inferSelect,
+  lines: (typeof taskLineTable.$inferSelect)[],
+) {
+  const canRepeat =
+    day.phase === "plan" && lines.length === 0 && (await previousPlanSource(day)) !== null;
+  return { ...serializeDay(day, lines), repeatAvailable: canRepeat };
+}
+
 export const dayRoutes = new Elysia({ prefix: "/api" })
   .get("/days/active", async ({ request, set }) => {
     const user = await requireFullUser(request);
@@ -278,7 +388,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       day.openingBalance = DAILY_ENERGY;
     }
     const lines = await linesForDay(day.id);
-    return { day: serializeDay(day, lines) };
+    return { day: await serializeDayWithRepeat(day, lines) };
   })
   .post(
     "/days/start",
@@ -305,7 +415,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       try {
         const day = await createDay(user, date);
         set.status = 201;
-        return serializeDay(day, []);
+        return await serializeDayWithRepeat(day, []);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         if (message.includes("day_one_active_per_user") || message.includes("UNIQUE constraint")) {
@@ -370,7 +480,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 404;
       return { error: "Day not found." };
     }
-    return serializeDay(day, await linesForDay(day.id));
+    return await serializeDayWithRepeat(day, await linesForDay(day.id));
   })
   .get("/export/days", async ({ request, set }) => {
     const user = await requireFullUser(request);
@@ -492,44 +602,14 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
 
       await db.insert(taskLineTable).values(newLine);
-      const bit = weekdayBit(day.date);
-      const catalog = await db.query.taskCatalogTable.findFirst({
-        where: and(
-          eq(taskCatalogTable.userId, user.id),
-          eq(taskCatalogTable.labelHash, body.labelHash),
-          eq(taskCatalogTable.side, body.side),
-        ),
+      await upsertCatalogUse(user.id, day, {
+        side: body.side,
+        labelCiphertext: body.labelCiphertext,
+        labelIv: body.labelIv,
+        labelHash: body.labelHash,
+        plannedCost: planned,
+        difficulty,
       });
-      if (catalog) {
-        await db
-          .update(taskCatalogTable)
-          .set({
-            typicalCost: planned,
-            useCount: catalog.useCount + 1,
-            difficultyTotal: catalog.difficultyTotal + (difficulty ?? 0),
-            difficultyCount: catalog.difficultyCount + (difficulty === null ? 0 : 1),
-            lastUsed: day.date,
-            weekdayMask: catalog.weekdayMask | bit,
-            labelCiphertext: body.labelCiphertext,
-            labelIv: body.labelIv,
-          })
-          .where(eq(taskCatalogTable.id, catalog.id));
-      } else {
-        await db.insert(taskCatalogTable).values({
-          id: newId(),
-          userId: user.id,
-          side: body.side,
-          labelCiphertext: body.labelCiphertext,
-          labelIv: body.labelIv,
-          labelHash: body.labelHash,
-          typicalCost: planned,
-          weekdayMask: bit,
-          useCount: 1,
-          difficultyTotal: difficulty ?? 0,
-          difficultyCount: difficulty === null ? 0 : 1,
-          lastUsed: day.date,
-        });
-      }
       return { id };
     },
     {
@@ -832,6 +912,76 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .where(eq(dayTable.id, day.id));
     return { closingBalance: closing, openingBalance: opening, attwood: attwoodTotals(tasks) };
   })
+  .post("/days/:dayId/repeat-previous", async ({ params, request, set }) => {
+    const user = await requireFullUser(request);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    const day = await ownedDay(user.id, params.dayId);
+    if (!day) {
+      set.status = 404;
+      return { error: "Day not found." };
+    }
+    if (day.phase !== "plan") {
+      set.status = 400;
+      return { error: "The previous plan can only be repeated while planning." };
+    }
+    const existing = await linesForDay(day.id);
+    if (existing.length > 0) {
+      set.status = 409;
+      return { error: "This day already has tasks; repeat works on an empty plan." };
+    }
+    const source = await previousPlanSource(day);
+    if (!source) {
+      set.status = 400;
+      return { error: "No previous plan to repeat yet." };
+    }
+    // All-or-nothing: the whole previous plan must fit today's capacity.
+    const plannedTotal = source.lines.reduce((sum, l) => sum + clampCost(l.plannedCost), 0);
+    const avail = availableCapacity(day.openingBalance, []);
+    if (plannedTotal > avail) {
+      set.status = 400;
+      return {
+        error: `The previous plan uses ${plannedTotal} points, and only ${avail} remain available to allocate.`,
+      };
+    }
+    try {
+      await db.transaction(async (tx) => {
+        // Re-check emptiness inside the transaction so a double submit
+        // cannot interleave and copy the plan twice.
+        const current = await linesForDay(day.id, tx);
+        if (current.length > 0) throw new Error("repeat-target-not-empty");
+        // Copy lines without catalog upserts: one repeat tap remembers the
+        // plan but must not bump useCount/ranking like N manual adds.
+        for (const [i, line] of source.lines.entries()) {
+          await tx.insert(taskLineTable).values({
+            id: newId(),
+            dayId: day.id,
+            side: line.side,
+            sort: i,
+            labelCiphertext: line.labelCiphertext,
+            labelIv: line.labelIv,
+            labelHash: line.labelHash,
+            plannedCost: clampCost(line.plannedCost),
+            actualCost: null,
+            completed: false,
+            difficulty: null,
+            detailsCiphertext: null,
+            detailsIv: null,
+          });
+        }
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("repeat-target-not-empty")) {
+        set.status = 409;
+        return { error: "This day already has tasks; repeat works on an empty plan." };
+      }
+      throw e;
+    }
+    const lines = await linesForDay(day.id);
+    return { day: await serializeDayWithRepeat(day, lines) };
+  })
   .get("/suggestions/:dayId", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
     if (!user) {
@@ -869,7 +1019,48 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         difficultyCount: c.difficultyCount,
         lastUsed: c.lastUsed,
       }));
-    return { suggestions };
+
+    // Recent activities come from actual prior-ledger lines (true recency),
+    // newest ledger first, deduplicated by side+label and capped per side.
+    // Exclusion is side-scoped: the same label on the other side stays offered.
+    const existingSideHashes = new Set(
+      lines.filter((l) => l.labelHash).map((l) => `${l.side}:${l.labelHash}`),
+    );
+    const RECENT_PER_SIDE = 5;
+    const recent: {
+      id: string;
+      side: string;
+      labelCiphertext: string;
+      labelIv: string;
+      labelHash: string;
+      typicalCost: number;
+      lastUsed: string;
+    }[] = [];
+    const seen = new Set<string>();
+    const perSide: Record<string, number> = { deposit: 0, withdrawal: 0 };
+    outer: for (const ledger of await priorClosedLedgers(day)) {
+      for (const line of await linesForDay(ledger.id)) {
+        if (!line.labelHash) continue;
+        const key = `${line.side}:${line.labelHash}`;
+        if (existingSideHashes.has(key) || seen.has(key)) continue;
+        if ((perSide[line.side] ?? 0) >= RECENT_PER_SIDE) continue;
+        seen.add(key);
+        perSide[line.side] = (perSide[line.side] ?? 0) + 1;
+        recent.push({
+          id: line.id,
+          side: line.side,
+          labelCiphertext: line.labelCiphertext,
+          labelIv: line.labelIv,
+          labelHash: line.labelHash,
+          typicalCost: line.plannedCost,
+          lastUsed: ledger.date,
+        });
+        if (perSide.deposit! >= RECENT_PER_SIDE && perSide.withdrawal! >= RECENT_PER_SIDE) {
+          break outer;
+        }
+      }
+    }
+    return { suggestions, recent };
   })
   .get(
     "/stats",
