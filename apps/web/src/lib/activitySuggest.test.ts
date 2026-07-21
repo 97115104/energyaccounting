@@ -81,4 +81,21 @@ describe("suggestActivities", () => {
     expect(suggestions.map((s) => s.label)).not.toContain("Try a 5-minute mindfulness pause");
     expect(suggestions.every((s) => s.typicalCost <= 10)).toBe(true);
   });
+
+  test("mentions difficulty only after enough personal ratings", () => {
+    const base = {
+      id: "pause",
+      side: "deposit" as const,
+      label: "Quiet pause",
+      typicalCost: 10,
+      weekdayMask: 127,
+      useCount: 4,
+      lastUsed: "2026-07-19",
+      typicalDifficulty: 3,
+    };
+    const thin = suggestActivities(context({ candidates: [{ ...base, difficultyCount: 2 }] }));
+    const known = suggestActivities(context({ candidates: [{ ...base, difficultyCount: 3 }] }));
+    expect(thin[0]?.reason).not.toContain("difficulty");
+    expect(known[0]?.reason).toContain("3/10 for difficulty");
+  });
 });

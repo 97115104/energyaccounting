@@ -84,6 +84,7 @@ type Step = {
   thesis: string;
   whisper: string;
   glyph: ReactNode;
+  source?: { label: string; url: string };
   setup?: boolean;
 };
 
@@ -92,7 +93,22 @@ const STEPS: Step[] = [
     eyebrow: "The idea",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow — like money, but you can't borrow from a bank.",
+      "An energy accounting journal built for neurodivergent brains. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow, like money with no outside bank.",
+    glyph: <SunGlyph />,
+  },
+  {
+    eyebrow: "The method",
+    thesis: "The ledger has roots.",
+    whisper:
+      "Maja Toudal and Dr. Tony Attwood developed Energy Accounting as a way to make deposits, withdrawals, and finite capacity visible enough to plan around.",
+    glyph: <LedgerGlyph />,
+    source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
+  },
+  {
+    eyebrow: "The hidden load",
+    thesis: "The iceberg counts.",
+    whisper:
+      "Dr. Samantha Hiew's Tip of the ADHD Iceberg framing keeps invisible work in view, including sensory input, masking, executive-function effort, and recovery. Use difficulty ratings and private notes when that hidden load matters.",
     glyph: <SunGlyph />,
   },
   {
@@ -103,10 +119,24 @@ const STEPS: Step[] = [
     glyph: <LedgerGlyph />,
   },
   {
-    eyebrow: "The payoff",
-    thesis: "Done frees energy.",
+    eyebrow: "Reusable capacity",
+    thesis: "Done frees capacity.",
     whisper:
-      "Unfinished tasks reserve points from your balance. Check one off and those points come back — spend them on something new, or bank them. Both count as winning.",
+      "Unfinished tasks reserve planned points. Completing one releases that reservation for reuse, while every other pending task keeps its own reservation. Completion frees capacity and does not mint new energy.",
+    glyph: <CheckGlyph />,
+  },
+  {
+    eyebrow: "Machine intelligence",
+    thesis: "Your patterns stay useful.",
+    whisper:
+      "The app tries exact history first, then local text similarity when available. It ranks familiar deposits from your weekday, capacity, weather, and past use, while numeric trends power gentle observations.",
+    glyph: <LedgerGlyph />,
+  },
+  {
+    eyebrow: "The boundary",
+    thesis: "Helpful, with limits.",
+    whisper:
+      "Suggestions are editable estimates and improve only when enough history exists. Labels, journals, task details, and audio are encrypted before upload, while numeric totals remain available for private trend calculations.",
     glyph: <CheckGlyph />,
   },
   {
@@ -249,6 +279,12 @@ export function OnboardingPage({ user, onUser }: Props) {
             {current.thesis}
           </h2>
           <p className="ob-whisper">{current.whisper}</p>
+          {current.source && (
+            <a href={current.source.url} target="_blank" rel="noreferrer" className="ob-source">
+              {current.source.label}
+              <span aria-hidden="true"> ↗</span>
+            </a>
+          )}
           {current.setup && (
             <div className="ob-setup">
               <div className="field">

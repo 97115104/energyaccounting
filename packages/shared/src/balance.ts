@@ -21,6 +21,12 @@ export function clampCost(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+/** Optional personal reflection score; null means the task was not rated. */
+export function clampDifficulty(n: number | null | undefined): number | null {
+  if (n === null || n === undefined || !Number.isFinite(n)) return null;
+  return Math.max(1, Math.min(10, Math.round(n)));
+}
+
 export function effectiveCost(t: TaskCosts): number {
   return clampCost(t.actual ?? t.planned);
 }
@@ -67,6 +73,11 @@ export function reservedCapacity(tasks: AllocatableTask[]): number {
     sum += clampCost(t.planned);
   }
   return sum;
+}
+
+/** Planned points released by completed work, tracked separately from balance. */
+export function completedFreedEnergy(tasks: AllocatableTask[]): number {
+  return tasks.reduce((sum, task) => sum + (task.completed ? clampCost(task.planned) : 0), 0);
 }
 
 /** Points free to allocate to new tasks after incomplete reservations. */

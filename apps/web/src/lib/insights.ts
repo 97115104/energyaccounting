@@ -19,6 +19,11 @@ export type StatPoint = {
   phase: string;
   taskCount: number;
   completedCount: number;
+  pendingReservedEnergy?: number;
+  completedFreedEnergy?: number;
+  availableCapacity?: number;
+  avgDifficulty?: number | null;
+  difficultyRatedCount?: number;
   plannedTotal: number;
   actualTotal: number;
 };
@@ -94,6 +99,21 @@ export function closeDayInsights(series: StatPoint[], date: string): Insight[] {
         id: "best-balance",
         tone: "celebrate",
         text: `Highest closing balance in ${Math.min(recent.length, 21)} closed days. The bank approves.`,
+      });
+    }
+
+    // High completion on a day that felt hard on average.
+    if (
+      today.avgDifficulty != null &&
+      today.avgDifficulty >= 7 &&
+      today.completedCount >= 2 &&
+      today.difficultyRatedCount != null &&
+      today.difficultyRatedCount >= 2
+    ) {
+      out.push({
+        id: "hard-and-done",
+        tone: "celebrate",
+        text: `Average difficulty ${today.avgDifficulty}/10 and you still finished ${today.completedCount}. That is not nothing.`,
       });
     }
 

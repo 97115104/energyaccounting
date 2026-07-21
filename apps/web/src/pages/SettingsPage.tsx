@@ -259,8 +259,8 @@ export function SettingsPage({ user, onUser }: Props) {
       <div className="panel" style={{ marginTop: "1rem" }}>
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Export</h2>
         <p className="muted">
-          Download a decrypted JSON corpus of your days, journals, and catalog. The file is formatted
-          for optional future model training on your own machine.
+          Download a decrypted JSON corpus of your days, task details, journals, and catalog. The
+          file is sensitive and formatted for optional future model training on your own machine.
         </p>
         <button
           type="button"

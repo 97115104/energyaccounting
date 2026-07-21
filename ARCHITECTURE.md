@@ -48,19 +48,19 @@ A request from the client carries an httpOnly session cookie. The server resolve
 
 ## The encryption boundary
 
-The client derives a key-encryption key (KEK) from the password with Argon2id and unwraps a data-encryption key (DEK) that was generated in the browser at registration. For convenience, the unlocked DEK is cached in the browser profile for at most 24 hours so refreshes and browser restarts preserve the session; explicit logout and expiry clear it. This weakens at-rest protection on the local browser profile compared with memory-only storage, but labels remain encrypted on the wire and server. Text that could identify what a user actually did is encrypted with AES-GCM before upload; numbers stay clear so the server can chart and aggregate without reading anything personal.
+The client derives a key-encryption key (KEK) from the password with Argon2id and unwraps a data-encryption key (DEK) that was generated in the browser at registration. For convenience, the unlocked DEK is cached in the browser profile for at most 24 hours so refreshes and browser restarts preserve the session; explicit logout and expiry clear it. This weakens at-rest protection on the local browser profile compared with memory-only storage, but labels remain encrypted on the wire and server. Text that could identify what a user actually did is encrypted with AES-GCM before upload; numbers stay clear so the server can chart and aggregate without reading anything personal. Per-task free-form details follow the encrypted boundary, while the optional 1 to 10 difficulty rating stays numeric so local insights can compare it without reading the note.
 
 ```mermaid
 flowchart LR
   subgraph client [Client-side plaintext]
     labels["Task labels"]
-    journalText["Journal and compensate notes"]
+    journalText["Journal, task details, and compensate notes"]
     audio["Voice recordings"]
   end
   subgraph wire [Crosses the network and rests in SQLite]
     cipher["AES-GCM ciphertext + IV"]
     hash["SHA-256 label hash (correlation handle)"]
-    numbers["Costs, balances, completion flags, feel rating, phase, weather, dates"]
+    numbers["Costs, balances, completion flags, difficulty, feel rating, phase, weather, dates"]
   end
   labels --> cipher
   labels --> hash

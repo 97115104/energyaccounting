@@ -3,6 +3,8 @@ import {
   UNLOCK_TTL_MS,
   forgetAllRememberedSessionDeks,
   forgetRememberedSessionDek,
+  decryptText,
+  encryptText,
   generateDek,
   getSessionDek,
   rememberSessionDek,
@@ -63,5 +65,16 @@ describe("remembered journal unlock", () => {
     expect(values.has("eaj-unlock-v1:user-1")).toBe(false);
     forgetAllRememberedSessionDeks();
     expect(values.size).toBe(0);
+  });
+
+  test("task details use a dedicated authenticated domain", async () => {
+    const dek = await generateDek();
+    const encrypted = await encryptText(dek, "The noise made this harder.", "eaj-task-details");
+    expect(
+      await decryptText(dek, encrypted.ciphertext, encrypted.iv, "eaj-task-details"),
+    ).toBe("The noise made this harder.");
+    await expect(
+      decryptText(dek, encrypted.ciphertext, encrypted.iv, "eaj-journal"),
+    ).rejects.toThrow();
   });
 });

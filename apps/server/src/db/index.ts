@@ -25,6 +25,31 @@ try {
   /* column exists */
 }
 try {
+  sqlite.exec("ALTER TABLE task_line_table ADD COLUMN difficulty INTEGER");
+} catch {
+  /* column exists */
+}
+try {
+  sqlite.exec("ALTER TABLE task_line_table ADD COLUMN details_ciphertext TEXT");
+} catch {
+  /* column exists */
+}
+try {
+  sqlite.exec("ALTER TABLE task_line_table ADD COLUMN details_iv TEXT");
+} catch {
+  /* column exists */
+}
+try {
+  sqlite.exec("ALTER TABLE task_catalog_table ADD COLUMN difficulty_total INTEGER NOT NULL DEFAULT 0");
+} catch {
+  /* column exists */
+}
+try {
+  sqlite.exec("ALTER TABLE task_catalog_table ADD COLUMN difficulty_count INTEGER NOT NULL DEFAULT 0");
+} catch {
+  /* column exists */
+}
+try {
   sqlite.exec(
     "ALTER TABLE user_table ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 1",
   );
@@ -113,7 +138,10 @@ CREATE TABLE IF NOT EXISTS task_line_table (
   label_hash TEXT NOT NULL DEFAULT '',
   planned_cost INTEGER NOT NULL,
   actual_cost INTEGER,
-  completed INTEGER NOT NULL DEFAULT 0
+  completed INTEGER NOT NULL DEFAULT 0,
+  difficulty INTEGER,
+  details_ciphertext TEXT,
+  details_iv TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_catalog_table (
@@ -126,6 +154,8 @@ CREATE TABLE IF NOT EXISTS task_catalog_table (
   typical_cost INTEGER NOT NULL DEFAULT 20,
   weekday_mask INTEGER NOT NULL DEFAULT 127,
   use_count INTEGER NOT NULL DEFAULT 1,
+  difficulty_total INTEGER NOT NULL DEFAULT 0,
+  difficulty_count INTEGER NOT NULL DEFAULT 0,
   last_used TEXT NOT NULL
 );
 

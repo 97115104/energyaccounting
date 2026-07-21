@@ -1,5 +1,6 @@
 import { isoDate } from "@eaj/shared";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
 import { closeDayInsights, planningHint, type Insight, type StatPoint } from "../lib/insights";
@@ -10,6 +11,64 @@ type Point = StatPoint & {
 };
 
 type Range = "day" | "week" | "month" | "year";
+
+/** Monday (local) of the calendar week containing dateIso. */
+function weekStartIso(dateIso: string): string {
+  const d = new Date(dateIso + "T12:00:00");
+  const day = d.getDay(); // 0 Sunday
+  const delta = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + delta);
+  return isoDate(d);
+}
+
+function summarizeGroup(group: Point[]): Point {
+  const mean = (pick: (point: Point) => number) =>
+    Math.round((group.reduce((sum, point) => sum + pick(point), 0) / group.length) * 10) / 10;
+  const rated = group.filter((point) => point.avgDifficulty != null);
+  return {
+    ...group[group.length - 1]!,
+    date: group[group.length - 1]!.date,
+    openingBalance: group[0]!.openingBalance,
+    closingBalance: mean((point) => point.closingBalance),
+    attwoodNet: mean((point) => point.attwoodNet),
+    depositTotal: group.reduce((sum, point) => sum + point.depositTotal, 0),
+    withdrawalTotal: group.reduce((sum, point) => sum + point.withdrawalTotal, 0),
+    taskCount: group.reduce((sum, point) => sum + point.taskCount, 0),
+    completedCount: group.reduce((sum, point) => sum + point.completedCount, 0),
+    plannedTotal: group.reduce((sum, point) => sum + point.plannedTotal, 0),
+    actualTotal: group.reduce((sum, point) => sum + point.actualTotal, 0),
+    pendingReservedEnergy: group.at(-1)?.pendingReservedEnergy,
+    completedFreedEnergy: group.reduce(
+      (sum, point) => sum + (point.completedFreedEnergy ?? 0),
+      0,
+    ),
+    availableCapacity: group.at(-1)?.availableCapacity,
+    avgDifficulty: rated.length
+      ? Math.round(
+          (rated.reduce((sum, point) => sum + (point.avgDifficulty ?? 0), 0) / rated.length) * 10,
+        ) / 10
+      : null,
+    difficultyRatedCount: group.reduce(
+      (sum, point) => sum + (point.difficultyRatedCount ?? 0),
+      0,
+    ),
+    isHoliday: group.some((point) => point.isHoliday),
+    weather: null,
+  };
+}
+
+/** Dense year ranges collapse to calendar-week averages so the chart stays readable. */
+function bucketSeries(series: Point[]): Point[] {
+  if (series.length <= 62) return series;
+  const groups = new Map<string, Point[]>();
+  for (const point of series) {
+    const key = weekStartIso(point.date);
+    const list = groups.get(key);
+    if (list) list.push(point);
+    else groups.set(key, [point]);
+  }
+  return [...groups.values()].map(summarizeGroup);
+}
 
 function rangeBounds(kind: Range): { from: string; to: string } {
   const to = isoDate();
@@ -29,13 +88,19 @@ export function DashboardPage({ user }: { user: UserProfile }) {
   // silently scoped to whatever chart range the user clicked.
   const [insightSeries, setInsightSeries] = useState<StatPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const navigate = useNavigate();
   const tempUnit = user.temperatureUnit ?? defaultTemperatureUnit(user.country);
 
   useEffect(() => {
     const { from, to } = rangeBounds(range);
+    setLoading(true);
+    setError(null);
     void api<{ series: Point[] }>(`/api/stats?from=${from}&to=${to}`)
       .then((r) => setSeries(r.series))
-      .catch((e) => setError(e instanceof Error ? e.message : "Stats failed"));
+      .catch((e) => setError(e instanceof Error ? e.message : "Stats failed"))
+      .finally(() => setLoading(false));
   }, [range]);
 
   useEffect(() => {
@@ -48,11 +113,12 @@ export function DashboardPage({ user }: { user: UserProfile }) {
       .catch(() => undefined);
   }, []);
 
+  const displayed = useMemo(() => bucketSeries(series), [series]);
   const maxAbs = useMemo(() => {
     let m = 1;
-    for (const p of series) m = Math.max(m, Math.abs(p.closingBalance), Math.abs(p.attwoodNet));
+    for (const p of displayed) m = Math.max(m, Math.abs(p.closingBalance), Math.abs(p.attwoodNet));
     return m;
-  }, [series]);
+  }, [displayed]);
 
   const avgClose = series.length
     ? Math.round(series.reduce((a, p) => a + p.closingBalance, 0) / series.length)
@@ -65,12 +131,30 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     if (hint && !out.some((i) => i.id === hint.id)) out.push(hint);
     return out.slice(0, 3);
   }, [insightSeries]);
+  const latest = series.find((p) => p.date === isoDate()) ?? series.at(-1);
+  const bucketing = displayed.length < series.length;
+  const completionRate = series.reduce((sum, point) => sum + point.taskCount, 0)
+    ? Math.round(
+        (series.reduce((sum, point) => sum + point.completedCount, 0) /
+          series.reduce((sum, point) => sum + point.taskCount, 0)) *
+          100,
+      )
+    : 0;
+  const takeaway = latest
+    ? latest.closingBalance >= avgClose
+      ? `Latest close is ${latest.closingBalance}, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
+      : `Latest close is ${latest.closingBalance}, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
+    : "Close a day to begin building a useful energy history.";
 
   return (
-    <div>
-      <div className="panel">
-        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Energy balance</h2>
-        <div className="phase-bar">
+    <div className="dashboard">
+      <section className="panel dashboard-hero">
+        <div className="dashboard-heading">
+          <div>
+            <p className="ob-eyebrow">Energy briefing</p>
+            <h2>{takeaway}</h2>
+          </div>
+          <div className="phase-bar dashboard-range" aria-label="Dashboard range">
           {(["day", "week", "month", "year"] as Range[]).map((r) => (
             <button
               key={r}
@@ -81,66 +165,99 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               {r}
             </button>
           ))}
+          </div>
         </div>
         {error && <p className="error">{error}</p>}
-        <div className="stats">
-          <div className="stat">
-            <div className="label">Days</div>
-            <div className="value">{series.length}</div>
+        {loading && <p className="muted">Reading the ledger…</p>}
+        <div className="dashboard-primary">
+          <div>
+            <span className="dashboard-value">{latest?.closingBalance ?? "—"}</span>
+            <span className="muted">latest closing balance</span>
           </div>
-          <div className="stat">
-            <div className="label">Avg closing</div>
-            <div className="value">{avgClose}</div>
-          </div>
-          <div className="stat">
-            <div className="label">Holidays</div>
-            <div className="value">{series.filter((p) => p.isHoliday).length}</div>
-          </div>
-          <div className="stat">
-            <div className="label">Latest Attwood net</div>
-            <div className="value">{series.at(-1)?.attwoodNet ?? "-"}</div>
-          </div>
+          <p>{completionRate}% of planned lines completed in this period.</p>
         </div>
-        <p className="muted" style={{ marginTop: "1rem" }}>
-          Bars show closing balance. Orange ticks mark holidays. Weather is from Open-Meteo when a
-          location is set in Settings.
-        </p>
-        <div className="chart" aria-label="Closing balance chart">
-          {series.map((p) => {
-            const h = Math.max(4, (Math.abs(p.closingBalance) / maxAbs) * 140);
-            const delta = p.closingBalance - avgClose;
-            const deltaText =
-              series.length > 1
-                ? `, ${delta >= 0 ? "+" : ""}${delta} vs period average`
-                : "";
+        <div
+          className="balance-chart"
+          role="group"
+          aria-label={
+            bucketing
+              ? "Weekly average closing balance by week"
+              : "Signed closing balance by date"
+          }
+        >
+          <div className="balance-zero" aria-hidden="true" />
+          {displayed.map((p) => {
+            const height = Math.max(3, (Math.abs(p.closingBalance) / maxAbs) * 48);
+            const positive = p.closingBalance >= 0;
+            const weekLabel = bucketing ? weekStartIso(p.date) : p.date;
             return (
-              <div
+              <button
                 key={p.date}
-                className={`bar ${p.closingBalance < 0 ? "neg" : ""} ${p.isHoliday ? "holiday" : ""}`}
-                style={{ height: h }}
-                title={`${p.date}: close ${p.closingBalance}${deltaText}, net ${p.attwoodNet}, ${p.completedCount}/${p.taskCount} done${
-                  p.weather?.tempMax != null ? `, max ${formatTemp(p.weather.tempMax, tempUnit)}` : ""
-                }`}
-              />
+                type="button"
+                className={`balance-mark ${positive ? "positive" : "negative"} ${p.isHoliday ? "holiday" : ""}`}
+                aria-label={
+                  bucketing
+                    ? `Week of ${weekLabel}, average close ${p.closingBalance}. Opens ${p.date}.`
+                    : `${p.date}, closing balance ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
+                }
+                title={
+                  bucketing
+                    ? `Week of ${weekLabel}: avg close ${p.closingBalance} (opens ${p.date})`
+                    : `${p.date}: close ${p.closingBalance}, net ${p.attwoodNet}`
+                }
+                onClick={() => navigate(`/?date=${p.date}`)}
+              >
+                <span
+                  className="balance-mark-bar"
+                  style={{ height: `${height}%` }}
+                  aria-hidden="true"
+                />
+              </button>
             );
           })}
-          {!series.length && <p className="muted">No closed or planned days in this range yet.</p>}
+          {!loading && !series.length && (
+            <p className="muted dashboard-empty">No planned or closed days in this range yet.</p>
+          )}
         </div>
-      </div>
+        <div className="chart-caption">
+          <span>Negative</span>
+          <span>{bucketing ? "Calendar-week averages" : "Daily closes"}</span>
+          <span>Positive</span>
+        </div>
+      </section>
+
+      <section className="panel capacity-platter">
+        <div>
+          <p className="ob-eyebrow">Reusable capacity</p>
+          <h2>Completed work releases reservations for reuse.</h2>
+          <p className="muted">Freed points are throughput, and they do not increase the balance.</p>
+        </div>
+        <div className="capacity-values">
+          <div><strong>{latest?.availableCapacity ?? 0}</strong><span>Available on latest day</span></div>
+          <div><strong>{latest?.pendingReservedEnergy ?? 0}</strong><span>Still reserved</span></div>
+          <div><strong>{latest?.completedFreedEnergy ?? 0}</strong><span>Freed on that day</span></div>
+        </div>
+      </section>
 
       {insights.length > 0 && (
-        <div className="panel" style={{ marginTop: "1rem" }}>
+        <section className="panel dashboard-insights">
           <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Insights</h2>
           {insights.map((i) => (
             <div key={i.id} className={`tip-card insight-${i.tone}`}>
               <p style={{ margin: 0 }}>{i.text}</p>
             </div>
           ))}
-        </div>
+        </section>
       )}
 
-      <div className="panel" style={{ marginTop: "1rem" }}>
-        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Day detail</h2>
+      <section className="panel dashboard-days">
+        <div className="dashboard-heading">
+          <h2>All days</h2>
+          <button type="button" className="btn secondary" onClick={() => setDetailsOpen((open) => !open)}>
+            {detailsOpen ? "Hide details" : "Show details"}
+          </button>
+        </div>
+        {detailsOpen && (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -161,7 +278,20 @@ export function DashboardPage({ user }: { user: UserProfile }) {
             </thead>
             <tbody>
               {series.map((p) => (
-                <tr key={p.date}>
+                <tr
+                  key={p.date}
+                  className="dashboard-day-row"
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open ledger for ${p.date}`}
+                  onClick={() => navigate(`/?date=${p.date}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(`/?date=${p.date}`);
+                    }
+                  }}
+                >
                   <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>{p.date}</td>
                   <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.closingBalance}
@@ -185,7 +315,8 @@ export function DashboardPage({ user }: { user: UserProfile }) {
             </tbody>
           </table>
         </div>
-      </div>
+        )}
+      </section>
     </div>
   );
 }

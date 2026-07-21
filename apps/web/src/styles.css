@@ -769,6 +769,27 @@ html[data-theme="night"] .task-row.completed {
   text-decoration-color: color-mix(in srgb, currentColor 65%, transparent);
 }
 
+.task-detail-trigger {
+  appearance: none;
+  font: inherit;
+  min-width: 0;
+  border: 0;
+  padding: 0.3rem;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-detail-trigger:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.task-detail-trigger:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
 .task-actions {
   display: flex;
   gap: 0.35rem;
@@ -1054,6 +1075,198 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   background: var(--accent);
 }
 
+.dashboard {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard h2 {
+  font-family: var(--display);
+  margin: 0;
+}
+
+.dashboard-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dashboard-range {
+  min-width: min(340px, 100%);
+  margin: 0;
+}
+
+.dashboard-primary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem 0 0.75rem;
+}
+
+.dashboard-primary > div {
+  display: grid;
+}
+
+.dashboard-value {
+  font-family: var(--display);
+  font-size: clamp(2.4rem, 8vw, 4.5rem);
+  line-height: 1;
+}
+
+.balance-chart {
+  position: relative;
+  height: 260px;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  overflow-x: auto;
+}
+
+.balance-zero {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: 50%;
+  border-top: 1px solid var(--muted);
+  pointer-events: none;
+}
+
+.balance-mark {
+  appearance: none;
+  position: relative;
+  align-self: stretch;
+  flex: 1 0 16px;
+  min-width: 16px;
+  max-width: 36px;
+  min-height: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: stretch;
+}
+
+.balance-mark-bar {
+  display: block;
+  width: 100%;
+  min-height: 3%;
+  margin-top: auto;
+  pointer-events: none;
+}
+
+.balance-mark.positive .balance-mark-bar {
+  margin-top: auto;
+  margin-bottom: 0;
+  background: var(--deposit);
+  align-self: flex-end;
+}
+
+.balance-mark.negative .balance-mark-bar {
+  margin-top: 0;
+  margin-bottom: auto;
+  background: var(--withdraw);
+  align-self: flex-start;
+}
+
+.balance-mark.holiday::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--accent);
+}
+
+.balance-mark.positive.holiday::after {
+  bottom: 2px;
+}
+
+.balance-mark.negative.holiday::after {
+  top: 2px;
+}
+
+.dashboard-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.chart-caption,
+.capacity-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.chart-caption {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.capacity-platter {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr);
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.capacity-values > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.capacity-values strong {
+  font-family: var(--display);
+  font-size: 2rem;
+}
+
+.capacity-values span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.dashboard-day-row {
+  cursor: pointer;
+}
+
+.dashboard-day-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.dashboard-day-row:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -3px;
+}
+
+@media (max-width: 719px) {
+  .dashboard-heading,
+  .dashboard-primary,
+  .capacity-platter {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-range {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .capacity-values {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .auth-card {
   max-width: 420px;
   margin: 2rem auto;
@@ -1175,6 +1388,98 @@ html[data-theme="night"] .tips-fab {
   max-height: 60vh;
   overflow: auto;
   animation: sheet-in 0.22s cubic-bezier(0.32, 0.72, 0.35, 1.1);
+}
+
+.action-tip {
+  position: fixed;
+  top: auto;
+  right: 1rem;
+  bottom: 5.75rem;
+  z-index: 55;
+  width: min(430px, calc(100vw - 2rem));
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 36px;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--ink);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+
+.action-tip-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.action-tip-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.action-tip-copy .linkish {
+  justify-self: start;
+  margin-top: 0.25rem;
+}
+
+.action-tip-dismiss {
+  width: 36px;
+  height: 36px;
+}
+
+.task-detail-modal {
+  width: min(560px, 100%);
+}
+
+.difficulty-field {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.difficulty-field legend {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.difficulty-scale {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.35rem;
+}
+
+@media (min-width: 520px) {
+  .difficulty-scale {
+    grid-template-columns: repeat(10, 1fr);
+  }
+}
+
+.difficulty-scale .btn {
+  min-width: 0;
+  padding-inline: 0.35rem;
+}
+
+.difficulty-anchors,
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.difficulty-anchors {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.modal-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 @keyframes sheet-in {

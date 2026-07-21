@@ -7,11 +7,13 @@ export type {
 
 export {
   clampCost,
+  clampDifficulty,
   effectiveCost,
   attwoodTotals,
   openingBalance,
   closingBalance,
   reservedCapacity,
+  completedFreedEnergy,
   availableCapacity,
   isWithdrawalHeavy,
   isoDate,

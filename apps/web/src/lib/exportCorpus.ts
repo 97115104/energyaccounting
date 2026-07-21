@@ -11,6 +11,9 @@ type ExportLine = {
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
+  difficulty: number | null;
+  detailsCiphertext: string | null;
+  detailsIv: string | null;
   label?: string;
 };
 
@@ -46,6 +49,8 @@ type ExportPayload = {
     typicalCost: number;
     weekdayMask: number;
     useCount: number;
+    typicalDifficulty: number | null;
+    difficultyCount: number;
     lastUsed: string;
   }>;
 };
@@ -66,6 +71,19 @@ export async function downloadTrainingCorpus(): Promise<void> {
       } catch {
         label = "";
       }
+      let details: string | null = null;
+      if (l.detailsCiphertext && l.detailsIv) {
+        try {
+          details = await decryptText(
+            dek,
+            l.detailsCiphertext,
+            l.detailsIv,
+            "eaj-task-details",
+          );
+        } catch {
+          details = null;
+        }
+      }
       lines.push({
         id: l.id,
         side: l.side,
@@ -75,6 +93,8 @@ export async function downloadTrainingCorpus(): Promise<void> {
         plannedCost: l.plannedCost,
         actualCost: l.actualCost,
         completed: l.completed,
+        difficulty: l.difficulty,
+        details,
       });
     }
     let journal: string | null = null;
@@ -131,6 +151,8 @@ export async function downloadTrainingCorpus(): Promise<void> {
       typicalCost: c.typicalCost,
       weekdayMask: c.weekdayMask,
       useCount: c.useCount,
+      typicalDifficulty: c.typicalDifficulty,
+      difficultyCount: c.difficultyCount,
       lastUsed: c.lastUsed,
     });
   }

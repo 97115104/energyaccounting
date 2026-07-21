@@ -60,6 +60,19 @@ describe("closeDayInsights", () => {
     expect(ids).toContain("above-average-completed");
   });
 
+  test("celebrates high average difficulty with real completions", () => {
+    const series = [
+      ...history("2026-07-20", 10),
+      day("2026-07-20", {
+        avgDifficulty: 8,
+        difficultyRatedCount: 3,
+        completedCount: 3,
+      }),
+    ];
+    const ids = closeDayInsights(series, "2026-07-20").map((i) => i.id);
+    expect(ids).toContain("hard-and-done");
+  });
+
   test("a deficit day with no other wins gets the gentle framing, never shame", () => {
     const series = [day("2026-07-20", { openingBalance: 100, closingBalance: 70 })];
     const insights = closeDayInsights(series, "2026-07-20");

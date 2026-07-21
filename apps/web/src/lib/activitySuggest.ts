@@ -7,6 +7,8 @@ export type ActivityCandidate = {
   typicalCost: number;
   weekdayMask: number;
   useCount: number;
+  typicalDifficulty?: number | null;
+  difficultyCount?: number;
   lastUsed: string;
 };
 
@@ -81,6 +83,12 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
     if ((candidate.weekdayMask & weekday) !== 0) score += 6;
     if (recentEnough(candidate.lastUsed, ctx.date)) score += 3;
     if (outdoor) score += lowUv ? 10 : 6;
+    const difficultyKnown =
+      (candidate.difficultyCount ?? 0) >= 3 && candidate.typicalDifficulty != null;
+    if (difficultyKnown) {
+      const easeNudge = 6 - candidate.typicalDifficulty!;
+      score += (ctx.withdrawalHeavy || ctx.available < 25 ? 2 : 1) * easeNudge;
+    }
     if (score <= 0) continue;
 
     const conditionReason =
@@ -93,7 +101,11 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       id: `familiar:${candidate.id}`,
       label,
       typicalCost: candidate.typicalCost,
-      reason: `You have used this deposit ${candidate.useCount}×.${conditionReason}`,
+      reason: `You have used this deposit ${candidate.useCount}×.${conditionReason}${
+        difficultyKnown
+          ? ` You usually rate it ${candidate.typicalDifficulty}/10 for difficulty.`
+          : ""
+      }`,
       research: "Personal history, ranked locally on this device.",
       sourceUrl: "",
       familiar: true,

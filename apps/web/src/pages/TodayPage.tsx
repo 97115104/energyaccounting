@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { suggestActivities } from "../lib/activitySuggest";
 import { api } from "../lib/api";
@@ -55,6 +56,10 @@ type Line = {
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
+  difficulty: number | null;
+  detailsCiphertext: string | null;
+  detailsIv: string | null;
+  details?: string;
   label?: string;
 };
 
@@ -67,6 +72,8 @@ type Suggestion = {
   typicalCost: number;
   weekdayMask: number;
   useCount: number;
+  typicalDifficulty: number | null;
+  difficultyCount: number;
   lastUsed: string;
   label?: string;
 };
@@ -140,7 +147,15 @@ function LightbulbIcon() {
 }
 
 export function TodayPage({ user }: { user: UserProfile }) {
-  const [date, setDate] = useState(isoDate());
+  const [params, setSearchParams] = useSearchParams();
+  const dateParam = params.get("date");
+  // URL is source of truth so Dashboard deep-links and the Today nav stay aligned.
+  const date =
+    dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : isoDate();
+  function setDate(next: string) {
+    if (next === isoDate()) setSearchParams({}, { replace: true });
+    else setSearchParams({ date: next }, { replace: true });
+  }
   const [day, setDay] = useState<DayPayload | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -148,11 +163,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [compensate, setCompensate] = useState("");
   const [listening, setListening] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [detailLineId, setDetailLineId] = useState<string | null>(null);
+  const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
+  const [detailText, setDetailText] = useState("");
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [dismissedTipIds, setDismissedTipIds] = useState<Set<string>>(() => new Set());
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
   const [justFreed, setJustFreed] = useState<number | undefined>();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dndBusy, setDndBusy] = useState(false);
+  // Swallow the click that browsers fire immediately after a drag ends.
+  const suppressOpenRef = useRef(false);
   // End-of-day insights modal, populated when the day closes.
   const [closeCelebration, setCloseCelebration] = useState<{
     closingBalance: number;
@@ -176,6 +198,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setJustFreed(undefined);
     setCloseCelebration(null);
     setHint(null);
+    setDetailLineId(null);
+    setDismissedTipIds(new Set());
   }, [date]);
 
   useEffect(() => {
@@ -201,9 +225,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
     for (const l of d.lines) {
       try {
         const label = await decryptText(dek, l.labelCiphertext, l.labelIv, "eaj-label");
-        lines.push({ ...l, completed: !!l.completed, label });
+        let details = "";
+        if (l.detailsCiphertext && l.detailsIv) {
+          try {
+            details = await decryptText(
+              dek,
+              l.detailsCiphertext,
+              l.detailsIv,
+              "eaj-task-details",
+            );
+          } catch {
+            details = "";
+          }
+        }
+        lines.push({ ...l, completed: !!l.completed, label, details });
       } catch {
-        lines.push({ ...l, completed: !!l.completed, label: "(unable to decrypt)" });
+        lines.push({ ...l, completed: !!l.completed, label: "(unable to decrypt)", details: "" });
       }
     }
     setDay({ ...d, lines });
@@ -330,6 +367,51 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [draftSide]);
 
+  // Escape closes task details; Tab stays inside the dialog (same contract as close celebration).
+  useEffect(() => {
+    if (!detailLineId) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("task-detail-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => !el.hasAttribute("disabled"))
+        : [];
+
+    const focusId = window.requestAnimationFrame(() => {
+      const first = focusables()[0];
+      first?.focus();
+    });
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDetailLineId(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      window.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [detailLineId]);
+
   function dismissHint() {
     setHint(null);
     try {
@@ -427,19 +509,60 @@ export function TodayPage({ user }: { user: UserProfile }) {
     });
   }, [day, date, weatherKind, uvMax, currentSkyPeriod, playHeavy, suggestions]);
 
+  const detailLine = day?.lines.find((line) => line.id === detailLineId) ?? null;
+  const promptSuggestion = activitySuggestions.find(
+    (suggestion) => !dismissedTipIds.has(suggestion.id),
+  );
+
+  function openTaskDetails(line: Line) {
+    if (dndBusy || activeDragId || suppressOpenRef.current) return;
+    setDetailLineId(line.id);
+    setDetailDifficulty(line.difficulty);
+    setDetailText(line.details ?? "");
+    setDetailError(null);
+    setTipsOpen(false);
+  }
+
+  function dismissPrompt(id: string) {
+    setDismissedTipIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    try {
+      localStorage.setItem(`eaj-tip-dismissed:${date}:${id}`, "1");
+    } catch {
+      // The prompt can reappear after reload when storage is unavailable.
+    }
+  }
+
+  useEffect(() => {
+    const dismissed = new Set<string>();
+    for (const suggestion of activitySuggestions) {
+      try {
+        if (localStorage.getItem(`eaj-tip-dismissed:${date}:${suggestion.id}`) === "1") {
+          dismissed.add(suggestion.id);
+        }
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    setDismissedTipIds(dismissed);
+  }, [activitySuggestions, date]);
+
   async function addLine(
     side: "deposit" | "withdrawal",
     label: string,
     cost: number,
     hash?: string,
-  ) {
+  ): Promise<boolean> {
     const dek = getSessionDek();
-    if (!dek || !day) return;
+    if (!dek || !day) return false;
     if (cost > day.availableCapacity) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
       );
-      return;
+      return false;
     }
     const { ciphertext, iv } = await encryptText(dek, label.trim(), "eaj-label");
     const lh = hash ?? (await labelHash(label));
@@ -454,6 +577,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }),
     });
     await load();
+    return true;
   }
 
   function closeDraft() {
@@ -486,6 +610,31 @@ export function TodayPage({ user }: { user: UserProfile }) {
       body: JSON.stringify({ completed: next }),
     });
     await load();
+  }
+
+  async function saveTaskDetails() {
+    if (!detailLine || !day || day.phase === "closed") return;
+    const dek = getSessionDek();
+    if (!dek) return;
+    setDetailError(null);
+    try {
+      const text = detailText.trim();
+      const encrypted = text
+        ? await encryptText(dek, text, "eaj-task-details")
+        : { ciphertext: null, iv: null };
+      await api(`/api/days/${date}/lines/${detailLine.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          difficulty: detailDifficulty,
+          detailsCiphertext: encrypted.ciphertext,
+          detailsIv: encrypted.iv,
+        }),
+      });
+      setDetailLineId(null);
+      await load();
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : "Could not save task details.");
+    }
   }
 
   async function removeLine(id: string) {
@@ -588,6 +737,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   async function onDragEnd(e: DragEndEvent) {
     setActiveDragId(null);
+    // The browser often synthesizes a click after pointer-up from a drag.
+    suppressOpenRef.current = true;
+    window.setTimeout(() => {
+      suppressOpenRef.current = false;
+    }, 200);
     if (!day || day.phase === "closed" || dndBusy) return;
     setDndBusy(true);
     try {
@@ -670,7 +824,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   return (
     <div className="today-root">
-      <div aria-hidden={closeCelebration || (draftSide && !closed) ? true : undefined}>
+      <div
+        aria-hidden={
+          closeCelebration || detailLineId || (draftSide && !closed) ? true : undefined
+        }
+      >
       <div className="panel">
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="day">Date</label>
@@ -808,6 +966,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
+            onOpen={openTaskDetails}
           />
           <Column
             title="Deposits"
@@ -825,6 +984,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
+            onOpen={openTaskDetails}
           />
         </div>
         <DragOverlay>
@@ -899,6 +1059,43 @@ export function TodayPage({ user }: { user: UserProfile }) {
             />
           </div>
         </div>
+      )}
+
+      {promptSuggestion && !closed && !tipsOpen && (
+        <aside className="action-tip" role="status" aria-label="Suggested energy deposit">
+          <span className="action-tip-icon" aria-hidden="true">
+            <LightbulbIcon />
+          </span>
+          <div className="action-tip-copy">
+            <strong>Deposit that fits now</strong>
+            <span>
+              {promptSuggestion.label} fits the {day.availableCapacity} points available now.
+            </span>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                void addLine(
+                  "deposit",
+                  promptSuggestion.label,
+                  promptSuggestion.typicalCost,
+                ).then((ok) => {
+                  if (ok) dismissPrompt(promptSuggestion.id);
+                });
+              }}
+            >
+              Add {promptSuggestion.label} · {promptSuggestion.typicalCost}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="icon-btn action-tip-dismiss"
+            aria-label="Dismiss suggestion for today"
+            onClick={() => dismissPrompt(promptSuggestion.id)}
+          >
+            ×
+          </button>
+        </aside>
       )}
 
       <button
@@ -1049,6 +1246,86 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
       )}
 
+      {detailLine && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDetailLineId(null);
+          }}
+        >
+          <form
+            id="task-detail-modal"
+            className="panel insight-modal task-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-detail-title"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveTaskDetails();
+            }}
+          >
+            <p className="ob-eyebrow">
+              {detailLine.side === "deposit" ? "Deposit" : "Withdrawal"}
+            </p>
+            <h2 id="task-detail-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              {detailLine.label}
+            </h2>
+            <p className="muted">
+              Planned {detailLine.plannedCost}
+              {day.phase !== "plan"
+                ? ` · Actual ${detailLine.actualCost ?? detailLine.plannedCost}`
+                : ""}
+              {detailLine.completed ? " · Done" : " · Pending"}
+            </p>
+            <fieldset className="difficulty-field" disabled={closed}>
+              <legend>How hard was this for you? Optional</legend>
+              <div className="difficulty-scale" aria-label="Difficulty from 1 easy to 10 hard">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`btn ${detailDifficulty === n ? "accent" : "secondary"}`}
+                    aria-pressed={detailDifficulty === n}
+                    onClick={() => setDetailDifficulty(detailDifficulty === n ? null : n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="difficulty-anchors muted">
+                <span>1 Easy</span>
+                <span>10 Hard</span>
+              </div>
+            </fieldset>
+            <div className="field">
+              <label htmlFor="task-details">Details</label>
+              <textarea
+                id="task-details"
+                value={detailText}
+                disabled={closed}
+                maxLength={5000}
+                placeholder="What made this easier or harder? Add any context worth remembering."
+                onChange={(e) => setDetailText(e.target.value)}
+              />
+              <p className="muted">
+                This text is encrypted before it leaves your browser.
+              </p>
+            </div>
+            {detailError && <p className="error">{detailError}</p>}
+            <div className="modal-actions">
+              {!closed && (
+                <button type="submit" className="btn accent">
+                  Save task details
+                </button>
+              )}
+              <button type="button" className="btn secondary" onClick={() => setDetailLineId(null)}>
+                {closed ? "Done" : "Cancel"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {closeCelebration && (
         <div
           className="insight-scrim"
@@ -1107,6 +1384,7 @@ function Column(props: {
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line) => void;
   onRemove: (id: string) => void;
+  onOpen: (line: Line) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: props.droppableId });
   return (
@@ -1136,6 +1414,7 @@ function Column(props: {
             onActual={props.onActual}
             onComplete={props.onComplete}
             onRemove={props.onRemove}
+            onOpen={props.onOpen}
           />
         ))}
       </SortableContext>
@@ -1196,6 +1475,7 @@ function SortableTask(props: {
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line) => void;
   onRemove: (id: string) => void;
+  onOpen: (line: Line) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: props.line.id,
@@ -1213,6 +1493,8 @@ function SortableTask(props: {
       className={`task-row ledger-task${props.line.completed ? " completed" : ""}`}
       {...attributes}
       {...listeners}
+      role="group"
+      aria-roledescription="sortable task"
     >
       <button
         type="button"
@@ -1228,7 +1510,13 @@ function SortableTask(props: {
           <path d="m6.5 12.5 3.4 3.4 7.6-8" />
         </svg>
       </button>
-      <div className="task-main">
+      <button
+        type="button"
+        className="task-main task-detail-trigger"
+        onClick={() => {
+          if (!isDragging) props.onOpen(props.line);
+        }}
+      >
         <div className={props.line.completed ? "task-done-label" : undefined}>{props.line.label}</div>
         <div className="task-meta">
           Planned {props.line.plannedCost}
@@ -1237,24 +1525,25 @@ function SortableTask(props: {
             : ""}
           {props.line.completed ? " · Done" : ""}
         </div>
-        {props.audit && !props.closed && (
-          <input
-            type="number"
-            className="task-actual-input"
-            min={0}
-            max={100}
-            key={`${props.line.id}-${props.line.actualCost ?? "p"}`}
-            defaultValue={props.line.actualCost ?? props.line.plannedCost}
-            onPointerDown={(e) => e.stopPropagation()}
-            onBlur={(e) => {
-              const v = Number(e.target.value);
-              void props.onActual(props.line, Number.isFinite(v) ? v : null);
-            }}
-          />
-        )}
-      </div>
+      </button>
       {!props.closed && (
         <div className="task-actions" onPointerDown={(e) => e.stopPropagation()}>
+          {props.audit && (
+            <input
+              type="number"
+              className="task-actual-input"
+              min={0}
+              max={100}
+              aria-label="Actual energy cost"
+              key={`${props.line.id}-${props.line.actualCost ?? "p"}`}
+              defaultValue={props.line.actualCost ?? props.line.plannedCost}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                const v = Number(e.target.value);
+                void props.onActual(props.line, Number.isFinite(v) ? v : null);
+              }}
+            />
+          )}
           <button
             type="button"
             className="btn secondary"

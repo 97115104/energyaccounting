@@ -73,6 +73,9 @@ export const taskLineTable = sqliteTable("task_line_table", {
   plannedCost: integer("planned_cost").notNull(),
   actualCost: integer("actual_cost"),
   completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  difficulty: integer("difficulty"),
+  detailsCiphertext: text("details_ciphertext"),
+  detailsIv: text("details_iv"),
 });
 
 export const taskCatalogTable = sqliteTable("task_catalog_table", {
@@ -87,6 +90,8 @@ export const taskCatalogTable = sqliteTable("task_catalog_table", {
   typicalCost: integer("typical_cost").notNull().default(20),
   weekdayMask: integer("weekday_mask").notNull().default(127),
   useCount: integer("use_count").notNull().default(1),
+  difficultyTotal: integer("difficulty_total").notNull().default(0),
+  difficultyCount: integer("difficulty_count").notNull().default(0),
   lastUsed: text("last_used").notNull(),
 });
 

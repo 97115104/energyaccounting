@@ -2,7 +2,9 @@ import {
   attwoodTotals,
   availableCapacity,
   clampCost,
+  clampDifficulty,
   closingBalance,
+  completedFreedEnergy,
   openingBalance,
   reservedCapacity,
   type AllocatableTask,
@@ -19,6 +21,46 @@ import { WEATHER_PAYLOAD_VERSION, fetchDayWeather } from "../lib/weather.ts";
 function weekdayBit(dateIso: string): number {
   const d = new Date(dateIso + "T12:00:00Z");
   return 1 << d.getUTCDay();
+}
+
+/** Keep catalog difficulty means correct when a rated line moves, clears, or is deleted. */
+async function adjustCatalogDifficulty(
+  userId: string,
+  labelHash: string,
+  side: string,
+  totalDelta: number,
+  countDelta: number,
+) {
+  if (!labelHash || (totalDelta === 0 && countDelta === 0)) return;
+  const catalog = await db.query.taskCatalogTable.findFirst({
+    where: and(
+      eq(taskCatalogTable.userId, userId),
+      eq(taskCatalogTable.labelHash, labelHash),
+      eq(taskCatalogTable.side, side),
+    ),
+  });
+  if (!catalog) return;
+  await db
+    .update(taskCatalogTable)
+    .set({
+      difficultyTotal: Math.max(0, catalog.difficultyTotal + totalDelta),
+      difficultyCount: Math.max(0, catalog.difficultyCount + countDelta),
+    })
+    .where(eq(taskCatalogTable.id, catalog.id));
+}
+
+function pairedDetails(
+  ciphertext: string | null | undefined,
+  iv: string | null | undefined,
+): { ok: true; ciphertext: string | null; iv: string | null } | { ok: false } {
+  if (ciphertext === undefined && iv === undefined) {
+    return { ok: true, ciphertext: null, iv: null };
+  }
+  if (ciphertext === undefined || iv === undefined) return { ok: false };
+  if ((ciphertext === null) !== (iv === null)) return { ok: false };
+  if (ciphertext === null || iv === null) return { ok: true, ciphertext: null, iv: null };
+  if (!ciphertext || !iv) return { ok: false };
+  return { ok: true, ciphertext, iv };
 }
 
 /** Last closed day strictly before dateIso (no row-count cap). */
@@ -133,6 +175,9 @@ function serializeDay(
       plannedCost: l.plannedCost,
       actualCost: l.actualCost,
       completed: l.completed,
+      difficulty: l.difficulty,
+      detailsCiphertext: l.detailsCiphertext,
+      detailsIv: l.detailsIv,
     })),
   };
 }
@@ -223,7 +268,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .from(taskCatalogTable)
       .where(eq(taskCatalogTable.userId, user.id));
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -242,6 +287,9 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         typicalCost: c.typicalCost,
         weekdayMask: c.weekdayMask,
         useCount: c.useCount,
+        typicalDifficulty:
+          c.difficultyCount > 0 ? Math.round((c.difficultyTotal / c.difficultyCount) * 10) / 10 : null,
+        difficultyCount: c.difficultyCount,
         lastUsed: c.lastUsed,
       })),
     };
@@ -271,6 +319,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         body.actualCost === undefined || body.actualCost === null
           ? null
           : clampCost(body.actualCost);
+      const difficulty = clampDifficulty(body.difficulty);
       const existing = await db
         .select()
         .from(taskLineTable)
@@ -288,6 +337,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           error: `That uses ${planned} points, and only ${avail} remain available to allocate.`,
         };
       }
+      const details = pairedDetails(body.detailsCiphertext, body.detailsIv);
+      if (!details.ok) {
+        set.status = 400;
+        return { error: "Task notes need both ciphertext and IV, or neither." };
+      }
       const id = newId();
       await db.insert(taskLineTable).values({
         id,
@@ -300,6 +354,9 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         plannedCost: planned,
         actualCost: actual,
         completed: false,
+        difficulty,
+        detailsCiphertext: details.ciphertext,
+        detailsIv: details.iv,
       });
       const bit = weekdayBit(date);
       const catalog = await db.query.taskCatalogTable.findFirst({
@@ -315,6 +372,8 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           .set({
             typicalCost: planned,
             useCount: catalog.useCount + 1,
+            difficultyTotal: catalog.difficultyTotal + (difficulty ?? 0),
+            difficultyCount: catalog.difficultyCount + (difficulty === null ? 0 : 1),
             lastUsed: date,
             weekdayMask: catalog.weekdayMask | bit,
             labelCiphertext: body.labelCiphertext,
@@ -332,6 +391,8 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           typicalCost: planned,
           weekdayMask: bit,
           useCount: 1,
+          difficultyTotal: difficulty ?? 0,
+          difficultyCount: difficulty === null ? 0 : 1,
           lastUsed: date,
         });
       }
@@ -345,6 +406,9 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         labelHash: t.String(),
         plannedCost: t.Number(),
         actualCost: t.Optional(t.Nullable(t.Number())),
+        difficulty: t.Optional(t.Nullable(t.Number())),
+        detailsCiphertext: t.Optional(t.Nullable(t.String())),
+        detailsIv: t.Optional(t.Nullable(t.String())),
       }),
     },
   )
@@ -388,6 +452,34 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
       const nextPlanned =
         body.plannedCost === undefined ? line.plannedCost : clampCost(body.plannedCost);
+      const nextDifficulty =
+        body.difficulty === undefined ? line.difficulty : clampDifficulty(body.difficulty);
+      const nextSide = body.side ?? line.side;
+      // labelHash is a client correlation handle; only accept a new one with a full label rewrite.
+      const rewritingLabel =
+        body.labelCiphertext !== undefined ||
+        body.labelIv !== undefined ||
+        body.labelHash !== undefined;
+      if (rewritingLabel) {
+        if (!body.labelCiphertext || !body.labelIv || !body.labelHash) {
+          set.status = 400;
+          return { error: "Relabeling needs ciphertext, IV, and labelHash together." };
+        }
+      }
+      const nextLabelHash = body.labelHash ?? line.labelHash;
+      const detailsTouched =
+        body.detailsCiphertext !== undefined || body.detailsIv !== undefined;
+      let nextDetailsCiphertext = line.detailsCiphertext;
+      let nextDetailsIv = line.detailsIv;
+      if (detailsTouched) {
+        const details = pairedDetails(body.detailsCiphertext, body.detailsIv);
+        if (!details.ok) {
+          set.status = 400;
+          return { error: "Task notes need both ciphertext and IV, or neither." };
+        }
+        nextDetailsCiphertext = details.ciphertext;
+        nextDetailsIv = details.iv;
+      }
 
       // Re-check capacity when reserved cost rises (higher planned, or un-complete).
       const siblings = await db
@@ -404,7 +496,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           };
         }
         return {
-          side: (body.side ?? line.side) as TaskCosts["side"],
+          side: nextSide as TaskCosts["side"],
           planned: nextPlanned,
           actual: nextActual,
           completed: nextCompleted,
@@ -415,6 +507,30 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         return { error: "That change would reserve more points than remain available." };
       }
 
+      // Move difficulty samples when rating, side, or label identity changes.
+      const catalogKeyChanged =
+        nextLabelHash !== line.labelHash || nextSide !== line.side;
+      if (nextDifficulty !== line.difficulty || catalogKeyChanged) {
+        if (line.difficulty !== null) {
+          await adjustCatalogDifficulty(
+            user.id,
+            line.labelHash,
+            line.side,
+            -line.difficulty,
+            -1,
+          );
+        }
+        if (nextDifficulty !== null) {
+          await adjustCatalogDifficulty(
+            user.id,
+            nextLabelHash,
+            nextSide,
+            nextDifficulty,
+            1,
+          );
+        }
+      }
+
       await db
         .update(taskLineTable)
         .set({
@@ -422,8 +538,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           actualCost: nextActual,
           labelCiphertext: body.labelCiphertext ?? line.labelCiphertext,
           labelIv: body.labelIv ?? line.labelIv,
+          labelHash: nextLabelHash,
           completed: nextCompleted,
-          side: body.side ?? line.side,
+          difficulty: nextDifficulty,
+          detailsCiphertext: nextDetailsCiphertext,
+          detailsIv: nextDetailsIv,
+          side: nextSide,
           sort: body.sort === undefined ? line.sort : body.sort,
         })
         .where(eq(taskLineTable.id, line.id));
@@ -435,7 +555,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         actualCost: t.Optional(t.Nullable(t.Number())),
         labelCiphertext: t.Optional(t.String()),
         labelIv: t.Optional(t.String()),
+        labelHash: t.Optional(t.String()),
         completed: t.Optional(t.Boolean()),
+        difficulty: t.Optional(t.Nullable(t.Number())),
+        detailsCiphertext: t.Optional(t.Nullable(t.String())),
+        detailsIv: t.Optional(t.Nullable(t.String())),
         side: t.Optional(t.Union([t.Literal("deposit"), t.Literal("withdrawal")])),
         sort: t.Optional(t.Number()),
       }),
@@ -458,6 +582,16 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     if (day.phase === "closed") {
       set.status = 400;
       return { error: "Day is closed." };
+    }
+    const line = await db.query.taskLineTable.findFirst({
+      where: and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)),
+    });
+    if (!line) {
+      set.status = 404;
+      return { error: "Line not found." };
+    }
+    if (line.difficulty !== null) {
+      await adjustCatalogDifficulty(user.id, line.labelHash, line.side, -line.difficulty, -1);
     }
     await db
       .delete(taskLineTable)
@@ -592,6 +726,9 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         typicalCost: c.typicalCost,
         weekdayMask: c.weekdayMask,
         useCount: c.useCount,
+        typicalDifficulty:
+          c.difficultyCount > 0 ? Math.round((c.difficultyTotal / c.difficultyCount) * 10) / 10 : null,
+        difficultyCount: c.difficultyCount,
         lastUsed: c.lastUsed,
       }));
     return { suggestions };
@@ -619,16 +756,19 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       const series = [];
       for (const d of days) {
         const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
-        const tasks: TaskCosts[] = lines.map((l) => ({
+        const tasks: AllocatableTask[] = lines.map((l) => ({
           side: l.side as TaskCosts["side"],
           planned: l.plannedCost,
           actual: l.actualCost,
+          completed: l.completed,
         }));
         const attwood = attwoodTotals(tasks);
         // Plaintext aggregates only — labels stay ciphertext; the client-side
         // insight engine works from these numbers alone.
         const plannedTotal = lines.reduce((a, l) => a + l.plannedCost, 0);
         const actualTotal = lines.reduce((a, l) => a + (l.actualCost ?? l.plannedCost), 0);
+        const rated = lines.filter((l) => l.difficulty !== null);
+        const pendingReservedEnergy = reservedCapacity(tasks);
         series.push({
           date: d.date,
           openingBalance: d.openingBalance,
@@ -642,6 +782,16 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           phase: d.phase,
           taskCount: lines.length,
           completedCount: lines.filter((l) => l.completed).length,
+          pendingReservedEnergy,
+          completedFreedEnergy: completedFreedEnergy(tasks),
+          availableCapacity: availableCapacity(d.openingBalance, tasks),
+          avgDifficulty:
+            rated.length > 0
+              ? Math.round(
+                  (rated.reduce((sum, line) => sum + (line.difficulty ?? 0), 0) / rated.length) * 10,
+                ) / 10
+              : null,
+          difficultyRatedCount: rated.length,
           plannedTotal,
           actualTotal,
         });

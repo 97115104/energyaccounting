@@ -4,7 +4,9 @@ import {
   closingBalance,
   openingBalance,
   clampCost,
+  clampDifficulty,
   reservedCapacity,
+  completedFreedEnergy,
   availableCapacity,
   isWithdrawalHeavy,
 } from "./src/balance";
@@ -38,6 +40,14 @@ describe("energy balance math", () => {
     expect(clampCost(33.7)).toBe(34);
   });
 
+  test("clampDifficulty preserves missing ratings and clamps 1-10", () => {
+    expect(clampDifficulty(null)).toBeNull();
+    expect(clampDifficulty(undefined)).toBeNull();
+    expect(clampDifficulty(0)).toBe(1);
+    expect(clampDifficulty(11)).toBe(10);
+    expect(clampDifficulty(6.6)).toBe(7);
+  });
+
   test("reserved and available capacity free on complete", () => {
     const tasks = [
       { side: "withdrawal" as const, planned: 20, actual: null, completed: false },
@@ -46,6 +56,7 @@ describe("energy balance math", () => {
     ];
     expect(reservedCapacity(tasks)).toBe(35);
     expect(availableCapacity(100, tasks)).toBe(65);
+    expect(completedFreedEnergy(tasks)).toBe(30);
   });
 
   test("withdrawal heavy when withdrawals exceed deposits", () => {
