@@ -9,7 +9,7 @@ import {
 import { hasReturningFlag } from "../lib/returning";
 import { normalizeIdentity } from "../lib/identity";
 import { readCachedIdentity } from "../lib/identityCache";
-import { dailyAffirmation } from "../lib/affirmations";
+import { AFFIRMATIONS, dailyAffirmation } from "../lib/affirmations";
 import { deviceTimezone } from "../lib/timezone";
 import { IdentityMark } from "../components/IdentityMark";
 import type { UserProfile } from "../App";
@@ -306,7 +306,7 @@ export function AuthPage({
               <IdentityMark identity={returningMark} size={64} decorative beatMs={2400} />
             </span>
           </div>
-          <p className="auth-affirmation">{dailyAffirmation()}</p>
+          <RotatingAffirmation />
         </>
       )}
       <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>
@@ -477,5 +477,30 @@ export function AuthPage({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The sign-in card's aphorism line. It opens on the day's deterministic pick,
+ * then wanders onward through the pool while the card is visible, fading each
+ * line in. The key remount replays the fade; reduced motion swaps plainly.
+ */
+function RotatingAffirmation() {
+  const [index, setIndex] = useState(() =>
+    Math.max(0, AFFIRMATIONS.indexOf(dailyAffirmation())),
+  );
+
+  useEffect(() => {
+    const id = window.setInterval(
+      () => setIndex((i) => (i + 1) % AFFIRMATIONS.length),
+      9000,
+    );
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <p className="auth-affirmation" key={index}>
+      {AFFIRMATIONS[index]}
+    </p>
   );
 }

@@ -2318,10 +2318,24 @@ function GuideCard(props: {
     <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
       <div className="guide-card-head">
         <strong>{item.title}</strong>
-        <span className="guide-provenance">
-          {item.provenance ??
-            (item.personalized ? "From your history, on this device" : "Research-backed")}
-        </span>
+        {/* Research items link straight to their citation; personalized and
+            custom-provenance items keep their plain-text label. */}
+        {item.provenance != null || item.personalized || !item.sourceUrl ? (
+          <span className="guide-provenance">
+            {item.provenance ??
+              (item.personalized ? "From your history, on this device" : "Research-backed")}
+          </span>
+        ) : (
+          <a
+            className="guide-provenance guide-provenance-link"
+            href={item.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Reference
+            <span aria-hidden="true"> ↗</span>
+          </a>
+        )}
       </div>
       <p className="guide-card-body">{item.body}</p>
       <div className="guide-card-actions">

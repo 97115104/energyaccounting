@@ -188,6 +188,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
           `So far, ${ctx.withdrawalTotal} points have been used and ${ctx.depositTotal} added.`,
         ],
         research: "Play styles follow Stuart Brown and the National Institute for Play.",
+        sourceUrl: "https://www.nifplay.org/what-is-play/play-science-the-patterns-of-play/",
         personalized: false,
         action: { side: "deposit", label: play.label, cost: play.typicalCost },
         score: 35,
@@ -213,6 +214,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       body: entry.body,
       because: corpusBecause(entry, ctx),
       research: entry.research,
+      sourceUrl: entry.sourceUrl,
       personalized: false,
       score: entry.priority * 4,
     });
@@ -336,6 +338,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
 
   const research =
     "Energy Accounting (Toudal & Attwood) schedules deliberate ways to add energy after depleting days.";
+  const researchUrl = "https://energyaccounting.com/";
 
   if (pick?.label) {
     return {
@@ -349,6 +352,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
         `You have used “${pick.label}” ${pick.useCount}× before.`,
       ],
       research,
+      sourceUrl: researchUrl,
       personalized: true,
       action: {
         side: "deposit",
@@ -367,6 +371,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
     body: "When you start again, plan fewer points that use energy than usual and leave room in your fresh 100.",
     because,
     research,
+    sourceUrl: researchUrl,
     personalized: true,
     score: 90,
   };
