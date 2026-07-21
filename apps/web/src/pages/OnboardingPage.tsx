@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
+import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
 
 function SunGlyph() {
   return (
@@ -119,7 +120,7 @@ const STEPS: Step[] = [
     eyebrow: "Last step",
     thesis: "Make it yours.",
     whisper:
-      "Everything here is optional and editable later in Settings. A name makes the greetings warmer; coordinates power the live sky.",
+      "Everything here is optional and editable later in Settings. A name makes the greetings warmer, coordinates power the live sky, and the greeting style sets the headline's mood.",
     glyph: <PersonGlyph />,
     setup: true,
   },
@@ -137,6 +138,9 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [name, setName] = useState(user.displayName ?? "");
   const [lat, setLat] = useState(String(user.lat ?? ""));
   const [lon, setLon] = useState(String(user.lon ?? ""));
+  const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
+    user.greetingStyle ?? "mix",
+  );
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const replay = params.get("replay") === "1";
@@ -177,6 +181,7 @@ export function OnboardingPage({ user, onUser }: Props) {
       // App already saved via geolocation while the user was reading slides.
       const body: Record<string, unknown> = {
         displayName: name.trim() || null,
+        greetingStyle,
         locationPrompted: true,
         onboardingCompleted: true,
       };
@@ -210,6 +215,7 @@ export function OnboardingPage({ user, onUser }: Props) {
         displayName: nextName,
         lat: nextLat,
         lon: nextLon,
+        greetingStyle,
         locationPrompted: true,
         onboardingCompleted: true,
       });
@@ -274,6 +280,23 @@ export function OnboardingPage({ user, onUser }: Props) {
                     onChange={(e) => setLon(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="field">
+                <label htmlFor="ob-greeting-style">Greeting style</label>
+                <select
+                  id="ob-greeting-style"
+                  value={greetingStyle}
+                  onChange={(e) => setGreetingStyle(e.target.value as GreetingStyle)}
+                >
+                  {GREETING_STYLES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="muted ob-style-example">
+                  {GREETING_STYLES.find((s) => s.value === greetingStyle)?.example}
+                </p>
               </div>
               <p className="muted ob-setup-note">
                 You can change any of this in <Link to="/settings">Settings</Link>.

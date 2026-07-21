@@ -623,6 +623,10 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           actual: l.actualCost,
         }));
         const attwood = attwoodTotals(tasks);
+        // Plaintext aggregates only — labels stay ciphertext; the client-side
+        // insight engine works from these numbers alone.
+        const plannedTotal = lines.reduce((a, l) => a + l.plannedCost, 0);
+        const actualTotal = lines.reduce((a, l) => a + (l.actualCost ?? l.plannedCost), 0);
         series.push({
           date: d.date,
           openingBalance: d.openingBalance,
@@ -633,6 +637,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           isHoliday: d.isHoliday,
           weather: d.weatherJson ? JSON.parse(d.weatherJson) : null,
           feelRating: d.feelRating,
+          phase: d.phase,
+          taskCount: lines.length,
+          completedCount: lines.filter((l) => l.completed).length,
+          plannedTotal,
+          actualTotal,
         });
       }
       return { series };

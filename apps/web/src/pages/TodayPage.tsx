@@ -26,6 +26,12 @@ import {
   getSessionDek,
   labelHash,
 } from "../lib/crypto";
+import {
+  closeDayInsights,
+  planningHint,
+  type Insight,
+  type StatPoint,
+} from "../lib/insights";
 import { playCategoryTitle, suggestPlayDeposits } from "../lib/playCategories";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { buildTips } from "../lib/tips";
@@ -96,6 +102,18 @@ type SpeechRec = {
   stop: () => void;
 };
 
+async function fetchRecentStats(date: string): Promise<StatPoint[]> {
+  const from = new Date(date + "T12:00:00Z");
+  from.setUTCDate(from.getUTCDate() - 60);
+  const fromIso = from.toISOString().slice(0, 10);
+  const res = await api<{ series: StatPoint[] }>(`/api/stats?from=${fromIso}&to=${date}`);
+  return res.series;
+}
+
+function hintDismissKey(date: string): string {
+  return `eaj-hint-dismissed-${date}`;
+}
+
 function MicIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -132,6 +150,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [justFreed, setJustFreed] = useState<number | undefined>();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dndBusy, setDndBusy] = useState(false);
+  // End-of-day insights modal, populated when the day closes.
+  const [closeCelebration, setCloseCelebration] = useState<{
+    closingBalance: number;
+    insights: Insight[];
+  } | null>(null);
+  // One gentle trend hint while planning; dismissal remembered per day.
+  const [hint, setHint] = useState<Insight | null>(null);
   const speechRef = useRef<SpeechRec | null>(null);
   const journalBaseRef = useRef("");
   const journalRef = useRef("");
@@ -146,6 +171,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   useEffect(() => {
     setJustFreed(undefined);
+    setCloseCelebration(null);
+    setHint(null);
   }, [date]);
 
   useEffect(() => {
@@ -210,6 +237,89 @@ export function TodayPage({ user }: { user: UserProfile }) {
   useEffect(() => {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Load failed"));
   }, [load]);
+
+  // Surface at most one trend hint during planning, unless dismissed today.
+  const dayPhase = day?.phase;
+  useEffect(() => {
+    if (dayPhase !== "plan") {
+      setHint(null);
+      return;
+    }
+    let cancelled = false;
+    try {
+      if (localStorage.getItem(hintDismissKey(date)) === "1") {
+        setHint(null);
+        return;
+      }
+    } catch {
+      /* storage unavailable; show the hint anyway */
+    }
+    void fetchRecentStats(date)
+      .then((series) => {
+        if (!cancelled) setHint(planningHint(series, date));
+      })
+      .catch(() => {
+        if (!cancelled) setHint(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dayPhase, date]);
+
+  // Escape closes the celebration modal; Tab stays inside it.
+  useEffect(() => {
+    if (!closeCelebration) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("insight-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => !el.hasAttribute("disabled"))
+        : [];
+
+    // Move focus in after paint so the dialog node exists.
+    const focusId = window.requestAnimationFrame(() => {
+      const first = focusables()[0];
+      first?.focus();
+    });
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setCloseCelebration(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      window.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [closeCelebration]);
+
+  function dismissHint() {
+    setHint(null);
+    try {
+      localStorage.setItem(hintDismissKey(date), "1");
+    } catch {
+      /* fine; it just reappears next load */
+    }
+  }
 
   useEffect(() => {
     if (!draftLabel.trim() || !day) return;
@@ -350,7 +460,19 @@ export function TodayPage({ user }: { user: UserProfile }) {
   async function setPhase(phase: "plan" | "audit" | "closed") {
     if (phase === "closed") {
       await saveJournal();
-      await api(`/api/days/${date}/close`, { method: "POST" });
+      const res = await api<{ closingBalance: number }>(`/api/days/${date}/close`, {
+        method: "POST",
+      });
+      try {
+        const series = await fetchRecentStats(date);
+        setCloseCelebration({
+          closingBalance: res.closingBalance,
+          insights: closeDayInsights(series, date),
+        });
+      } catch {
+        // The day still closed; skip the celebration if stats are unavailable.
+        setCloseCelebration({ closingBalance: res.closingBalance, insights: [] });
+      }
     } else {
       await api(`/api/days/${date}`, {
         method: "PATCH",
@@ -512,6 +634,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   return (
     <div className="today-root">
+      <div aria-hidden={closeCelebration ? true : undefined}>
       <div className="panel">
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="day">Date</label>
@@ -594,6 +717,19 @@ export function TodayPage({ user }: { user: UserProfile }) {
             Close day
           </button>
         </div>
+        {hint && day.phase === "plan" && !closed && (
+          <div className="hint-chip" role="status">
+            <span>{hint.text}</span>
+            <button
+              type="button"
+              className="linkish"
+              aria-label="Dismiss hint"
+              onClick={dismissHint}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {error && <p className="error">{error}</p>}
       </div>
 
@@ -830,6 +966,46 @@ export function TodayPage({ user }: { user: UserProfile }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+      </div>
+
+      {closeCelebration && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCloseCelebration(null);
+          }}
+        >
+          <div
+            id="insight-modal"
+            className="panel insight-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="insight-title"
+          >
+            <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Day closed
+            </h2>
+            <p className="muted">
+              Closing balance {closeCelebration.closingBalance}, carried into tomorrow.
+            </p>
+            {closeCelebration.insights.map((i) => (
+              <div key={i.id} className={`tip-card insight-${i.tone}`}>
+                <p style={{ margin: 0 }}>{i.text}</p>
+              </div>
+            ))}
+            {closeCelebration.insights.length === 0 && (
+              <p className="muted">The sheet is locked. Rest is also productive.</p>
+            )}
+            <button
+              type="button"
+              className="btn accent"
+              onClick={() => setCloseCelebration(null)}
+            >
+              Good night, ledger
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import {
   newSalt,
   wrapDek,
 } from "../lib/crypto";
+import { hasReturningFlag } from "../lib/returning";
 import type { UserProfile } from "../App";
 
 type Props = {
@@ -20,7 +21,10 @@ type Props = {
 };
 
 export function AuthPage({ needsTotp, onAuthed, onNeedsTotp }: Props) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  // Returning devices default to sign-in; a fresh device leads with sign-up.
+  const [mode, setMode] = useState<"login" | "register">(
+    hasReturningFlag() ? "login" : "register",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");

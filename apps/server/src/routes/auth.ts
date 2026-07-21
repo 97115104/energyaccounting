@@ -88,6 +88,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lon: null,
           country: "US",
           temperatureUnit: null,
+          greetingStyle: null,
           onboardingCompleted: false,
           locationPrompted: false,
         },
@@ -138,6 +139,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lon: user.lon,
           country: user.country,
           temperatureUnit: user.temperatureUnit,
+          greetingStyle: user.greetingStyle,
           onboardingCompleted: user.onboardingCompleted,
           locationPrompted: user.locationPrompted,
         },
@@ -201,6 +203,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           lon: auth.user.lon,
           country: auth.user.country,
           temperatureUnit: auth.user.temperatureUnit,
+          greetingStyle: auth.user.greetingStyle,
           onboardingCompleted: auth.user.onboardingCompleted,
           locationPrompted: auth.user.locationPrompted,
         },
@@ -236,6 +239,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         lon: auth.user.lon,
         country: auth.user.country,
         temperatureUnit: auth.user.temperatureUnit,
+        greetingStyle: auth.user.greetingStyle,
         onboardingCompleted: auth.user.onboardingCompleted,
         locationPrompted: auth.user.locationPrompted,
       },
@@ -337,6 +341,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         ...(body.temperatureUnit !== undefined
           ? { temperatureUnit: body.temperatureUnit }
           : {}),
+        ...(body.greetingStyle !== undefined ? { greetingStyle: body.greetingStyle } : {}),
         ...(body.onboardingCompleted !== undefined
           ? { onboardingCompleted: body.onboardingCompleted }
           : {}),
@@ -357,6 +362,15 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         lon: t.Optional(t.Union([t.Number(), t.Null()])),
         country: t.Optional(t.String()),
         temperatureUnit: t.Optional(t.Union([t.Literal("C"), t.Literal("F"), t.Null()])),
+        greetingStyle: t.Optional(
+          t.Union([
+            t.Literal("classic"),
+            t.Literal("humor"),
+            t.Literal("facts"),
+            t.Literal("mix"),
+            t.Null(),
+          ]),
+        ),
         onboardingCompleted: t.Optional(t.Boolean()),
         locationPrompted: t.Optional(t.Boolean()),
       }),

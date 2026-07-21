@@ -1400,7 +1400,106 @@ html[data-theme="night"] .tip-card {
   gap: 1rem;
 }
 
+/* Greeting style picker on the onboarding setup slide. */
+.ob-greeting-styles {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.ob-greeting-styles legend {
+  padding: 0 0.4rem;
+  font-family: var(--display);
+  font-size: 0.9rem;
+}
+
+.ob-style-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ob-style-example {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+
+/* One-line trend hint on the Today panel. */
+.hint-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 80%, var(--accent) 8%);
+  font-size: 0.92rem;
+}
+
+.hint-chip .linkish {
+  padding: 0.65rem 0.5rem;
+  min-height: 44px;
+}
+
+/* Close-day celebration modal. */
+.insight-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg0) 35%, #000 65%);
+  animation: scrim-in 0.2s ease;
+}
+
+.insight-modal {
+  width: min(440px, 100%);
+  animation: modal-in 0.25s ease;
+}
+
+.insight-modal .btn {
+  margin-top: 0.5rem;
+}
+
+.insight-celebrate {
+  border-left: 4px solid var(--deposit);
+}
+
+.insight-notice {
+  border-left: 4px solid var(--accent);
+}
+
+.insight-gentle {
+  border-left: 4px solid var(--muted);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .insight-scrim,
+  .insight-modal,
   .ob-card,
   .ob-eyebrow,
   .ob-thesis,

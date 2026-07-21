@@ -17,6 +17,8 @@ export const userTable = sqliteTable("user_table", {
   country: text("country").default("US"),
   // "C" | "F"; null means "infer from region on the client"
   temperatureUnit: text("temperature_unit"),
+  // "classic" | "humor" | "facts" | "mix"; null means "mix"
+  greetingStyle: text("greeting_style"),
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).notNull().default(false),
   locationPrompted: integer("location_prompted", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

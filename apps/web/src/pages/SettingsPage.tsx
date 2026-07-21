@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
+import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
 import { defaultTemperatureUnit } from "../lib/weatherUi";
 
 type Props = {
@@ -21,6 +22,9 @@ export function SettingsPage({ user, onUser }: Props) {
   );
   const [timezone, setTimezone] = useState(
     user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
+    user.greetingStyle ?? "mix",
   );
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +46,7 @@ export function SettingsPage({ user, onUser }: Props) {
           lon: lon === "" ? null : Number(lon),
           country,
           temperatureUnit: tempUnit,
+          greetingStyle,
           timezone,
         }),
       });
@@ -52,6 +57,7 @@ export function SettingsPage({ user, onUser }: Props) {
         lon: lon === "" ? null : Number(lon),
         country,
         temperatureUnit: tempUnit,
+        greetingStyle,
         timezone,
       });
       setMsg("Profile saved.");
@@ -158,6 +164,23 @@ export function SettingsPage({ user, onUser }: Props) {
             <option value="C">Celsius (°C)</option>
             <option value="F">Fahrenheit (°F)</option>
           </select>
+        </div>
+        <div className="field">
+          <label htmlFor="greeting-style">Greeting style</label>
+          <select
+            id="greeting-style"
+            value={greetingStyle}
+            onChange={(e) => setGreetingStyle(e.target.value as GreetingStyle)}
+          >
+            {GREETING_STYLES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <p className="muted" style={{ marginTop: "0.35rem" }}>
+            {GREETING_STYLES.find((s) => s.value === greetingStyle)?.example}
+          </p>
         </div>
         <button type="button" className="btn accent" onClick={() => void saveProfile()}>
           Save profile

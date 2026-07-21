@@ -46,6 +46,11 @@ try {
 } catch {
   /* column exists */
 }
+try {
+  sqlite.exec("ALTER TABLE user_table ADD COLUMN greeting_style TEXT");
+} catch {
+  /* column exists */
+}
 
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS user_table (
@@ -63,6 +68,7 @@ CREATE TABLE IF NOT EXISTS user_table (
   lon REAL,
   country TEXT DEFAULT 'US',
   temperature_unit TEXT,
+  greeting_style TEXT,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   location_prompted INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL

@@ -7,7 +7,8 @@ import {
   setSessionDek,
   unwrapDek,
 } from "./lib/crypto";
-import { greetingFor } from "./lib/greeting";
+import { greetingFor, type GreetingStyle } from "./lib/greeting";
+import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -25,6 +26,7 @@ export type UserProfile = {
   lon?: number | null;
   country?: string | null;
   temperatureUnit?: "C" | "F" | null;
+  greetingStyle?: GreetingStyle | null;
   onboardingCompleted?: boolean;
   locationPrompted?: boolean;
 };
@@ -203,9 +205,22 @@ export function App() {
           {authed ? (
             <>
               <p className="wordmark">Your Energy Matters</p>
-              <h1 className="brand greeting" key={user?.displayName ?? ""}>
-                {greetingFor(user?.displayName, { timeZone: user?.timezone })}
+              <h1
+                className="brand greeting"
+                key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
+              >
+                {greetingFor(user?.displayName, {
+                  timeZone: user?.timezone,
+                  style: user?.greetingStyle,
+                })}
               </h1>
+            </>
+          ) : hasReturningFlag() ? (
+            <>
+              <h1 className="brand">Welcome back</h1>
+              <p className="tagline">
+                Energy Accounting Journal for neurodivergent productivity.
+              </p>
             </>
           ) : (
             <>
@@ -262,6 +277,7 @@ export function App() {
                   setUser(u);
                   setNeedsTotp(false);
                   await unlockWithPassword(password, salt, wrapped);
+                  markReturning();
                 }}
                 onNeedsTotp={() => setNeedsTotp(true)}
               />
