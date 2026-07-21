@@ -15,6 +15,7 @@ import {
   SYMBOLS,
   archetypeMeta,
   normalizeIdentity,
+  paletteSwatchBackground,
   type IdentityConfig,
 } from "../lib/identity";
 
@@ -381,9 +382,7 @@ export function OnboardingPage({ user, onUser }: Props) {
                   >
                     <span
                       className="you-preset-swatch"
-                      style={{
-                        background: `linear-gradient(135deg, ${p.palette.primary}, ${p.palette.secondary})`,
-                      }}
+                      style={{ background: paletteSwatchBackground(p.palette) }}
                       aria-hidden="true"
                     />
                     {p.label}

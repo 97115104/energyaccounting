@@ -52,6 +52,13 @@ export function Butterfly({
   const wingStyle: CSSProperties | undefined = animated
     ? ({ "--beat": `${beatMs}ms` } as CSSProperties)
     : undefined;
+  // Rainbow theme: the whole mark drifts through the hue wheel. A person who
+  // chose "still" keeps the resting colors; prefers-reduced-motion is handled
+  // in CSS. "calm" halves the drift speed.
+  const rainbow = identity.palette.rainbow === true && identity.motion !== "still";
+  const rainbowStyle: CSSProperties | undefined = rainbow
+    ? ({ "--rainbow-period": identity.motion === "calm" ? "48s" : "24s" } as CSSProperties)
+    : undefined;
 
   const wing = (
     <g>
@@ -126,7 +133,8 @@ export function Butterfly({
       viewBox="0 0 200 210"
       width={size}
       height={size}
-      className={className}
+      className={[className, rainbow ? "butterfly-rainbow" : null].filter(Boolean).join(" ") || undefined}
+      style={rainbowStyle}
       {...(decorative
         ? { "aria-hidden": true as const }
         : { role: "img" as const, "aria-label": title ?? "Your butterfly" })}

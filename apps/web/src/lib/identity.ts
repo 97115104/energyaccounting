@@ -42,6 +42,9 @@ export type ButterflyPalette = {
   secondary: string;
   /** Vein, border, and eyespot ink. */
   accent: string;
+  /** Living rainbow: the wings slowly cycle hue through the whole wheel.
+      The hex fields above are the resting pose (and the reduced-motion look). */
+  rainbow?: boolean;
 };
 
 export type IdentityConfig = {
@@ -167,7 +170,21 @@ export const PALETTE_PRESETS: { label: string; palette: ButterflyPalette }[] = [
   { label: "Dusk", palette: { primary: "#c96f8e", secondary: "#7b5bd6", accent: "#2a1832" } },
   { label: "Tide", palette: { primary: "#3f7bd6", secondary: "#2f9bb0", accent: "#12233a" } },
   { label: "Gold", palette: { primary: "#f0b429", secondary: "#c98a1a", accent: "#3a2a08" } },
+  {
+    label: "Rainbow",
+    // Red-to-violet resting gradient; the rainbow flag makes the wings drift
+    // through the full hue wheel, so these are the pose it passes through.
+    palette: { primary: "#d1273b", secondary: "#7a4a9e", accent: "#2a1226", rainbow: true },
+  },
 ];
+
+/** CSS background for a preset swatch; the rainbow preset shows all bands. */
+export function paletteSwatchBackground(palette: ButterflyPalette): string {
+  if (palette.rainbow) {
+    return "linear-gradient(135deg, #d1273b, #e8853a, #e5c33a, #2f8f4e, #3563b0, #7a4a9e)";
+  }
+  return `linear-gradient(135deg, ${palette.primary}, ${palette.secondary})`;
+}
 
 export function isIdentitySymbol(value: unknown): value is IdentitySymbol {
   return SYMBOLS.some((s) => s.id === value);
@@ -230,6 +247,7 @@ export function normalizeIdentity(input: unknown, seed: string): IdentityConfig 
       primary: isHexColor(paletteRaw.primary) ? paletteRaw.primary : preset.primary,
       secondary: isHexColor(paletteRaw.secondary) ? paletteRaw.secondary : preset.secondary,
       accent: isHexColor(paletteRaw.accent) ? paletteRaw.accent : preset.accent,
+      ...(paletteRaw.rainbow === true ? { rainbow: true } : {}),
     },
     seed: typeof raw.seed === "string" && raw.seed.trim() ? raw.seed : base.seed,
     motion:

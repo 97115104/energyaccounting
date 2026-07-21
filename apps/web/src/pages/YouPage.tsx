@@ -35,6 +35,7 @@ import {
   SYMBOLS,
   archetypeMeta,
   normalizeIdentity,
+  paletteSwatchBackground,
   type ButterflyPalette,
   type IdentityConfig,
 } from "../lib/identity";
@@ -456,9 +457,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
             >
               <span
                 className="you-preset-swatch"
-                style={{
-                  background: `linear-gradient(135deg, ${p.palette.primary}, ${p.palette.secondary})`,
-                }}
+                style={{ background: paletteSwatchBackground(p.palette) }}
                 aria-hidden="true"
               />
               {p.label}
@@ -475,9 +474,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
                 id={`you-color-${slot}`}
                 type="color"
                 value={localPalette[slot]}
-                onChange={(e) =>
-                  setLocalPalette({ ...localPalette, [slot]: e.target.value })
-                }
+                onChange={(e) => {
+                  // Hand-picking a color takes over from the rainbow drift.
+                  const { rainbow: _drop, ...rest } = localPalette;
+                  setLocalPalette({ ...rest, [slot]: e.target.value });
+                }}
                 onBlur={() => commitPalette(localPalette)}
               />
               <ColorMeaningInput

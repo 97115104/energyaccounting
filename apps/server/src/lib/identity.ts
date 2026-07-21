@@ -55,7 +55,7 @@ export type StoredIdentity = {
   symbol: string;
   archetype: string;
   wing: StoredWing;
-  palette: { primary: string; secondary: string; accent: string };
+  palette: { primary: string; secondary: string; accent: string; rainbow?: boolean };
   seed: string;
   motion: string;
 };
@@ -100,6 +100,8 @@ export function sanitizeIdentity(input: unknown, fallbackSeed: string): StoredId
       primary: isHex(paletteRaw.primary) ? paletteRaw.primary : preset.primary,
       secondary: isHex(paletteRaw.secondary) ? paletteRaw.secondary : preset.secondary,
       accent: isHex(paletteRaw.accent) ? paletteRaw.accent : preset.accent,
+      // The animated rainbow theme rides as a single allowlisted boolean.
+      ...(paletteRaw.rainbow === true ? { rainbow: true } : {}),
     },
     seed,
     motion: MOTIONS.has(String(raw.motion)) ? String(raw.motion) : "auto",

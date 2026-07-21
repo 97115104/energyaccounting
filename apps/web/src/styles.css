@@ -2394,6 +2394,22 @@ html[data-theme="night"] .tip-card {
   }
 }
 
+/* Rainbow wing theme: one slow lap of the hue wheel. The base palette is a
+   red-to-violet gradient, so rotating hue visits every band of the rainbow.
+   The near-black accent ink barely shifts, keeping veins and body legible. */
+.butterfly-rainbow {
+  animation: butterfly-rainbow-drift var(--rainbow-period, 24s) linear infinite;
+}
+
+@keyframes butterfly-rainbow-drift {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
 @keyframes butterfly-bob {
   0%,
   100% {
@@ -2425,7 +2441,8 @@ html[data-theme="night"] .tip-card {
 
 @media (prefers-reduced-motion: reduce) {
   .butterfly-wing,
-  .butterfly-body {
+  .butterfly-body,
+  .butterfly-rainbow {
     animation: none !important;
   }
 }
@@ -2580,7 +2597,9 @@ html[data-theme="night"] .tip-card {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.you-symbol-card:focus-within {
+/* Keyboard-only focus ring: clicking already shows the .selected border, so
+   a mouse pick would otherwise draw two outlines on the same card. */
+.you-symbol-card:has(input:focus-visible) {
   outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 1px;
 }
@@ -2981,7 +3000,8 @@ html[data-theme="night"] .tip-card {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.ob-symbol-card:focus-within {
+/* Keyboard-only focus ring; mouse picks rely on the .selected border alone. */
+.ob-symbol-card:has(input:focus-visible) {
   outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 1px;
 }
