@@ -128,6 +128,59 @@ describe("share snapshots", () => {
     expect(row?.tokenHash).not.toBe(token);
   });
 
+  test("permanent links survive expiry scrubbing until revoked", async () => {
+    const { cookie } = await makeUser("permanent");
+    const payload = JSON.stringify({ version: 1, name: "Always available" });
+    const created = await youRoutes.handle(
+      req("/api/you/shares", { method: "POST", cookie, body: { payload, ttl: "permanent" } }),
+    );
+    expect(created.status).toBe(201);
+    const { token, share } = (await created.json()) as {
+      token: string;
+      share: { id: string; expiresAt: string | null };
+    };
+    expect(share.expiresAt).toBeNull();
+
+    // Permanent status, rather than the compatibility expiry value, controls cleanup.
+    await db
+      .update(shareSnapshotTable)
+      .set({ expiresAt: new Date(Date.now() - 60_000) })
+      .where(eq(shareSnapshotTable.id, share.id));
+    const listed = await youRoutes.handle(req("/api/you/shares", { cookie }));
+    expect(listed.status).toBe(200);
+    const listedBody = (await listed.json()) as {
+      shares: Array<{ id: string; expiresAt: string | null; revoked: boolean }>;
+    };
+    expect(listedBody.shares).toHaveLength(1);
+    expect(listedBody.shares[0]).toMatchObject({
+      id: share.id,
+      expiresAt: null,
+      revoked: false,
+    });
+    const publicRes = await youRoutes.handle(req(`/api/share/${token}`));
+    expect(publicRes.status).toBe(200);
+    const publicBody = (await publicRes.json()) as {
+      expiresAt: string | null;
+      payload: { name: string };
+    };
+    expect(publicBody.expiresAt).toBeNull();
+    expect(publicBody.payload.name).toBe("Always available");
+
+    const revoked = await youRoutes.handle(
+      req(`/api/you/shares/${share.id}`, { method: "DELETE", cookie }),
+    );
+    expect(revoked.status).toBe(200);
+    expect((await youRoutes.handle(req(`/api/share/${token}`))).status).toBe(404);
+    // Revoked permanent rows become scrubbable empty tombstones.
+    const afterList = await youRoutes.handle(req("/api/you/shares", { cookie }));
+    expect(
+      ((await afterList.json()) as { shares: unknown[] }).shares,
+    ).toHaveLength(0);
+    expect(
+      await db.query.shareSnapshotTable.findFirst({ where: eq(shareSnapshotTable.id, share.id) }),
+    ).toBeUndefined();
+  });
+
   test("revocation kills the link and clears the payload", async () => {
     const { cookie } = await makeUser("revoke");
     const payload = JSON.stringify({ version: 1, secret: "sensitive words" });

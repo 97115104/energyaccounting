@@ -23,6 +23,8 @@ const SHARE_TTLS_MS: Record<string, number> = {
 const MAX_SNAPSHOTS_PER_USER = 20;
 const MAX_PAYLOAD_BYTES = 64 * 1024;
 const MAX_PROFILE_BYTES = 256 * 1024;
+// The legacy non-null column still needs a valid value; isPermanent is the source of truth.
+const PERMANENT_EXPIRY_SENTINEL = new Date("9999-12-31T23:59:59.999Z");
 /** AES-GCM IV is 12 bytes → 16 chars of standard base64; allow a little slack. */
 const MAX_IV_CHARS = 64;
 
@@ -30,7 +32,7 @@ function serializeSnapshot(row: typeof shareSnapshotTable.$inferSelect) {
   return {
     id: row.id,
     createdAt: row.createdAt.toISOString(),
-    expiresAt: row.expiresAt.toISOString(),
+    expiresAt: row.isPermanent ? null : row.expiresAt.toISOString(),
     revoked: row.revokedAt != null,
   };
 }
@@ -40,8 +42,16 @@ async function scrubExpiredShares(userId: string) {
   await db
     .delete(shareSnapshotTable)
     .where(
-      and(eq(shareSnapshotTable.userId, userId), lt(shareSnapshotTable.expiresAt, new Date())),
+      and(
+        eq(shareSnapshotTable.userId, userId),
+        eq(shareSnapshotTable.isPermanent, false),
+        lt(shareSnapshotTable.expiresAt, new Date()),
+      ),
     );
+}
+
+function isExpired(row: typeof shareSnapshotTable.$inferSelect): boolean {
+  return !row.isPermanent && row.expiresAt.getTime() < Date.now();
 }
 
 export const youRoutes = new Elysia({ prefix: "/api" })
@@ -136,7 +146,8 @@ export const youRoutes = new Elysia({ prefix: "/api" })
         set.status = 400;
         return { error: "Share limit reached. Revoke an older link first." };
       }
-      const ttl = SHARE_TTLS_MS[body.ttl] ?? SHARE_TTLS_MS.month!;
+      const isPermanent = body.ttl === "permanent";
+      const ttl = isPermanent ? null : (SHARE_TTLS_MS[body.ttl] ?? SHARE_TTLS_MS.month!);
       const token = randomBytes(32).toString("base64url");
       const now = new Date();
       const row = {
@@ -145,7 +156,8 @@ export const youRoutes = new Elysia({ prefix: "/api" })
         tokenHash: hashToken(token),
         payload: body.payload,
         createdAt: now,
-        expiresAt: new Date(now.getTime() + ttl),
+        expiresAt: ttl == null ? PERMANENT_EXPIRY_SENTINEL : new Date(now.getTime() + ttl),
+        isPermanent,
         revokedAt: null,
       };
       await db.insert(shareSnapshotTable).values(row);
@@ -155,7 +167,12 @@ export const youRoutes = new Elysia({ prefix: "/api" })
     {
       body: t.Object({
         payload: t.String(),
-        ttl: t.Union([t.Literal("day"), t.Literal("month"), t.Literal("quarter")]),
+        ttl: t.Union([
+          t.Literal("day"),
+          t.Literal("month"),
+          t.Literal("quarter"),
+          t.Literal("permanent"),
+        ]),
       }),
     },
   )
@@ -177,7 +194,12 @@ export const youRoutes = new Elysia({ prefix: "/api" })
     }
     await db
       .update(shareSnapshotTable)
-      .set({ revokedAt: new Date(), payload: "{}" })
+      .set({
+        revokedAt: new Date(),
+        payload: "{}",
+        // Permanent tombstones would never age out otherwise; make them scrubbable.
+        ...(row.isPermanent ? { isPermanent: false, expiresAt: new Date(0) } : {}),
+      })
       .where(eq(shareSnapshotTable.id, row.id));
     return { ok: true };
   })
@@ -185,9 +207,9 @@ export const youRoutes = new Elysia({ prefix: "/api" })
     const row = await db.query.shareSnapshotTable.findFirst({
       where: eq(shareSnapshotTable.tokenHash, hashToken(params.token)),
     });
-    if (!row || row.revokedAt != null || row.expiresAt.getTime() < Date.now()) {
+    if (!row || row.revokedAt != null || isExpired(row)) {
       // Scrub any expired payload we just refused so it does not linger.
-      if (row && row.expiresAt.getTime() < Date.now() && row.revokedAt == null) {
+      if (row && isExpired(row) && row.revokedAt == null) {
         await db.delete(shareSnapshotTable).where(eq(shareSnapshotTable.id, row.id));
       }
       set.status = 404;
@@ -197,7 +219,7 @@ export const youRoutes = new Elysia({ prefix: "/api" })
       return {
         payload: JSON.parse(row.payload) as unknown,
         createdAt: row.createdAt.toISOString(),
-        expiresAt: row.expiresAt.toISOString(),
+        expiresAt: row.isPermanent ? null : row.expiresAt.toISOString(),
       };
     } catch {
       set.status = 404;

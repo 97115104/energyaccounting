@@ -209,6 +209,7 @@ CREATE TABLE IF NOT EXISTS share_snapshot_table (
   payload TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
+  is_permanent INTEGER NOT NULL DEFAULT 0,
   revoked_at INTEGER
 );
 
@@ -221,6 +222,15 @@ CREATE TABLE IF NOT EXISTS weather_cache_table (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS weather_loc_date ON weather_cache_table(lat_key, lon_key, date);
 `);
+
+try {
+  sqlite.exec(
+    "ALTER TABLE share_snapshot_table ADD COLUMN is_permanent INTEGER NOT NULL DEFAULT 0",
+  );
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (!msg.includes("duplicate column name")) throw e;
+}
 
 // Run after table creation: old databases still have the date-unique index and
 // cannot accept the new duplicate-date model until that index is removed.

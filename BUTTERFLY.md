@@ -86,9 +86,9 @@ sections, and only that chosen plaintext is frozen into a snapshot.
   and posts, plus a print-quality profile document via the browser's print
   dialog (save as PDF).
 - **Public links**: unguessable tokens (32 random bytes, hash-only storage)
-  with bounded lifetimes (1, 30, or 90 days), revocable at any time. Revocation
-  deletes the frozen payload. Expired and revoked links return the same calm
-  message.
+  with bounded lifetimes (1, 30, or 90 days) by default, plus an explicit
+  permanent-until-revoked option. Revocation deletes the frozen payload.
+  Expired and revoked links return the same calm message.
 
 ## Motion and accessibility
 

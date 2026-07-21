@@ -42,7 +42,7 @@ export const youProfileTable = sqliteTable("you_profile_table", {
 
 // Public share snapshots. The person decrypts locally, picks sections, and the
 // chosen plaintext is frozen here under an unguessable token. Deliberate
-// disclosure, revocable at any time, auto-expiring.
+// disclosure, revocable at any time, and expiring unless explicitly permanent.
 export const shareSnapshotTable = sqliteTable("share_snapshot_table", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -54,6 +54,8 @@ export const shareSnapshotTable = sqliteTable("share_snapshot_table", {
   payload: text("payload").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  // Kept separate from expiresAt so existing databases need only an additive migration.
+  isPermanent: integer("is_permanent", { mode: "boolean" }).notNull().default(false),
   revokedAt: integer("revoked_at", { mode: "timestamp" }),
 });
 

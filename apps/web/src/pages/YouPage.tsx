@@ -57,7 +57,8 @@ type Props = {
   butterflyState: ButterflyState;
 };
 
-type ShareRow = { id: string; createdAt: string; expiresAt: string; revoked: boolean };
+type ShareLifetime = "day" | "month" | "quarter" | "permanent";
+type ShareRow = { id: string; createdAt: string; expiresAt: string | null; revoked: boolean };
 
 const DRAFT_FIELD_LABEL: Record<DraftField, string> = {
   about: "About you",
@@ -82,8 +83,9 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   const dataRef = useRef<PersonalData | null>(null);
   const [shares, setShares] = useState<ShareRow[]>([]);
   const [sections, setSections] = useState<ShareSections>(DEFAULT_SHARE_SECTIONS);
-  const [ttl, setTtl] = useState<"day" | "month" | "quarter">("month");
+  const [ttl, setTtl] = useState<ShareLifetime>("month");
   const [newLink, setNewLink] = useState<string | null>(null);
+  const [newLinkIsPermanent, setNewLinkIsPermanent] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -309,6 +311,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
       });
       setShares((s) => [...s, res.share]);
       setNewLink(`${window.location.origin}/share/${res.token}`);
+      setNewLinkIsPermanent(ttl === "permanent");
       setCopied(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the share link.");
@@ -697,13 +700,21 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
             <select
               id="you-share-ttl"
               value={ttl}
+              aria-describedby={ttl === "permanent" ? "you-share-permanent-note" : undefined}
               onChange={(e) => setTtl(e.target.value as typeof ttl)}
             >
               <option value="day">1 day</option>
               <option value="month">30 days</option>
               <option value="quarter">90 days</option>
+              <option value="permanent">Permanent — until revoked</option>
             </select>
           </div>
+          {ttl === "permanent" && (
+            <p id="you-share-permanent-note" className="muted you-print-note">
+              A permanent link keeps the selected plaintext available until you revoke it or delete
+              your account.
+            </p>
+          )}
           <button type="button" className="btn accent" onClick={() => void createShare()}>
             Create share link
           </button>
@@ -721,8 +732,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               {copied ? "Copied" : "Copy"}
             </button>
             <p className="muted">
-              This full link appears once. Anyone who has it can view the snapshot until it
-              expires or you revoke it.
+              This full link appears once. Anyone who has it can view the snapshot{" "}
+              {newLinkIsPermanent
+                ? "until you revoke it or delete your account"
+                : "until it expires or you revoke it"}
+              .
             </p>
           </div>
         )}
@@ -733,8 +747,10 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               {shares.map((s) => (
                 <li key={s.id} className="you-share-row">
                   <span>
-                    Created {new Date(s.createdAt).toLocaleDateString()} · expires{" "}
-                    {new Date(s.expiresAt).toLocaleDateString()}
+                    Created {new Date(s.createdAt).toLocaleDateString()} ·{" "}
+                    {s.expiresAt
+                      ? `expires ${new Date(s.expiresAt).toLocaleDateString()}`
+                      : "permanent until revoked"}
                     {s.revoked ? " · revoked" : ""}
                   </span>
                   {!s.revoked && (
