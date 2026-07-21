@@ -1,0 +1,104 @@
+[
+  {
+    "category": "creator",
+    "label": "Doodle for ten minutes",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "creator",
+    "label": "Cook something fun",
+    "typicalCost": 25,
+    "physical": false
+  },
+  {
+    "category": "creator",
+    "label": "Make a short playlist",
+    "typicalCost": 10,
+    "physical": false
+  },
+  {
+    "category": "explorer",
+    "label": "Take a short walk somewhere new",
+    "typicalCost": 20,
+    "physical": true
+  },
+  {
+    "category": "explorer",
+    "label": "Timed wiki rabbit hole",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "explorer",
+    "label": "Browse a map of a place you like",
+    "typicalCost": 10,
+    "physical": false
+  },
+  {
+    "category": "competitor",
+    "label": "Play a quick game",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "competitor",
+    "label": "Personal best challenge",
+    "typicalCost": 20,
+    "physical": false
+  },
+  {
+    "category": "competitor",
+    "label": "Puzzle race",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "organizer",
+    "label": "Tidy one small zone for satisfaction",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "organizer",
+    "label": "Plan a fun outing",
+    "typicalCost": 10,
+    "physical": false
+  },
+  {
+    "category": "dreamer",
+    "label": "Daydream timer",
+    "typicalCost": 10,
+    "physical": false
+  },
+  {
+    "category": "dreamer",
+    "label": "Read a fiction chapter",
+    "typicalCost": 20,
+    "physical": false
+  },
+  {
+    "category": "dreamer",
+    "label": "Music with eyes closed",
+    "typicalCost": 15,
+    "physical": false
+  },
+  {
+    "category": "mover",
+    "label": "Stretch break",
+    "typicalCost": 10,
+    "physical": true
+  },
+  {
+    "category": "mover",
+    "label": "Dance to one song",
+    "typicalCost": 15,
+    "physical": true
+  },
+  {
+    "category": "mover",
+    "label": "Movement or stim break",
+    "typicalCost": 10,
+    "physical": false
+  }
+]

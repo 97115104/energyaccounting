@@ -782,7 +782,7 @@ html[data-theme="night"] .btn.secondary {
   font-size: 0.9rem;
 }
 
-.field input:not([type="range"]),
+.field input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
 .field textarea,
 .field select,
 .you-color-meaning {
@@ -794,14 +794,14 @@ html[data-theme="night"] .btn.secondary {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.field input:not([type="range"]):focus-visible,
+.field input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus-visible,
 .field textarea:focus-visible,
 .field select:focus-visible,
 .you-color-meaning:focus-visible {
   border-color: var(--accent);
 }
 
-html[data-theme="night"] .field input:not([type="range"]),
+html[data-theme="night"] .field input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
 html[data-theme="night"] .field textarea,
 html[data-theme="night"] .field select,
 html[data-theme="night"] .you-color-meaning {
@@ -814,6 +814,32 @@ html[data-theme="night"] .you-color-meaning {
   width: 100%;
   margin-top: 0.35rem;
   accent-color: var(--accent);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.check-row input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.field-legend,
+.ob-activity-pref legend {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
 }
 
 .field textarea {
@@ -1721,11 +1747,39 @@ html[data-theme="night"] .tips-fab {
 
 /* One guide recommendation, inline on the Today panel or inside the sheet. */
 .guide-card {
+  position: relative;
   margin-top: 0.85rem;
   padding: 0.8rem 0.9rem;
+  padding-right: 2.4rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--panel) 82%, var(--accent) 7%);
+}
+
+.guide-card-close {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.guide-card-close:hover,
+.guide-card-close:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 70%, var(--line) 30%);
 }
 
 .guide-card.in-sheet {
@@ -1783,6 +1837,11 @@ html[data-theme="night"] .guide-card {
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
+}
+
+.guide-card-actions .guide-card-source {
+  margin-top: 0;
+  margin-left: auto;
 }
 
 .guide-card-actions .btn {
@@ -3438,11 +3497,6 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   gap: 0.75rem;
   flex-wrap: wrap;
   font-size: 0.9rem;
-}
-
-.you-danger-note {
-  margin-top: 1rem;
-  font-size: 0.85rem;
 }
 
 /* ---------------------------- Share (public) ---------------------------- */

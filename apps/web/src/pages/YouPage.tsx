@@ -8,7 +8,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
 import { DictatableField } from "../components/DictatableField";
@@ -453,8 +452,8 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
 
         <h4>Wing family</h4>
         <p className="muted">
-          Eight families to start from. Neurodivergent people are as varied as butterflies, so
-          pick the silhouette that feels like you, then shape the details.
+          Neurodivergent people are as varied as butterflies, so pick the silhouette that feels
+          like you, then shape the details.
         </p>
         <WingFamilyPicker
           identity={liveIdentity}
@@ -822,10 +821,6 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
             </ul>
           </>
         )}
-        <p className="muted you-danger-note">
-          Want everything gone instead? <Link to="/settings">Settings</Link> has a full profile
-          deletion that removes your account, journal, and every share link.
-        </p>
       </section>
 
       {/* Print-only profile: the PDF is this document via the browser's print dialog. */}

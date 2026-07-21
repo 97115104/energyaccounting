@@ -4,6 +4,7 @@ import {
   type MovementProgress,
 } from "./activityCatalog";
 import type { WeatherKind } from "./weatherUi";
+import NOVEL_JSON from "../content/novel-activities.json";
 
 export type ActivityCandidate = {
   id: string;
@@ -46,14 +47,41 @@ export type ActivitySuggestContext = {
    * starter tiers); passing the full-history signals personalizes the dose.
    */
   movement?: MovementProgress[];
+  /** Default true. When false, skip movement families and physical novel tips. */
+  includePhysicalActivities?: boolean;
 };
+
+type NovelCondition = "always" | "outdoorSafe";
+
+type NovelActivityJson = {
+  id: string;
+  label: string;
+  typicalCost: number;
+  physical: boolean;
+  condition: NovelCondition;
+  scoreWhen: Record<string, number>;
+  reasonWhen: Record<string, string>;
+  research: string;
+  sourceUrl: string;
+};
+
+const NOVEL_ACTIVITIES = NOVEL_JSON as unknown as NovelActivityJson[];
 
 const DRY_WEATHER: WeatherKind[] = ["sun", "cloud"];
 const OUTDOOR_WORDS = /\b(walk|hike|run|jog|bike|cycle|garden|outside|outdoor)\b/i;
+// Broader physical/exertion labels for preference gating (gym, yoga, movement families).
+const PHYSICAL_WORDS =
+  /\b(walk|hike|run|jog|bike|cycle|garden|outside|outdoor|gym|yoga|swim|stretch|push[\s-]?ups?|squats?|jacks?|dance|workout|exercise|pilates|weights?|sit[\s-]?to[\s-]?stands?)\b/i;
 
 /** Labels stay private on-device; this heuristic only classifies decrypted text locally. */
 export function isOutdoorActivity(label: string): boolean {
   return OUTDOOR_WORDS.test(label);
+}
+
+/** True when a label looks like physical movement/exercise (not stim-only regulation). */
+export function isPhysicalActivity(label: string): boolean {
+  if (PHYSICAL_WORDS.test(label)) return true;
+  return MOVEMENT_FAMILIES.some((family) => family.matcher.test(label));
 }
 
 function normalized(label: string): string {
@@ -86,6 +114,8 @@ function movementSuggestion(
   ctx: ActivitySuggestContext,
   otherLabels: string[],
 ): (ActivitySuggestion & { score: number }) | null {
+  if (ctx.includePhysicalActivities === false) return null;
+
   const progress = ctx.movement ?? deriveMovementProgress(
     ctx.candidates
       .filter((c) => c.label)
@@ -135,12 +165,46 @@ function movementSuggestion(
   return null;
 }
 
+function novelScore(
+  item: NovelActivityJson,
+  flags: {
+    lowUv: boolean;
+    safeOutdoor: boolean;
+    withdrawalHeavy: boolean;
+    nonPhysicalPreferred: boolean;
+  },
+): number {
+  const s = item.scoreWhen;
+  // Prefer the non-physical boost when that preference is active.
+  if (flags.nonPhysicalPreferred && s.nonPhysicalPreferred != null) return s.nonPhysicalPreferred;
+  if (flags.withdrawalHeavy && s.withdrawalHeavy != null) return s.withdrawalHeavy;
+  // Mindful pause: higher score when the day is heavy or outdoor options are off.
+  if ((flags.withdrawalHeavy || !flags.safeOutdoor) && s.withdrawalHeavyOrIndoor != null) {
+    return s.withdrawalHeavyOrIndoor;
+  }
+  if (flags.lowUv && s.lowUv != null) return s.lowUv;
+  if (flags.safeOutdoor && s.outdoorSafe != null) return s.outdoorSafe;
+  return s.default ?? 8;
+}
+
+function novelReason(
+  item: NovelActivityJson,
+  flags: { lowUv: boolean; safeOutdoor: boolean; withdrawalHeavy: boolean },
+): string {
+  const r = item.reasonWhen;
+  if (flags.withdrawalHeavy && r.withdrawalHeavy) return r.withdrawalHeavy;
+  if (flags.lowUv && r.lowUv) return r.lowUv;
+  if (flags.safeOutdoor && r.outdoorSafe) return r.outdoorSafe;
+  return r.default ?? "";
+}
+
 /**
  * Rank familiar encrypted-catalog entries and a small evidence-backed corpus.
  * Labels are supplied only after client-side decryption and never leave the device.
  */
 export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggestion[] {
   if (ctx.available <= 0) return [];
+  const includePhysical = ctx.includePhysicalActivities !== false;
   const existing = new Set(ctx.existingLabels.map(normalized));
   const weekday = weekdayBit(ctx.date);
   const dry = DRY_WEATHER.includes(ctx.weatherKind);
@@ -148,6 +212,7 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
   const moderateOrLowerUv = ctx.uvMax != null && ctx.uvMax <= 5;
   // Outdoor recommendations require known UV so copy never invents a peak index.
   const safeOutdoor = ctx.isDaylight && dry && moderateOrLowerUv;
+  const nonPhysicalPreferred = !includePhysical;
 
   const ranked: Array<ActivitySuggestion & { score: number }> = [];
   for (const candidate of ctx.candidates) {
@@ -164,6 +229,8 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
     const outdoor = isOutdoorActivity(label);
     // Outdoor history stays suppressed when weather/daylight/UV are wrong.
     if (outdoor && !safeOutdoor) continue;
+    // Prefer not to resurface physical familiar history when movement is off.
+    if (!includePhysical && isPhysicalActivity(label)) continue;
 
     let score = Math.min(candidate.useCount, 10) * 2;
     if ((candidate.weekdayMask & weekday) !== 0) score += 6;
@@ -199,67 +266,27 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
     });
   }
 
-  const novel: Array<ActivitySuggestion & { score: number; matches: boolean }> = [
-    {
-      id: "healthy:short-walk",
-      label: "Take a short walk",
-      typicalCost: 15,
-      reason: lowUv
-        ? "It is dry and today's peak UV is low."
-        : "It is dry, daylight, and today's peak UV is moderate or lower.",
-      research: "WHO: all physical activity counts; nature-based walking can support wellbeing.",
-      sourceUrl: "https://www.who.int/news-room/fact-sheets/detail/physical-activity",
-      familiar: false,
-      score: lowUv ? 18 : 14,
-      matches: safeOutdoor,
-    },
-    {
-      id: "healthy:mindful-pause",
-      label: "Try a 5-minute mindfulness pause",
-      typicalCost: 10,
-      reason: ctx.withdrawalHeavy
-        ? "More energy is going out than coming in, so a low-demand reset may fit."
-        : "A brief, low-demand pause can be an easy way to add energy.",
-      research: "Brief mindfulness and acceptance-based practices may reduce immediate anxiety.",
-      sourceUrl: "https://doi.org/10.3389/fpsyg.2024.1412928",
-      familiar: false,
-      score: ctx.withdrawalHeavy || !safeOutdoor ? 13 : 7,
-      matches: true,
-    },
-    {
-      id: "healthy:microbreak",
-      label: "Take a 10-minute screen break",
-      typicalCost: 10,
-      reason: "A short break can reduce fatigue without asking much of the remaining capacity.",
-      research: "A meta-analysis found micro-breaks improved vigor and reduced fatigue.",
-      sourceUrl: "https://doi.org/10.1371/journal.pone.0272460",
-      familiar: false,
-      score: ctx.withdrawalHeavy ? 12 : 8,
-      matches: true,
-    },
-    {
-      id: "healthy:gentle-stretch",
-      label: "Do a gentle stretch",
-      typicalCost: 10,
-      reason: safeOutdoor
-        ? "A light movement option is available if going outside feels too large."
-        : "Conditions favor simple indoor movement that adds energy.",
-      research: "WHO recommends replacing sedentary time with movement of any intensity.",
-      sourceUrl: "https://www.who.int/publications/i/item/9789240015128",
-      familiar: false,
-      score: safeOutdoor ? 6 : 11,
-      matches: true,
-    },
-  ];
-
-  for (const item of novel) {
+  const flags = { lowUv, safeOutdoor, withdrawalHeavy: ctx.withdrawalHeavy, nonPhysicalPreferred };
+  for (const item of NOVEL_ACTIVITIES) {
+    if (!includePhysical && item.physical) continue;
+    const matches =
+      item.condition === "always" || (item.condition === "outdoorSafe" && safeOutdoor);
     if (
-      item.matches &&
+      matches &&
       item.typicalCost <= ctx.available &&
       !existing.has(normalized(item.label)) &&
       !ranked.some((entry) => normalized(entry.label) === normalized(item.label))
     ) {
-      ranked.push(item);
+      ranked.push({
+        id: item.id,
+        label: item.label,
+        typicalCost: item.typicalCost,
+        reason: novelReason(item, flags),
+        research: item.research,
+        sourceUrl: item.sourceUrl,
+        familiar: false,
+        score: novelScore(item, flags),
+      });
     }
   }
 

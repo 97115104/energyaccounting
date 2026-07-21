@@ -1,0 +1,128 @@
+[
+  {
+    "id": "pushups",
+    "title": "Tiny strength spark",
+    "matcher": "\\bpush[\\s-]?ups\\b|\\bpush-?up\\b",
+    "gentlerMatcher": "\\bwall[\\s-]push[\\s-]?ups?\\b",
+    "primary": {
+      "name": "push-ups",
+      "tiers": [
+        {
+          "label": "Do 3 push-ups",
+          "cost": 5
+        },
+        {
+          "label": "Do 8 push-ups",
+          "cost": 5
+        },
+        {
+          "label": "Do 15 push-ups",
+          "cost": 5
+        }
+      ]
+    },
+    "gentler": {
+      "name": "wall push-ups",
+      "tiers": [
+        {
+          "label": "Do 5 wall push-ups",
+          "cost": 5
+        },
+        {
+          "label": "Do 10 wall push-ups",
+          "cost": 5
+        },
+        {
+          "label": "Do 20 wall push-ups",
+          "cost": 5
+        }
+      ]
+    },
+    "research": "WHO recommends muscle-strengthening activity; brief bodyweight sets count.",
+    "sourceUrl": "https://www.who.int/news-room/fact-sheets/detail/physical-activity"
+  },
+  {
+    "id": "jacks",
+    "title": "A quick heart-bump",
+    "matcher": "\\bjumping jacks?\\b|\\bseated jacks?\\b|\\barm jacks?\\b",
+    "gentlerMatcher": "\\bseated jacks?\\b|\\barm jacks?\\b",
+    "primary": {
+      "name": "jumping jacks",
+      "tiers": [
+        {
+          "label": "Do 10 jumping jacks",
+          "cost": 5
+        },
+        {
+          "label": "Do 25 jumping jacks",
+          "cost": 5
+        },
+        {
+          "label": "Do 50 jumping jacks",
+          "cost": 5
+        }
+      ]
+    },
+    "gentler": {
+      "name": "seated jacks",
+      "tiers": [
+        {
+          "label": "Do 10 seated jacks",
+          "cost": 5
+        },
+        {
+          "label": "Do 20 seated jacks",
+          "cost": 5
+        },
+        {
+          "label": "Do 40 seated jacks",
+          "cost": 5
+        }
+      ]
+    },
+    "research": "Sub-minute 'exercise snacks' spread through the day can improve cardiometabolic health.",
+    "sourceUrl": "https://doi.org/10.1249/JES.0000000000000275"
+  },
+  {
+    "id": "squats",
+    "title": "A little leg power",
+    "matcher": "\\bsquats?\\b|\\bsit[\\s-]?to[\\s-]?stands?\\b",
+    "gentlerMatcher": "\\bsit[\\s-]?to[\\s-]?stands?\\b",
+    "primary": {
+      "name": "squats",
+      "tiers": [
+        {
+          "label": "Do 5 squats",
+          "cost": 5
+        },
+        {
+          "label": "Do 12 squats",
+          "cost": 5
+        },
+        {
+          "label": "Do 20 squats",
+          "cost": 5
+        }
+      ]
+    },
+    "gentler": {
+      "name": "sit-to-stands",
+      "tiers": [
+        {
+          "label": "Do 4 sit-to-stands from a chair",
+          "cost": 5
+        },
+        {
+          "label": "Do 8 sit-to-stands from a chair",
+          "cost": 5
+        },
+        {
+          "label": "Do 15 sit-to-stands from a chair",
+          "cost": 5
+        }
+      ]
+    },
+    "research": "WHO recommends replacing sedentary time with movement of any intensity.",
+    "sourceUrl": "https://www.who.int/publications/i/item/9789240015128"
+  }
+]

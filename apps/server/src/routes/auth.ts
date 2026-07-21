@@ -39,6 +39,7 @@ function publicUser(user: typeof userTable.$inferSelect) {
     country: user.country,
     temperatureUnit: user.temperatureUnit,
     greetingStyle: user.greetingStyle,
+    includePhysicalActivities: user.includePhysicalActivities,
     onboardingCompleted: user.onboardingCompleted,
     locationPrompted: user.locationPrompted,
     identity: parseIdentityJson(user.identityJson),
@@ -394,6 +395,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
           ? { temperatureUnit: body.temperatureUnit }
           : {}),
         ...(body.greetingStyle !== undefined ? { greetingStyle: body.greetingStyle } : {}),
+        ...(body.includePhysicalActivities !== undefined
+          ? { includePhysicalActivities: body.includePhysicalActivities }
+          : {}),
         ...(body.onboardingCompleted !== undefined
           ? { onboardingCompleted: body.onboardingCompleted }
           : {}),
@@ -440,6 +444,7 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
             t.Null(),
           ]),
         ),
+        includePhysicalActivities: t.Optional(t.Boolean()),
         onboardingCompleted: t.Optional(t.Boolean()),
         locationPrompted: t.Optional(t.Boolean()),
         // Render-only NeuroMe config; stored as JSON, validated for size here

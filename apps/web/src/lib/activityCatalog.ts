@@ -2,13 +2,12 @@
  * The movement registry: typed, extensible activity families for the Energy
  * Guide's novel suggestions (push-ups, jumping jacks, and friends).
  *
- * Each family defines conservative dose tiers, a lower-impact alternative that
- * is always offered, playful copy, and research provenance. Progression is
- * derived on-device from the person's own decrypted catalog history (use
- * counts and difficulty ratings); nothing here assumes fitness, and nothing
- * here talks to a network. Adding a new family means adding one entry to
- * MOVEMENT_FAMILIES — the ranker, intelligence, and UI pick it up unchanged.
+ * Family data lives in content/movement-families.json (matchers as strings).
+ * Progression is derived on-device from the person's own decrypted catalog
+ * history; nothing here assumes fitness, and nothing talks to a network.
  */
+
+import MOVEMENT_JSON from "../content/movement-families.json";
 
 export type MovementTier = {
   /** Exact label logged to the encrypted ledger when this dose is chosen. */
@@ -38,85 +37,28 @@ export type MovementFamily = {
   sourceUrl: string;
 };
 
-export const MOVEMENT_FAMILIES: MovementFamily[] = [
-  {
-    id: "pushups",
-    title: "Tiny strength spark",
-    // Plural or joined forms only, so the phrasal verb "push up my deadline"
-    // never counts toward exercise history.
-    matcher: /\bpush[\s-]?ups\b|\bpush-?up\b/i,
-    gentlerMatcher: /\bwall[\s-]push[\s-]?ups?\b/i,
-    primary: {
-      name: "push-ups",
-      tiers: [
-        { label: "Do 3 push-ups", cost: 5 },
-        { label: "Do 8 push-ups", cost: 5 },
-        { label: "Do 15 push-ups", cost: 5 },
-      ],
-    },
-    gentler: {
-      name: "wall push-ups",
-      tiers: [
-        { label: "Do 5 wall push-ups", cost: 5 },
-        { label: "Do 10 wall push-ups", cost: 5 },
-        { label: "Do 20 wall push-ups", cost: 5 },
-      ],
-    },
-    research:
-      "WHO recommends muscle-strengthening activity; brief bodyweight sets count.",
-    sourceUrl: "https://www.who.int/news-room/fact-sheets/detail/physical-activity",
-  },
-  {
-    id: "jacks",
-    title: "A quick heart-bump",
-    matcher: /\bjumping jacks?\b|\bseated jacks?\b|\barm jacks?\b/i,
-    gentlerMatcher: /\bseated jacks?\b|\barm jacks?\b/i,
-    primary: {
-      name: "jumping jacks",
-      tiers: [
-        { label: "Do 10 jumping jacks", cost: 5 },
-        { label: "Do 25 jumping jacks", cost: 5 },
-        { label: "Do 50 jumping jacks", cost: 5 },
-      ],
-    },
-    gentler: {
-      name: "seated jacks",
-      tiers: [
-        { label: "Do 10 seated jacks", cost: 5 },
-        { label: "Do 20 seated jacks", cost: 5 },
-        { label: "Do 40 seated jacks", cost: 5 },
-      ],
-    },
-    research:
-      "Sub-minute 'exercise snacks' spread through the day can improve cardiometabolic health.",
-    sourceUrl: "https://doi.org/10.1249/JES.0000000000000275",
-  },
-  {
-    id: "squats",
-    title: "A little leg power",
-    matcher: /\bsquats?\b|\bsit[\s-]?to[\s-]?stands?\b/i,
-    gentlerMatcher: /\bsit[\s-]?to[\s-]?stands?\b/i,
-    primary: {
-      name: "squats",
-      tiers: [
-        { label: "Do 5 squats", cost: 5 },
-        { label: "Do 12 squats", cost: 5 },
-        { label: "Do 20 squats", cost: 5 },
-      ],
-    },
-    gentler: {
-      name: "sit-to-stands",
-      tiers: [
-        { label: "Do 4 sit-to-stands from a chair", cost: 5 },
-        { label: "Do 8 sit-to-stands from a chair", cost: 5 },
-        { label: "Do 15 sit-to-stands from a chair", cost: 5 },
-      ],
-    },
-    research:
-      "WHO recommends replacing sedentary time with movement of any intensity.",
-    sourceUrl: "https://www.who.int/publications/i/item/9789240015128",
-  },
-];
+type MovementFamilyJson = {
+  id: string;
+  title: string;
+  matcher: string;
+  gentlerMatcher: string;
+  primary: MovementVariant;
+  gentler: MovementVariant;
+  research: string;
+  sourceUrl: string;
+};
+
+function compileFamily(raw: MovementFamilyJson): MovementFamily {
+  return {
+    ...raw,
+    matcher: new RegExp(raw.matcher, "i"),
+    gentlerMatcher: new RegExp(raw.gentlerMatcher, "i"),
+  };
+}
+
+export const MOVEMENT_FAMILIES: MovementFamily[] = (
+  MOVEMENT_JSON as MovementFamilyJson[]
+).map(compileFamily);
 
 /** Tier index: 0 starter, 1 steady, 2 strong. */
 export type MovementTierIndex = 0 | 1 | 2;

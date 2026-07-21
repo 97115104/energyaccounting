@@ -30,6 +30,9 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
     user.greetingStyle ?? "mix",
   );
+  const [includePhysicalActivities, setIncludePhysicalActivities] = useState(
+    user.includePhysicalActivities !== false,
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; qr: string } | null>(null);
@@ -102,6 +105,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
           country,
           temperatureUnit: tempUnit,
           greetingStyle,
+          includePhysicalActivities,
           timezone,
         }),
       });
@@ -113,6 +117,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
         country,
         temperatureUnit: tempUnit,
         greetingStyle,
+        includePhysicalActivities,
         timezone,
       });
       setMsg("Profile saved.");
@@ -256,6 +261,23 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             {GREETING_STYLES.find((s) => s.value === greetingStyle)?.example}
           </p>
         </div>
+        <fieldset className="field" style={{ border: "none", padding: 0, margin: 0 }}>
+          <legend className="field-legend">Activity suggestions</legend>
+          <label className="check-row" htmlFor="include-physical">
+            <input
+              id="include-physical"
+              type="checkbox"
+              checked={includePhysicalActivities}
+              onChange={(e) => setIncludePhysicalActivities(e.target.checked)}
+            />
+            <span>Include physical activities</span>
+          </label>
+          <p className="muted" style={{ marginTop: "0.35rem" }}>
+            {includePhysicalActivities
+              ? "Suggestions may include walks, movement, and stretch breaks."
+              : "Suggestions focus on mindfulness, reading, journaling, writing, and connecting with people you care about."}
+          </p>
+        </fieldset>
         <button type="button" className="btn accent" onClick={() => void saveProfile()}>
           Save profile
         </button>

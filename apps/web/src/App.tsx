@@ -38,6 +38,8 @@ export type UserProfile = {
   country?: string | null;
   temperatureUnit?: "C" | "F" | null;
   greetingStyle?: GreetingStyle | null;
+  /** Default true. When false, Energy Guide prefers seated/social/creative suggestions. */
+  includePhysicalActivities?: boolean;
   onboardingCompleted?: boolean;
   locationPrompted?: boolean;
   /** Raw NeuroMe identity config from the server; normalize before rendering. */

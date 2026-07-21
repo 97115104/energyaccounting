@@ -211,6 +211,9 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
     user.greetingStyle ?? "mix",
   );
+  const [includePhysicalActivities, setIncludePhysicalActivities] = useState(
+    user.includePhysicalActivities !== false,
+  );
   const [identity, setIdentity] = useState<IdentityConfig>(() =>
     normalizeIdentity(user.identity, user.id),
   );
@@ -255,6 +258,7 @@ export function OnboardingPage({ user, onUser }: Props) {
       const body: Record<string, unknown> = {
         displayName: name.trim() || null,
         greetingStyle,
+        includePhysicalActivities,
         identity,
         locationPrompted: true,
         onboardingCompleted: true,
@@ -290,6 +294,7 @@ export function OnboardingPage({ user, onUser }: Props) {
         lat: nextLat,
         lon: nextLon,
         greetingStyle,
+        includePhysicalActivities,
         identity,
         locationPrompted: true,
         onboardingCompleted: true,
@@ -445,6 +450,23 @@ export function OnboardingPage({ user, onUser }: Props) {
                   {GREETING_STYLES.find((s) => s.value === greetingStyle)?.example}
                 </p>
               </div>
+              <fieldset className="field ob-activity-pref" style={{ border: "none", padding: 0 }}>
+                <legend>Activity suggestions</legend>
+                <label className="check-row" htmlFor="ob-include-physical">
+                  <input
+                    id="ob-include-physical"
+                    type="checkbox"
+                    checked={includePhysicalActivities}
+                    onChange={(e) => setIncludePhysicalActivities(e.target.checked)}
+                  />
+                  <span>Include physical activities</span>
+                </label>
+                <p className="muted ob-style-example">
+                  {includePhysicalActivities
+                    ? "Suggestions may include walks, movement, and stretch breaks."
+                    : "Suggestions focus on mindfulness, reading, journaling, writing, and connecting with people you care about."}
+                </p>
+              </fieldset>
               <p className="muted ob-setup-note">
                 You can change any of this in <Link to="/settings">Settings</Link>.
               </p>

@@ -84,6 +84,13 @@ try {
 } catch {
   /* column exists */
 }
+try {
+  sqlite.exec(
+    "ALTER TABLE user_table ADD COLUMN include_physical_activities INTEGER NOT NULL DEFAULT 1",
+  );
+} catch {
+  /* column exists */
+}
 // Voice-recording storage was removed in favor of dictation-to-text: drop the
 // legacy pointer columns and purge any encrypted blobs left on disk. The
 // recordings were never playable in-app (no decrypt/download path shipped).
@@ -123,6 +130,7 @@ CREATE TABLE IF NOT EXISTS user_table (
   country TEXT DEFAULT 'US',
   temperature_unit TEXT,
   greeting_style TEXT,
+  include_physical_activities INTEGER NOT NULL DEFAULT 1,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   location_prompted INTEGER NOT NULL DEFAULT 0,
   identity_json TEXT,

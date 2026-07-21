@@ -12,7 +12,7 @@
 
 import { DAILY_ENERGY } from "@eaj/shared";
 import type { MovementProgress } from "./activityCatalog";
-import { suggestActivities, type ActivityCandidate } from "./activitySuggest";
+import { suggestActivities, type ActivityCandidate, isPhysicalActivity } from "./activitySuggest";
 import { mean, weekdayName } from "./dateIso";
 import type { Insight, StatPoint } from "./insights";
 import { playCategoryTitle, suggestPlayDeposits } from "./playCategories";
@@ -64,6 +64,8 @@ export type GuideContext = {
   candidates: ActivityCandidate[];
   /** Movement progression from the shared intelligence model, when loaded. */
   movement?: MovementProgress[];
+  /** Default true. When false, Energy Guide skips physical movement suggestions. */
+  includePhysicalActivities?: boolean;
   firstName?: string;
   recentLowFeel?: boolean;
   recentRatedSample?: number;
@@ -189,6 +191,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     existingLabels: ctx.existingLabels,
     candidates: ctx.candidates,
     movement: ctx.movement,
+    includePhysicalActivities: ctx.includePhysicalActivities,
   });
   activities.forEach((suggestion, index) => {
     items.push({
@@ -228,6 +231,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       existingLabels: ctx.existingLabels,
       daySeed: ctx.date,
       count: 2,
+      includePhysicalActivities: ctx.includePhysicalActivities,
     });
     for (const play of plays) {
       if (play.typicalCost > ctx.available) continue;
@@ -263,6 +267,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     timeOfDay: ctx.timeOfDay,
     familiarRestorer: ctx.familiarRestorer,
     heavyWeekday: ctx.heavyWeekday,
+    includePhysicalActivities: ctx.includePhysicalActivities,
   };
   for (const entry of selectFromCorpus(corpusCtx, 3)) {
     items.push({
@@ -339,6 +344,8 @@ export type RecoveryContext = {
   series: StatPoint[];
   /** Decrypted personal catalog for picking a familiar way to add energy. */
   candidates: ActivityCandidate[];
+  /** Default true. When false, skip physical familiar deposits for recovery. */
+  includePhysicalActivities?: boolean;
 };
 
 export function nextIsoDate(dateIso: string): string {
@@ -395,9 +402,11 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
   if (strong === 0 && weak < 2) return null;
 
   const nextCapacity = DAILY_ENERGY;
+  const includePhysical = ctx.includePhysicalActivities !== false;
   const pick = ctx.candidates
     .filter((c) => {
       if (c.side !== "deposit" || !c.label?.trim()) return false;
+      if (!includePhysical && isPhysicalActivity(c.label)) return false;
       if (c.typicalCost > nextCapacity || c.typicalCost > 25) return false;
       const easyKnown =
         (c.difficultyCount ?? 0) >= 3 && c.typicalDifficulty != null && c.typicalDifficulty <= 4;

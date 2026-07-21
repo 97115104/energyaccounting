@@ -1,0 +1,138 @@
+[
+  {
+    "id": "healthy:short-walk",
+    "label": "Take a short walk",
+    "typicalCost": 15,
+    "physical": true,
+    "condition": "outdoorSafe",
+    "scoreWhen": {
+      "lowUv": 18,
+      "default": 14
+    },
+    "reasonWhen": {
+      "lowUv": "It is dry and today's peak UV is low.",
+      "default": "It is dry, daylight, and today's peak UV is moderate or lower."
+    },
+    "research": "WHO: all physical activity counts; nature-based walking can support wellbeing.",
+    "sourceUrl": "https://www.who.int/news-room/fact-sheets/detail/physical-activity"
+  },
+  {
+    "id": "healthy:mindful-pause",
+    "label": "Try a 5-minute mindfulness pause",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "withdrawalHeavyOrIndoor": 13,
+      "default": 7,
+      "nonPhysicalPreferred": 15
+    },
+    "reasonWhen": {
+      "withdrawalHeavy": "More energy is going out than coming in, so a low-demand reset may fit.",
+      "default": "A brief, low-demand pause can be an easy way to add energy."
+    },
+    "research": "Brief mindfulness and acceptance-based practices may reduce immediate anxiety.",
+    "sourceUrl": "https://doi.org/10.3389/fpsyg.2024.1412928"
+  },
+  {
+    "id": "healthy:microbreak",
+    "label": "Take a 10-minute screen break",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "withdrawalHeavy": 12,
+      "default": 8
+    },
+    "reasonWhen": {
+      "default": "A short break can reduce fatigue without asking much of the remaining capacity."
+    },
+    "research": "A meta-analysis found micro-breaks improved vigor and reduced fatigue.",
+    "sourceUrl": "https://doi.org/10.1371/journal.pone.0272460"
+  },
+  {
+    "id": "healthy:gentle-stretch",
+    "label": "Do a gentle stretch",
+    "typicalCost": 10,
+    "physical": true,
+    "condition": "always",
+    "scoreWhen": {
+      "outdoorSafe": 6,
+      "default": 11
+    },
+    "reasonWhen": {
+      "outdoorSafe": "A light movement option is available if going outside feels too large.",
+      "default": "Conditions favor simple indoor movement that adds energy."
+    },
+    "research": "WHO recommends replacing sedentary time with movement of any intensity.",
+    "sourceUrl": "https://www.who.int/publications/i/item/9789240015128"
+  },
+  {
+    "id": "healthy:read-poem",
+    "label": "Read a short poem",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "nonPhysicalPreferred": 14,
+      "default": 8
+    },
+    "reasonWhen": {
+      "default": "A few lines of poetry can add energy without asking much of the body."
+    },
+    "research": "Reading for pleasure is linked with wellbeing and lower reported stress.",
+    "sourceUrl": "https://doi.org/10.1080/1750984X.2019.1656276"
+  },
+  {
+    "id": "healthy:journal",
+    "label": "Journal for five minutes",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "nonPhysicalPreferred": 15,
+      "withdrawalHeavy": 13,
+      "default": 8
+    },
+    "reasonWhen": {
+      "withdrawalHeavy": "Writing things down can settle a day that has used more than it has added.",
+      "default": "A short journal pass can clarify the day and add a little energy back."
+    },
+    "research": "Expressive writing can support emotional processing in brief sessions.",
+    "sourceUrl": "https://doi.org/10.1037/0022-006X.74.3.438"
+  },
+  {
+    "id": "healthy:write-note",
+    "label": "Write a few sentences to someone you care about",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "nonPhysicalPreferred": 14,
+      "default": 7
+    },
+    "reasonWhen": {
+      "default": "A short note keeps connection alive without needing to leave your chair."
+    },
+    "research": "Supportive social contact is associated with better day-to-day wellbeing.",
+    "sourceUrl": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+  },
+  {
+    "id": "healthy:call-or-text",
+    "label": "Call or text someone you care about",
+    "typicalCost": 10,
+    "physical": false,
+    "condition": "always",
+    "scoreWhen": {
+      "nonPhysicalPreferred": 16,
+      "withdrawalHeavy": 14,
+      "default": 9
+    },
+    "reasonWhen": {
+      "withdrawalHeavy": "A quick check-in with kith or kin can restore energy when the day feels depleting.",
+      "default": "A short call or text is a low-demand way to add connection energy."
+    },
+    "research": "Social connection is a protective factor for mental health across the life course.",
+    "sourceUrl": "https://www.who.int/news-room/fact-sheets/detail/mental-health-strengthening-our-response"
+  }
+]

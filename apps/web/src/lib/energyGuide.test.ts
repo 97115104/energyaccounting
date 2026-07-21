@@ -93,6 +93,23 @@ describe("buildGuide", () => {
     expect(a.items.map((i) => i.id)).toEqual(b.items.map((i) => i.id));
   });
 
+  test("includePhysicalActivities false drops outdoor walk tips and movement", () => {
+    const guide = buildGuide(
+      guideContext({
+        includePhysicalActivities: false,
+        weatherKind: "sun",
+        uvMax: 1,
+        isDaylight: true,
+        available: 80,
+      }),
+    );
+    const ids = guide.items.map((i) => i.id);
+    expect(ids.some((id) => id.startsWith("activity:movement:"))).toBe(false);
+    expect(ids).not.toContain("context:uv-low-walk");
+    expect(ids).not.toContain("context:sun-general");
+    expect(ids.some((id) => id.includes("healthy:short-walk"))).toBe(false);
+  });
+
   test("dismissed items disappear and the next item takes primary", () => {
     const withEvent = buildGuide(guideContext({ justFreed: 10 }));
     expect(withEvent.primary?.id).toBe("event:freed");

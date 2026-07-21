@@ -20,6 +20,10 @@ export const userTable = sqliteTable("user_table", {
   temperatureUnit: text("temperature_unit"),
   // "classic" | "humor" | "facts" | "mix"; null means "mix"
   greetingStyle: text("greeting_style"),
+  // When false, Energy Guide skips physical movement and prefers seated/social/creative options.
+  includePhysicalActivities: integer("include_physical_activities", { mode: "boolean" })
+    .notNull()
+    .default(true),
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).notNull().default(false),
   locationPrompted: integer("location_prompted", { mode: "boolean" }).notNull().default(false),
   // NeuroMe identity config (symbol, archetype, palette, seed, motion) as

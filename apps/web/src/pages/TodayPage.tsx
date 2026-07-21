@@ -910,6 +910,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         existingLabels: day.lines.map((line) => line.label ?? ""),
         candidates: suggestions,
         movement: personalIntel.tipSignals.movement,
+        includePhysicalActivities: user.includePhysicalActivities !== false,
         firstName: user.displayName?.trim().split(/\s+/)[0],
         recentLowFeel: personalIntel.tipSignals.recentLowFeel,
         recentRatedSample: personalIntel.tipSignals.recentRatedSample,
@@ -936,6 +937,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     playHeavy,
     suggestions,
     user.displayName,
+    user.includePhysicalActivities,
     personalIntel,
     justFreed,
     hint,
@@ -1205,6 +1207,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               ).length,
               series: statSeries,
               candidates: suggestions,
+              includePhysicalActivities: user.includePhysicalActivities !== false,
             })
           : null;
       try {
@@ -2412,42 +2415,25 @@ function GuideCard(props: {
   const [whyOpen, setWhyOpen] = useState(false);
   const { item } = props;
   const whyId = `guide-why-${item.id.replace(/[^a-z0-9-]/gi, "-")}${props.inSheet ? "-sheet" : ""}`;
+  const dismissAria = props.dismissLabel ?? "Dismiss";
+
+  const sourceLink =
+    item.sourceUrl != null && item.sourceUrl.length > 0 ? (
+      <a
+        className="greeting-source guide-card-source"
+        href={item.sourceUrl}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Source: {guideSourceLabel(item.sourceUrl)}
+        <span aria-hidden="true"> ↗</span>
+      </a>
+    ) : null;
+
   return (
     <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
       <div className="guide-card-head">
         <strong>{item.title}</strong>
-        {/* Prefer an honest dual label when history timed the tip and research
-            exists: history provenance stays visible, citation stays one tap. */}
-        {item.provenance != null ? (
-          <span className="guide-provenance">{item.provenance}</span>
-        ) : item.personalized && item.sourceUrl ? (
-          <span className="guide-provenance guide-provenance-split">
-            From your history
-            <a
-              className="guide-provenance-link"
-              href={item.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Reference
-              <span aria-hidden="true"> ↗</span>
-            </a>
-          </span>
-        ) : item.personalized || !item.sourceUrl ? (
-          <span className="guide-provenance">
-            {item.personalized ? "From your history, on this device" : "Research-backed"}
-          </span>
-        ) : (
-          <a
-            className="guide-provenance guide-provenance-link"
-            href={item.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Reference
-            <span aria-hidden="true"> ↗</span>
-          </a>
-        )}
       </div>
       <p className="guide-card-body">{item.body}</p>
       <div className="guide-card-actions">
@@ -2485,13 +2471,7 @@ function GuideCard(props: {
         >
           Why this?
         </button>
-        <button
-          type="button"
-          className="linkish"
-          onClick={() => props.onDismiss(item.id)}
-        >
-          {props.dismissLabel ?? "Dismiss"}
-        </button>
+        {sourceLink}
       </div>
       {whyOpen && (
         <div id={whyId} className="guide-why">
@@ -2515,8 +2495,40 @@ function GuideCard(props: {
           )}
         </div>
       )}
+      {/* Visually top-right; last in DOM so title/body get first focus/read order. */}
+      <button
+        type="button"
+        className="guide-card-close"
+        aria-label={dismissAria}
+        onClick={() => props.onDismiss(item.id)}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
     </article>
   );
+}
+
+/** Short label for Source: … links — mirrors greeting fact sources. */
+function guideSourceLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    const known: Record<string, string> = {
+      "who.int": "WHO",
+      "doi.org": "DOI",
+      "energyaccounting.com": "Energy Accounting",
+      "nifplay.org": "NIFPlay",
+      "cdc.gov": "CDC",
+      "frontiersin.org": "Frontiers",
+      "plos.org": "PLOS",
+      "nih.gov": "NIH",
+    };
+    for (const [domain, label] of Object.entries(known)) {
+      if (host === domain || host.endsWith(`.${domain}`)) return label;
+    }
+    return host;
+  } catch {
+    return "link";
+  }
 }
 
 function Column(props: {

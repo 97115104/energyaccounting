@@ -26,6 +26,8 @@ export type CorpusContext = {
   timeOfDay?: "morning" | "afternoon" | "evening";
   familiarRestorer?: string | null;
   heavyWeekday?: string | null;
+  /** Default true. When false, skip tips that recommend outdoor/physical activity. */
+  includePhysicalActivities?: boolean;
 };
 
 export type CorpusEntry = {
@@ -40,6 +42,8 @@ export type CorpusEntry = {
   priority: number;
   /** True only when matching depends on the person's own history. */
   personalized?: boolean;
+  /** Tips that recommend walks/outdoor activity; filtered when physical is off. */
+  physical?: boolean;
   matches: (ctx: CorpusContext) => boolean;
 };
 
@@ -101,6 +105,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
       "Green-exercise meta-analyses (Barton & Pretty 2010) find mood and self-esteem gains from even 5-minute outdoor doses; low UV removes the sunburn cost.",
     sourceUrl: "https://doi.org/10.1021/es903183r",
     priority: 8,
+    physical: true,
     matches: (c) =>
       c.isDaylight &&
       c.uvMax != null &&
@@ -116,6 +121,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
       "Morning/afternoon daylight advances circadian phase and improves sleep quality (Wright et al. 2013); moderate UV (3–5) is safe with basic shade.",
     sourceUrl: "https://doi.org/10.1016/j.cub.2013.06.039",
     priority: 6,
+    physical: true,
     matches: (c) =>
       c.isDaylight &&
       c.uvMax != null &&
@@ -133,6 +139,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
     sourceUrl:
       "https://www.who.int/news-room/questions-and-answers/item/radiation-the-ultraviolet-(uv)-index",
     priority: 7,
+    physical: true,
     matches: (c) =>
       c.isDaylight && c.uvMax != null && c.uvMax >= 6 && DRY_KINDS.includes(c.weatherKind),
   },
@@ -204,13 +211,15 @@ export const TIPS_CORPUS: CorpusEntry[] = [
       "Sunlight exposure correlates with serotonin turnover (Lambert et al. 2002); dose-matching helps an energy-adding activity avoid using energy.",
     sourceUrl: "https://doi.org/10.1016/s0140-6736(02)11737-5",
     priority: 4,
+    physical: true,
     matches: (c) => c.weatherKind === "sun",
   },
 ];
 
 /** Highest-priority matching entries, capped. Deterministic: same input, same tips. */
 export function selectFromCorpus(ctx: CorpusContext, max: number): CorpusEntry[] {
-  return TIPS_CORPUS.filter((e) => e.matches(ctx))
+  const includePhysical = ctx.includePhysicalActivities !== false;
+  return TIPS_CORPUS.filter((e) => (includePhysical || !e.physical) && e.matches(ctx))
     .sort((a, b) => b.priority - a.priority)
     .slice(0, max);
 }

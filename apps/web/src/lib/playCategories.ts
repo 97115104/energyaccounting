@@ -1,5 +1,7 @@
 /** Play-category starters that add energy when the day is depleting (Stuart Brown / NIFPlay). */
 
+import PROMPTS_JSON from "../content/play-prompts.json";
+
 export type PlayCategory =
   | "creator"
   | "explorer"
@@ -12,27 +14,11 @@ export type PlayPrompt = {
   category: PlayCategory;
   label: string;
   typicalCost: number;
+  /** When true, skip if the person prefers non-physical activity suggestions. */
+  physical: boolean;
 };
 
-const PROMPTS: PlayPrompt[] = [
-  { category: "creator", label: "Doodle for ten minutes", typicalCost: 15 },
-  { category: "creator", label: "Cook something fun", typicalCost: 25 },
-  { category: "creator", label: "Make a short playlist", typicalCost: 10 },
-  { category: "explorer", label: "Take a short walk somewhere new", typicalCost: 20 },
-  { category: "explorer", label: "Timed wiki rabbit hole", typicalCost: 15 },
-  { category: "explorer", label: "Browse a map of a place you like", typicalCost: 10 },
-  { category: "competitor", label: "Play a quick game", typicalCost: 15 },
-  { category: "competitor", label: "Personal best challenge", typicalCost: 20 },
-  { category: "competitor", label: "Puzzle race", typicalCost: 15 },
-  { category: "organizer", label: "Tidy one small zone for satisfaction", typicalCost: 15 },
-  { category: "organizer", label: "Plan a fun outing", typicalCost: 10 },
-  { category: "dreamer", label: "Daydream timer", typicalCost: 10 },
-  { category: "dreamer", label: "Read a fiction chapter", typicalCost: 20 },
-  { category: "dreamer", label: "Music with eyes closed", typicalCost: 15 },
-  { category: "mover", label: "Stretch break", typicalCost: 10 },
-  { category: "mover", label: "Dance to one song", typicalCost: 15 },
-  { category: "mover", label: "Movement or stim break", typicalCost: 10 },
-];
+const PROMPTS: PlayPrompt[] = PROMPTS_JSON as PlayPrompt[];
 
 const CATEGORY_LABEL: Record<PlayCategory, string> = {
   creator: "Creator",
@@ -52,11 +38,15 @@ export function suggestPlayDeposits(opts: {
   existingLabels: string[];
   count?: number;
   daySeed: string;
+  /** Default true: include walks, dance, stretch, mover prompts. */
+  includePhysicalActivities?: boolean;
 }): PlayPrompt[] {
   const count = opts.count ?? 3;
+  const includePhysical = opts.includePhysicalActivities !== false;
   const lower = new Set(opts.existingLabels.map((l) => l.toLowerCase()));
   const seed = hashSeed(opts.daySeed);
-  const ranked = [...PROMPTS].sort((a, b) => {
+  const pool = includePhysical ? PROMPTS : PROMPTS.filter((p) => !p.physical);
+  const ranked = [...pool].sort((a, b) => {
     const aHit = lower.has(a.label.toLowerCase()) ? 0 : 1;
     const bHit = lower.has(b.label.toLowerCase()) ? 0 : 1;
     if (aHit !== bHit) return aHit - bHit;
