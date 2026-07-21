@@ -440,6 +440,23 @@ html[data-weather="thunder"] .sky-layer {
   animation: greet-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* Small reference link under a fun-fact greeting, so claims are verifiable. */
+.greeting-source {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.greeting-source:hover,
+.greeting-source:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* Greeting is the page h1 but shouldn't dominate like the product title did. */
 .brand.greeting {
   font-size: clamp(1.25rem, 3.6vw, 2rem);

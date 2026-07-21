@@ -115,45 +115,118 @@ const HUMOR: Pool = {
   ],
 };
 
-// Machine-written hyperfixation bait. One line each so the h1 wraps politely.
-const FACTS: Pool = {
-  named: [
-    "Hi {name}. Some giraffes can do simple addition with carrots.",
-    "Fun fact, {name}: honeybees count landmarks as they fly.",
-    "Wombat poop is cube-shaped, {name}. You needed to know.",
-    "An octopus has one central brain and eight more in its arms, {name}.",
-    "Gentoo penguins propose with a pebble. Anyway, hi {name}.",
-    "Sea otters hold hands while they sleep, {name}.",
-    "{name}, a day on Venus lasts longer than its year.",
-    "Arctic ground squirrels can supercool below freezing in hibernation, {name}.",
-    "Some caterpillars drum a secret beat so ants adopt them, {name}.",
-    "Crows remember faces for years, {name}. Be nice to crows.",
-    "Bananas are berries, {name}. Strawberries are not berries.",
-    "Sharks are older than trees, {name}, and older than Saturn's rings.",
-    "Skin cells turn over in weeks, {name}, while tooth enamel lasts a lifetime.",
-    "Honey from ancient tombs is still edible, {name}.",
-    "Axolotls can regrow parts of their own brain, {name}.",
-    "Pigeons carry a built-in compass, {name}. Iron-rich cells.",
-  ],
-  anonymous: [
-    "Some giraffes can do simple addition with carrots.",
-    "Fun fact: honeybees count landmarks as they fly.",
-    "Wombat poop is cube-shaped. You needed to know.",
-    "An octopus has one central brain and eight more in its arms.",
-    "Gentoo penguins propose with a pebble. Anyway, hello.",
-    "Sea otters hold hands while they sleep.",
-    "A day on Venus lasts longer than its year.",
-    "Arctic ground squirrels can supercool below freezing in hibernation.",
-    "Some caterpillars drum a secret beat so ants adopt them.",
-    "Crows remember faces for years. Be nice to crows.",
-    "Bananas are berries. Strawberries are not berries.",
-    "Sharks are older than trees, and older than Saturn's rings.",
-    "Skin cells turn over in weeks, while tooth enamel lasts a lifetime.",
-    "Honey from ancient tombs is still edible.",
-    "Axolotls can regrow parts of their own brain.",
-    "Pigeons carry a built-in compass. Iron-rich cells.",
-  ],
-};
+export type FactSource = { label: string; url: string };
+
+// Machine-written hyperfixation bait. Each fact carries a reference so the
+// header can link out to where the claim is documented or explained.
+type FactEntry = { named: string; anonymous: string; source: FactSource };
+
+const FACTS: FactEntry[] = [
+  {
+    named: "Hi {name}. Some giraffes can tell larger quantities from smaller ones.",
+    anonymous: "Some giraffes can tell larger quantities from smaller ones.",
+    source: { label: "Animal Cognition", url: "https://doi.org/10.1007/s10071-021-01507-2" },
+  },
+  {
+    named: "Fun fact, {name}: honeybees can count landmarks as they fly.",
+    anonymous: "Fun fact: honeybees can count landmarks as they fly.",
+    source: { label: "Springer", url: "https://doi.org/10.1007/s00114-008-0464-y" },
+  },
+  {
+    named: "Wombat poop is cube-shaped, {name}. You needed to know.",
+    anonymous: "Wombat poop is cube-shaped. You needed to know.",
+    source: {
+      label: "National Geographic",
+      url: "https://www.nationalgeographic.com/animals/article/why-does-wombat-poop-cube-shaped-scientists-narrow-in-on-the-answer",
+    },
+  },
+  {
+    named: "An octopus has one central brain and eight more in its arms, {name}.",
+    anonymous: "An octopus has one central brain and eight more in its arms.",
+    source: {
+      label: "Scientific American",
+      url: "https://www.scientificamerican.com/article/the-mind-of-an-octopus/",
+    },
+  },
+  {
+    named: "Gentoo penguins propose with a pebble. Anyway, hi {name}.",
+    anonymous: "Gentoo penguins propose with a pebble. Anyway, hello.",
+    source: { label: "Wikipedia", url: "https://en.wikipedia.org/wiki/Gentoo_penguin" },
+  },
+  {
+    named: "Sea otters hold hands while they sleep, {name}.",
+    anonymous: "Sea otters hold hands while they sleep.",
+    source: { label: "Wikipedia", url: "https://en.wikipedia.org/wiki/Sea_otter" },
+  },
+  {
+    named: "{name}, a day on Venus lasts longer than its year.",
+    anonymous: "A day on Venus lasts longer than its year.",
+    source: { label: "NASA", url: "https://science.nasa.gov/venus/venus-facts/" },
+  },
+  {
+    named: "Arctic ground squirrels can supercool below freezing in hibernation, {name}.",
+    anonymous: "Arctic ground squirrels can supercool below freezing in hibernation.",
+    source: {
+      label: "Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Arctic_ground_squirrel",
+    },
+  },
+  {
+    named: "Some caterpillars drum a secret beat so ants adopt them, {name}.",
+    anonymous: "Some caterpillars drum a secret beat so ants adopt them.",
+    source: {
+      label: "Science",
+      url: "https://www.science.org/content/article/caterpillar-uses-vibrations-summon-army-ant-bodyguards",
+    },
+  },
+  {
+    named: "Crows remember faces for years, {name}. Be nice to crows.",
+    anonymous: "Crows remember faces for years. Be nice to crows.",
+    source: {
+      label: "Univ. of Washington",
+      url: "https://www.washington.edu/news/2011/09/13/crows-can-distinguish-faces-in-a-crowd/",
+    },
+  },
+  {
+    named: "Bananas are berries, {name}. Strawberries are not berries.",
+    anonymous: "Bananas are berries. Strawberries are not berries.",
+    source: { label: "Britannica", url: "https://www.britannica.com/story/is-a-banana-a-berry" },
+  },
+  {
+    named: "Sharks are older than trees, {name}, and older than Saturn's rings.",
+    anonymous: "Sharks are older than trees, and older than Saturn's rings.",
+    source: {
+      label: "Natural History Museum",
+      url: "https://www.nhm.ac.uk/discover/how-old-are-sharks.html",
+    },
+  },
+  {
+    named: "Tooth enamel is the hardest substance your body makes, {name}.",
+    anonymous: "Tooth enamel is the hardest substance your body makes.",
+    source: {
+      label: "Cleveland Clinic",
+      url: "https://my.clevelandclinic.org/health/body/22458-tooth-enamel",
+    },
+  },
+  {
+    named: "Honey basically never spoils, {name}.",
+    anonymous: "Honey basically never spoils.",
+    source: {
+      label: "Smithsonian",
+      url: "https://www.smithsonianmag.com/science-nature/the-science-behind-honeys-eternal-shelf-life-1218690/",
+    },
+  },
+  {
+    named: "Axolotls can regrow parts of their own brain, {name}.",
+    anonymous: "Axolotls can regrow parts of their own brain.",
+    source: { label: "Wikipedia", url: "https://en.wikipedia.org/wiki/Axolotl" },
+  },
+  {
+    named: "Pigeons can sense Earth's magnetic field, {name}.",
+    anonymous: "Pigeons can sense Earth's magnetic field.",
+    source: { label: "Wikipedia", url: "https://en.wikipedia.org/wiki/Magnetoreception" },
+  },
+];
 
 const visitSeed = Math.random();
 // A second stream from the same seed so "which pool" and "which phrase"
@@ -167,10 +240,20 @@ function pickFrom(pool: Pool, named: boolean, seed: number): string {
   return list[index] ?? list[0]!;
 }
 
-export function greetingFor(
+export type GreetingDetail = {
+  text: string;
+  /** Present only for the "facts" style: where the claim can be verified. */
+  factSource?: FactSource;
+};
+
+/**
+ * Resolve the header greeting and, for fun facts, the reference link that backs
+ * the claim. `greetingFor` wraps this for callers that only need the text.
+ */
+export function greetingDetailFor(
   name: string | null | undefined,
   opts?: { now?: Date; timeZone?: string | null; style?: GreetingStyle | null },
-): string {
+): GreetingDetail {
   const now = opts?.now ?? new Date();
   if (!frozenSlot) {
     frozenSlot = slotFor(hourInZone(now, opts?.timeZone));
@@ -184,10 +267,27 @@ export function greetingFor(
     style = options[Math.floor(poolSeed * options.length) % options.length]!;
   }
 
-  const pool =
-    style === "humor" ? HUMOR : style === "facts" ? FACTS : CLASSIC[frozenSlot];
-  const phrase = pickFrom(pool, named, visitSeed);
-  return trimmed ? phrase.replaceAll("{name}", trimmed) : phrase;
+  const withName = (phrase: string) =>
+    trimmed ? phrase.replaceAll("{name}", trimmed) : phrase;
+
+  if (style === "facts") {
+    const index = Math.floor(visitSeed * FACTS.length) % FACTS.length;
+    const entry = FACTS[index] ?? FACTS[0]!;
+    return {
+      text: withName(named ? entry.named : entry.anonymous),
+      factSource: entry.source,
+    };
+  }
+
+  const pool = style === "humor" ? HUMOR : CLASSIC[frozenSlot];
+  return { text: withName(pickFrom(pool, named, visitSeed)) };
+}
+
+export function greetingFor(
+  name: string | null | undefined,
+  opts?: { now?: Date; timeZone?: string | null; style?: GreetingStyle | null },
+): string {
+  return greetingDetailFor(name, opts).text;
 }
 
 /** Test hook: reset the per-visit frozen slot. */

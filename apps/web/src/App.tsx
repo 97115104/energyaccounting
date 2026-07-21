@@ -11,7 +11,7 @@ import {
   setSessionDek,
   unwrapDek,
 } from "./lib/crypto";
-import { greetingFor, type GreetingStyle } from "./lib/greeting";
+import { greetingDetailFor, type GreetingStyle } from "./lib/greeting";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { skyPeriod } from "./lib/weatherUi";
 import { AuthPage } from "./pages/AuthPage";
@@ -244,6 +244,12 @@ export function App() {
   const authed = !!user && dekReady && !needsTotp;
   const needsOnboarding = authed && user && !user.onboardingCompleted;
   const onOnboardingRoute = loc.pathname.startsWith("/onboarding");
+  const greeting = user
+    ? greetingDetailFor(user.displayName, {
+        timeZone: user.timezone,
+        style: user.greetingStyle,
+      })
+    : null;
 
   return (
     <div className="app-shell">
@@ -260,11 +266,19 @@ export function App() {
                 className="brand greeting"
                 key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
               >
-                {greetingFor(user?.displayName, {
-                  timeZone: user?.timezone,
-                  style: user?.greetingStyle,
-                })}
+                {greeting?.text}
               </h1>
+              {greeting?.factSource && (
+                <a
+                  className="greeting-source"
+                  href={greeting.factSource.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Source: {greeting.factSource.label}
+                  <span aria-hidden="true"> ↗</span>
+                </a>
+              )}
             </>
           ) : hasReturningFlag() ? (
             <>
