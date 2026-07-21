@@ -3,10 +3,12 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
 import { DictatableField } from "../components/DictatableField";
-import { IdentityMark } from "../components/IdentityMark";
+import { IdentityMark, NeuroMe } from "../components/IdentityMark";
 import { api } from "../lib/api";
 import { normalizeWing } from "../lib/butterflyGeometry";
+import { resolveButterflyState } from "../lib/butterflyState";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
+import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import {
   ARCHETYPES,
   PALETTE_PRESETS,
@@ -40,6 +42,26 @@ function DayGlyph() {
       <line x1="20" y1="20" x2="44" y2="20" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
       <line x1="20" y1="30" x2="44" y2="30" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
       <line x1="20" y1="40" x2="34" y2="40" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DayDoneGlyph() {
+  // The journal from DayGlyph, but finished: a bold check where the remaining
+  // lines would be, so "close it when you're done" gets its own mark.
+  return (
+    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
+      <rect x="12" y="8" width="40" height="48" fill="none" stroke="currentColor" strokeWidth="3.5" />
+      <line x1="20" y1="19" x2="44" y2="19" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+      <line x1="20" y1="28" x2="36" y2="28" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+      <path
+        d="M22 42l7 7 14-16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -84,7 +106,25 @@ type Step = {
   setup?: boolean;
   /** Interactive identity slides: pick a symbol, then shape the butterfly. */
   identity?: "symbol" | "butterfly";
+  /** Show the person's NeuroMe seal in the aside instead of the glyph. */
+  neurome?: boolean;
 };
+
+/**
+ * A mid-day sample state so the rhythm slide's NeuroMe seal shows a partly
+ * filled vitality ring, which is what the header will actually look like.
+ */
+const NEUROME_DEMO_STATE = resolveButterflyState({
+  available: 68,
+  opening: 100,
+  depositTotal: 15,
+  withdrawalTotal: 47,
+  incompleteWithdrawals: 1,
+  completedCount: 3,
+  withdrawalHeavy: false,
+  feelRating: null,
+  phase: "audit",
+});
 
 // Deliberately short: the core loop and the privacy boundary. Everything
 // else (capacity mechanics, the Attwood terms, how suggestions are ranked)
@@ -92,7 +132,7 @@ type Step = {
 // Guide, where it can attach to a real day instead of theory.
 const STEPS: Step[] = [
   {
-    eyebrow: "The idea",
+    eyebrow: "Idea",
     thesis: "Your energy matters.",
     whisper:
       "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. You explicitly start each energy day when you're ready; nothing starts automatically. Every day gets a fresh 100 points with no carry from the last one. Add energy with restorative activities, track what uses energy, and complete planned tasks to free their reserved capacity.",
@@ -104,24 +144,25 @@ const STEPS: Step[] = [
     thesis: "Close it when you're done.",
     whisper:
       "Your energy day ends when you close it, not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open day stays active across calendar dates with no penalty. When you're ready, close it and explicitly start the next day fresh at 100.",
-    glyph: <DayGlyph />,
+    glyph: <DayDoneGlyph />,
   },
   {
-    eyebrow: "The rhythm",
+    eyebrow: "Rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Closed days appear under Previous days on the Dashboard and open read-only. Choose Edit this day to amend the record without reopening it, or Delete this day and confirm to remove it permanently.",
+      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Your NeuroMe seal beside the greeting keeps that beat with you: the ring around your mark is today's remaining energy, easing as tasks use it and refilling as you add it back. Closed days appear under Previous days on the Dashboard and open read-only, where you can amend the record or delete it permanently.",
     glyph: <DayGlyph />,
+    neurome: true,
   },
   {
-    eyebrow: "The boundary",
+    eyebrow: "Privacy",
     thesis: "Private by architecture.",
     whisper:
       "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions, with an explanation and a dismiss control available for every suggestion.",
     glyph: <CheckGlyph />,
   },
   {
-    eyebrow: "Your symbol",
+    eyebrow: "Symbolism matters",
     thesis: "Choose your mark.",
     whisper:
       "Neurodivergent people carry many symbols with pride. Pick the one that feels like yours; it appears on shares, exports, and your sign-in welcome. Inside the app, your butterfly is always you, and you can change this any time on the You page.",
@@ -129,7 +170,7 @@ const STEPS: Step[] = [
     identity: "symbol",
   },
   {
-    eyebrow: "Your butterfly",
+    eyebrow: "We are all butterflies",
     thesis: "Meet your butterfly.",
     whisper:
       "The butterfly is this app's symbol of becoming: change that looks like struggle from the inside. Pick a wing family to start from; there are eight, because neurodivergent people are as varied as butterflies. Its wings beat with your energy, and its colors mean whatever you decide. Shape the edges, tails, and patterns any time on the You page.",
@@ -264,7 +305,7 @@ export function OnboardingPage({ user, onUser }: Props) {
 
       {/* key remounts the slide so the enter animation replays each step */}
       <article
-        className={`ob-card ob-card-${direction}`}
+        className={`ob-card ob-card-${direction}${current.setup ? " ob-card-tall" : ""}`}
         key={step}
         aria-labelledby="ob-thesis"
       >
@@ -427,8 +468,12 @@ export function OnboardingPage({ user, onUser }: Props) {
           {error && <p className="error">{error}</p>}
         </div>
         <div className="ob-aside" aria-hidden="true">
-          {current.identity ? (
+          {current.identity === "symbol" ? (
+            <SymbolShowcase identity={identity} />
+          ) : current.identity === "butterfly" ? (
             <Butterfly identity={identity} beatMs={2400} size={160} />
+          ) : current.neurome ? (
+            <NeuroMe identity={identity} state={NEUROME_DEMO_STATE} size={128} decorative />
           ) : (
             current.glyph
           )}
@@ -481,6 +526,46 @@ export function OnboardingPage({ user, onUser }: Props) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Decorative slideshow for the "Your symbol" slide: cycles through every mark
+ * with a gentle pop-and-float so the aside shows the whole range, not only the
+ * butterfly. Snaps to the person's current pick and holds still under reduced
+ * motion. Purely visual (the parent aside is aria-hidden).
+ */
+function SymbolShowcase({ identity }: { identity: IdentityConfig }) {
+  const prefersReduced = usePrefersReducedMotion();
+  const [index, setIndex] = useState(() =>
+    Math.max(0, SYMBOLS.findIndex((s) => s.id === identity.symbol)),
+  );
+
+  // A fresh selection takes the spotlight immediately.
+  useEffect(() => {
+    const i = SYMBOLS.findIndex((s) => s.id === identity.symbol);
+    if (i >= 0) setIndex(i);
+  }, [identity.symbol]);
+
+  useEffect(() => {
+    if (prefersReduced) return;
+    const id = window.setInterval(
+      () => setIndex((i) => (i + 1) % SYMBOLS.length),
+      2400,
+    );
+    return () => window.clearInterval(id);
+  }, [prefersReduced]);
+
+  return (
+    <div className="ob-symbol-cycle">
+      {SYMBOLS.map((s, i) => (
+        <span key={s.id} className={i === index ? "active" : ""}>
+          <span className="ob-cycle-float">
+            <IdentityMark identity={identity} symbol={s.id} size={128} decorative />
+          </span>
+        </span>
+      ))}
     </div>
   );
 }

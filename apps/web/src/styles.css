@@ -1912,6 +1912,16 @@ html[data-theme="night"] .tip-card {
   overflow: auto;
 }
 
+/* The setup slide holds a real form; give it natural height so nothing clips.
+   Centered overflow in the fixed-height card would otherwise cut the fields
+   mid-label with the top unreachable. */
+.ob-card.ob-card-tall {
+  height: auto;
+  min-height: min(52vh, 520px);
+  overflow: visible;
+  align-items: start;
+}
+
 .ob-card-next {
   animation: ob-card-in-next 0.4s ease both;
 }
@@ -1989,6 +1999,59 @@ html[data-theme="night"] .tip-card {
   height: clamp(88px, 14vw, 128px);
   color: var(--accent);
   display: block;
+}
+
+/* "Your symbol" slide: every mark takes a turn in the spotlight. Marks are
+   stacked; the active one pops in and floats, the rest fade back. */
+.ob-symbol-cycle {
+  position: relative;
+  width: 160px;
+  height: 160px;
+}
+
+.ob-symbol-cycle > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ob-symbol-cycle > span.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ob-symbol-cycle > span.active .ob-cycle-float {
+  animation: ob-cycle-float 3s ease-in-out infinite;
+}
+
+.ob-cycle-float {
+  display: block;
+}
+
+@keyframes ob-cycle-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-symbol-cycle > span {
+    transition: opacity 0.2s ease;
+    transform: none;
+  }
+
+  .ob-symbol-cycle > span.active .ob-cycle-float {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {

@@ -127,7 +127,9 @@ export function NeuroMe({
   className,
   decorative = false,
 }: NeuroMeProps) {
-  const ring = 3;
+  // Ring weight scales with the seal so large demo seals stay legible while
+  // the compact header seal keeps its light line.
+  const ring = Math.max(3, Math.round(size * 0.055));
   const r = size / 2 - ring;
   const circumference = 2 * Math.PI * r;
   const filled = state ? circumference * state.vitality : 0;
