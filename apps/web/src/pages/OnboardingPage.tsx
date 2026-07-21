@@ -49,21 +49,6 @@ function CheckGlyph() {
   );
 }
 
-function PinGlyph() {
-  return (
-    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
-      <path
-        d="M32 6a18 18 0 0 0-18 18c0 13 18 34 18 34s18-21 18-34A18 18 0 0 0 32 6z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinejoin="round"
-      />
-      <circle cx="32" cy="24" r="7" fill="currentColor" />
-    </svg>
-  );
-}
-
 function PersonGlyph() {
   return (
     <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
@@ -88,69 +73,38 @@ type Step = {
   setup?: boolean;
 };
 
+// Deliberately short: the core loop and the privacy boundary. Everything
+// else (capacity mechanics, the Attwood terms, how suggestions are ranked)
+// is taught in place on the Today page via help disclosures and the Energy
+// Guide, where it can attach to a real ledger instead of theory.
 const STEPS: Step[] = [
   {
     eyebrow: "The idea",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow, like money with no outside bank.",
+      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Deposits refill you, withdrawals cost you, and the balance carries into tomorrow, like money with no outside bank.",
     glyph: <SunGlyph />,
-  },
-  {
-    eyebrow: "The method",
-    thesis: "The ledger has roots.",
-    whisper:
-      "Maja Toudal and Dr. Tony Attwood developed Energy Accounting as a way to make deposits, withdrawals, and finite capacity visible enough to plan around.",
-    glyph: <LedgerGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
-  },
-  {
-    eyebrow: "The hidden load",
-    thesis: "The iceberg counts.",
-    whisper:
-      "Dr. Samantha Hiew's Tip of the ADHD Iceberg framing keeps invisible work in view, including sensory input, masking, executive-function effort, and recovery. Use difficulty ratings and private notes when that hidden load matters.",
-    glyph: <SunGlyph />,
   },
   {
     eyebrow: "The rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "In the morning, plan the day's deposits and withdrawals. In the evening, audit how it actually felt. Then close the day to lock the sheet and carry the balance forward.",
-    glyph: <LedgerGlyph />,
-  },
-  {
-    eyebrow: "Reusable capacity",
-    thesis: "Done frees capacity.",
-    whisper:
-      "Unfinished tasks reserve planned points. Completing one releases that reservation for reuse, while every other pending task keeps its own reservation. Completion frees capacity and does not mint new energy.",
-    glyph: <CheckGlyph />,
-  },
-  {
-    eyebrow: "Machine intelligence",
-    thesis: "Your patterns stay useful.",
-    whisper:
-      "The app tries exact history first, then local text similarity when available. It ranks familiar deposits from your weekday, capacity, weather, and past use, while numeric trends power gentle observations.",
+      "Plan the day's deposits and withdrawals in the morning, audit how it actually felt in the evening, then close the day to carry the balance forward. Completing a task frees its reserved points — the little ? marks on the ledger explain every number as you go.",
     glyph: <LedgerGlyph />,
   },
   {
     eyebrow: "The boundary",
-    thesis: "Helpful, with limits.",
+    thesis: "Private by architecture.",
     whisper:
-      "Suggestions are editable estimates and improve only when enough history exists. Labels, journals, task details, and audio are encrypted before upload, while numeric totals remain available for private trend calculations.",
+      "Activity labels, journals, and recordings are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions — every one explains itself, and every one can be dismissed.",
     glyph: <CheckGlyph />,
-  },
-  {
-    eyebrow: "The atmosphere",
-    thesis: "Skies included.",
-    whisper:
-      "Set a location and the background follows your real weather and sunset, tips consider the UV index, and the app quietly nudges you outside when it's nice out.",
-    glyph: <PinGlyph />,
   },
   {
     eyebrow: "Last step",
     thesis: "Make it yours.",
     whisper:
-      "Everything here is optional and editable later in Settings. A name makes the greetings warmer, coordinates power the live sky, and the greeting style sets the headline's mood.",
+      "Everything here is optional and editable later in Settings. A name makes the greetings warmer, coordinates power the live sky and weather-aware suggestions, and the greeting style sets the headline's mood.",
     glyph: <PersonGlyph />,
     setup: true,
   },
@@ -377,6 +331,11 @@ export function OnboardingPage({ user, onUser }: Props) {
             {step > 0 && (
               <button type="button" className="linkish" onClick={() => go(-1)}>
                 Back
+              </button>
+            )}
+            {!last && !replay && (
+              <button type="button" className="linkish" onClick={() => void finish()}>
+                Skip — the ledger explains itself as you go
               </button>
             )}
             {replay && (

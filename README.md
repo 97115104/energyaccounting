@@ -2,7 +2,7 @@
 
 # EAJ (Energy Accounting Journal)
 
-An open-source, end-to-end encrypted energy accounting journal for neurodivergent productivity.
+EAJ is for neurodivergent productivity 💖 An open-source, end-to-end encrypted energy accounting journal.
 
 [![License: MIT](https://img.shields.io/github/license/97115104/energyaccounting?color=blue)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-1.x-black?logo=bun&logoColor=white)](https://bun.sh)
@@ -10,7 +10,7 @@ An open-source, end-to-end encrypted energy accounting journal for neurodivergen
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Attested](https://img.shields.io/badge/attested-verify-brightgreen?logo=npm&logoColor=white)](https://attest.97115104.com/s/zn6mxj9z)
 
-EAJ is an open-source energy accounting journal for neurodivergent productivity. You plan deposits and withdrawals each morning, complete tasks to free reserved capacity during the day, audit how the day actually felt in the evening, and carry the closing balance into tomorrow. Activity labels, journal text, and voice recordings stay encrypted on the device before they reach the server.
+EAJ is for neurodivergent productivity 💖 You plan deposits and withdrawals each morning, complete tasks to free reserved capacity during the day, audit how the day actually felt in the evening, and carry the closing balance into tomorrow. Activity labels, journal text, and voice recordings stay encrypted on the device before they reach the server.
 
 Host target `eaj.97115104.com` (see [host.txt](host.txt)).
 

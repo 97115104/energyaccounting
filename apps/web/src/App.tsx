@@ -293,16 +293,14 @@ export function App() {
           ) : hasReturningFlag() ? (
             <>
               <h1 className="brand">Welcome back</h1>
-              <p className="tagline">
-                Energy Accounting Journal for neurodivergent productivity.
-              </p>
+              <p className="tagline">EAJ is for neurodivergent productivity 💖</p>
             </>
           ) : (
             <>
               <h1 className="brand">Your Energy Matters</h1>
               <p className="tagline">
-                Energy Accounting Journal for neurodivergent productivity. Plan deposits and
-                withdrawals, audit the day, and carry the balance forward.
+                EAJ is for neurodivergent productivity 💖 Plan deposits and withdrawals, audit the
+                day, and carry the balance forward.
               </p>
             </>
           )}

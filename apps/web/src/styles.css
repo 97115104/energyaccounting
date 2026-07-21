@@ -1407,47 +1407,174 @@ html[data-theme="night"] .tips-fab {
   animation: sheet-in 0.22s cubic-bezier(0.32, 0.72, 0.35, 1.1);
 }
 
-.action-tip {
+/* Guide sheet scrim: modal semantics with a whisper of a backdrop, so the
+   sheet still reads as a lightweight popover anchored at the FAB. */
+.guide-scrim {
   position: fixed;
-  top: auto;
-  right: 1rem;
-  bottom: 5.75rem;
-  z-index: 55;
-  width: min(430px, calc(100vw - 2rem));
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 36px;
-  gap: 0.75rem;
-  align-items: start;
-  padding: 0.8rem;
+  inset: 0;
+  z-index: 41;
+  background: color-mix(in srgb, var(--bg0) 10%, rgba(0, 0, 0, 0.18));
+}
+
+/* One guide recommendation, inline on the Today panel or inside the sheet. */
+.guide-card {
+  margin-top: 0.85rem;
+  padding: 0.8rem 0.9rem;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 82%, var(--accent) 7%);
+}
+
+.guide-card.in-sheet {
+  margin-top: 0;
+  margin-bottom: 0.65rem;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 4%);
+}
+
+html[data-theme="night"] .guide-card {
+  background: color-mix(in srgb, #0e1428 88%, var(--accent) 8%);
+}
+
+.guide-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.guide-provenance {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.guide-card-body {
+  margin: 0.35rem 0 0.25rem;
+}
+
+.guide-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.guide-card-actions .btn {
+  text-align: left;
+}
+
+/* The "Why this?" disclosure: personal signals first, research second. */
+.guide-why {
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--line);
+  font-size: 0.85rem;
+}
+
+.guide-why ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.guide-why li + li {
+  margin-top: 0.2rem;
+}
+
+.guide-research {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.guide-research a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.guide-privacy {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+}
+
+/* Progressive-disclosure help: quiet ? affordance, verbose only on demand. */
+.help-tip {
+  position: relative;
+  display: inline-block;
+  margin-left: 0.3rem;
+}
+
+.guide-card-actions .linkish {
+  min-height: 44px;
+  padding: 0.65rem 0.5rem;
+}
+
+.help-tip-btn {
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50% !important;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: text-top;
+}
+
+.help-tip-btn[aria-expanded="true"],
+.help-tip-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.help-tip-panel {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% + 0.4rem);
+  width: min(260px, 78vw);
+  display: block;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
   color: var(--ink);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
-.action-tip-icon {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  color: var(--accent-ink);
+/* Stats sit near the viewport's left edge; keep panels on screen. */
+.stat .help-tip-panel {
+  left: 0;
+  transform: none;
 }
 
-.action-tip-copy {
-  display: grid;
-  gap: 0.2rem;
+/* The current phase reads as pressed, not just tinted. */
+.phase-bar .btn.phase-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  font-weight: 700;
 }
 
-.action-tip-copy .linkish {
-  justify-self: start;
-  margin-top: 0.25rem;
+.phase-bar .help-tip {
+  align-self: center;
 }
 
-.action-tip-dismiss {
-  width: 36px;
-  height: 36px;
+.phase-bar .help-tip-panel {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 .task-detail-modal {
@@ -1525,47 +1652,6 @@ html[data-theme="night"] .tip-card {
 
 .tip-card p {
   margin: 0.35rem 0 0;
-}
-
-.play-chips {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-}
-
-.activity-suggestion-list {
-  display: grid;
-  gap: 0.65rem;
-  margin-top: 0.65rem;
-}
-
-.activity-suggestion {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.activity-suggestion .btn {
-  justify-self: stretch;
-  text-align: left;
-}
-
-.activity-suggestion span,
-.activity-suggestion a {
-  font-size: 0.8rem;
-}
-
-.activity-suggestion span {
-  color: var(--muted);
-}
-
-.activity-suggestion-research {
-  display: block;
-}
-
-.activity-suggestion a {
-  color: var(--accent);
-  font-weight: 700;
 }
 
 .site-footer {
@@ -1916,25 +2002,6 @@ html[data-theme="night"] .tip-card {
 .ob-style-example {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
-}
-
-/* One-line trend hint on the Today panel. */
-.hint-chip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--panel) 80%, var(--accent) 8%);
-  font-size: 0.92rem;
-}
-
-.hint-chip .linkish {
-  padding: 0.65rem 0.5rem;
-  min-height: 44px;
 }
 
 /* Close-day celebration modal. */

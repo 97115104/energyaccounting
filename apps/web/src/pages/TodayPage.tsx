@@ -20,7 +20,7 @@ import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
-import { suggestActivities } from "../lib/activitySuggest";
+import { HelpTip } from "../components/HelpTip";
 import { api } from "../lib/api";
 import {
   decryptText,
@@ -29,14 +29,17 @@ import {
   labelHash,
 } from "../lib/crypto";
 import {
+  buildGuide,
+  recoveryPlan,
+  type GuideItem,
+} from "../lib/energyGuide";
+import {
   closeDayInsights,
   planningHint,
   type Insight,
   type StatPoint,
 } from "../lib/insights";
-import { playCategoryTitle, suggestPlayDeposits } from "../lib/playCategories";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
-import { buildTips } from "../lib/tips";
 import {
   defaultTemperatureUnit,
   formatTemp,
@@ -120,8 +123,19 @@ async function fetchRecentStats(date: string): Promise<StatPoint[]> {
   return res.series;
 }
 
-function hintDismissKey(date: string): string {
-  return `eaj-hint-dismissed-${date}`;
+function guideDismissKey(date: string): string {
+  return `eaj-guide-dismissed:${date}`;
+}
+
+function loadDismissedGuideIds(date: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(guideDismissKey(date));
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
 }
 
 function MicIcon() {
@@ -160,14 +174,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
-  const [compensate, setCompensate] = useState("");
   const [listening, setListening] = useState(false);
-  const [tipsOpen, setTipsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [detailLineId, setDetailLineId] = useState<string | null>(null);
   const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
   const [detailText, setDetailText] = useState("");
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [dismissedTipIds, setDismissedTipIds] = useState<Set<string>>(() => new Set());
+  const [dismissedGuideIds, setDismissedGuideIds] = useState<Set<string>>(() => new Set());
+  // The welcome walkthrough dismisses once, forever — not per day.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("eaj-guide-welcome-dismissed") === "1";
+    } catch {
+      return true;
+    }
+  });
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
   const [justFreed, setJustFreed] = useState<number | undefined>();
@@ -179,27 +200,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [closeCelebration, setCloseCelebration] = useState<{
     closingBalance: number;
     insights: Insight[];
+    recovery: GuideItem | null;
   } | null>(null);
-  // One gentle trend hint while planning; dismissal remembered per day.
-  const [hint, setHint] = useState<Insight | null>(null);
+  // Numeric history, feeding the planning hint and the recovery plan.
+  const [statSeries, setStatSeries] = useState<StatPoint[]>([]);
   const speechRef = useRef<SpeechRec | null>(null);
   const journalBaseRef = useRef("");
   const journalRef = useRef("");
-  const compensateRef = useRef("");
 
   useEffect(() => {
     journalRef.current = journal;
   }, [journal]);
-  useEffect(() => {
-    compensateRef.current = compensate;
-  }, [compensate]);
 
   useEffect(() => {
     setJustFreed(undefined);
     setCloseCelebration(null);
-    setHint(null);
+    setStatSeries([]);
     setDetailLineId(null);
-    setDismissedTipIds(new Set());
+    setDismissedGuideIds(loadDismissedGuideIds(date));
   }, [date]);
 
   useEffect(() => {
@@ -251,15 +269,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
         setJournal("");
       }
     } else setJournal("");
-    if (d.compensateNoteCiphertext && d.compensateNoteIv) {
-      try {
-        setCompensate(
-          await decryptText(dek, d.compensateNoteCiphertext, d.compensateNoteIv, "eaj-compensate"),
-        );
-      } catch {
-        setCompensate("");
-      }
-    } else setCompensate("");
 
     const sug = await api<{ suggestions: Suggestion[] }>(`/api/suggestions/${date}`);
     const decrypted: Suggestion[] = [];
@@ -278,28 +287,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Load failed"));
   }, [load]);
 
-  // Surface at most one trend hint during planning, unless dismissed today.
+  // Numeric history feeds the planning hint during plan.
   const dayPhase = day?.phase;
   useEffect(() => {
-    if (dayPhase !== "plan") {
-      setHint(null);
-      return;
-    }
+    if (dayPhase !== "plan" && dayPhase !== "audit") return;
     let cancelled = false;
-    try {
-      if (localStorage.getItem(hintDismissKey(date)) === "1") {
-        setHint(null);
-        return;
-      }
-    } catch {
-      /* storage unavailable; show the hint anyway */
-    }
     void fetchRecentStats(date)
       .then((series) => {
-        if (!cancelled) setHint(planningHint(series, date));
+        if (!cancelled) setStatSeries(series);
       })
       .catch(() => {
-        if (!cancelled) setHint(null);
+        if (!cancelled) setStatSeries([]);
       });
     return () => {
       cancelled = true;
@@ -412,14 +410,50 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [detailLineId]);
 
-  function dismissHint() {
-    setHint(null);
-    try {
-      localStorage.setItem(hintDismissKey(date), "1");
-    } catch {
-      /* fine; it just reappears next load */
+  // Escape closes the guide sheet; Tab stays inside (same contract as the
+  // other dialogs on this page).
+  useEffect(() => {
+    if (!guideOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("guide-sheet");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => !el.hasAttribute("disabled"))
+        : [];
+
+    const focusId = window.requestAnimationFrame(() => {
+      focusables()[0]?.focus();
+    });
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setGuideOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
-  }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      window.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [guideOpen]);
 
   useEffect(() => {
     if (!draftLabel.trim() || !day) return;
@@ -472,47 +506,65 @@ export function TodayPage({ user }: { user: UserProfile }) {
     user.lon,
     user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
-  const playSuggestions = useMemo(() => {
-    if (!day || !playHeavy) return [];
-    return suggestPlayDeposits({
-      existingLabels: day.lines.map((l) => l.label ?? ""),
-      daySeed: date,
-      count: 3,
-    });
-  }, [day, playHeavy, date]);
 
-  const tips = useMemo(() => {
-    if (!day) return [];
-    return buildTips({
-      available: day.availableCapacity,
-      depositTotal: day.attwood.depositTotal,
-      withdrawalTotal: day.attwood.withdrawalTotal,
-      incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
-      weatherKind,
-      uvMax,
-      isDaylight: isDaylightPeriod(currentSkyPeriod),
-      justFreed,
-    });
-  }, [day, withdrawals, weatherKind, uvMax, currentSkyPeriod, justFreed]);
+  // Trend hint while planning; recovery only at close (never during audit,
+  // so tomorrow's day row is not created before today locks).
+  const hint = useMemo(
+    () => (dayPhase === "plan" ? planningHint(statSeries, date) : null),
+    [dayPhase, statSeries, date],
+  );
 
-  const activitySuggestions = useMemo(() => {
-    if (!day) return [];
-    return suggestActivities({
-      date,
-      available: day.availableCapacity,
-      weatherKind,
-      uvMax,
-      isDaylight: isDaylightPeriod(currentSkyPeriod),
-      withdrawalHeavy: playHeavy,
-      existingLabels: day.lines.map((line) => line.label ?? ""),
-      candidates: suggestions,
-    });
-  }, [day, date, weatherKind, uvMax, currentSkyPeriod, playHeavy, suggestions]);
+  const guide = useMemo(() => {
+    if (!day) return { primary: null, items: [] as GuideItem[] };
+    const extra: GuideItem[] = [];
+    // First contact: teach the loop where it happens instead of in slides.
+    if (!welcomeDismissed && day.lines.length === 0 && day.phase === "plan") {
+      extra.push({
+        id: "welcome",
+        kind: "event",
+        title: "Start with one honest line",
+        body: "Add a withdrawal for something today will ask of you, and a deposit for something that refills you. Completing a task frees its reserved points back into Available.",
+        because: ["This day's ledger is empty, and you haven't dismissed this walkthrough."],
+        provenance: "Getting started",
+        personalized: false,
+        score: 70,
+      });
+    }
+    return buildGuide(
+      {
+        date,
+        available: day.availableCapacity,
+        depositTotal: day.attwood.depositTotal,
+        withdrawalTotal: day.attwood.withdrawalTotal,
+        incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
+        weatherKind,
+        uvMax,
+        isDaylight: isDaylightPeriod(currentSkyPeriod),
+        withdrawalHeavy: playHeavy,
+        existingLabels: day.lines.map((line) => line.label ?? ""),
+        candidates: suggestions,
+        justFreed,
+        planningHint: hint,
+        dismissedIds: dismissedGuideIds,
+      },
+      extra,
+    );
+  }, [
+    day,
+    date,
+    withdrawals,
+    weatherKind,
+    uvMax,
+    currentSkyPeriod,
+    playHeavy,
+    suggestions,
+    justFreed,
+    hint,
+    dismissedGuideIds,
+    welcomeDismissed,
+  ]);
 
   const detailLine = day?.lines.find((line) => line.id === detailLineId) ?? null;
-  const promptSuggestion = activitySuggestions.find(
-    (suggestion) => !dismissedTipIds.has(suggestion.id),
-  );
 
   function openTaskDetails(line: Line) {
     if (dndBusy || activeDragId || suppressOpenRef.current) return;
@@ -520,45 +572,49 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setDetailDifficulty(line.difficulty);
     setDetailText(line.details ?? "");
     setDetailError(null);
-    setTipsOpen(false);
+    setGuideOpen(false);
   }
 
-  function dismissPrompt(id: string) {
-    setDismissedTipIds((prev) => {
+  function dismissGuideItem(id: string) {
+    // The freed-capacity item reflects a transient event; dismissing clears
+    // the event instead of muting future completions for the whole day.
+    if (id === "event:freed") {
+      setJustFreed(undefined);
+      return;
+    }
+    if (id === "welcome") {
+      setWelcomeDismissed(true);
+      try {
+        localStorage.setItem("eaj-guide-welcome-dismissed", "1");
+      } catch {
+        // Storage unavailable; state alone hides it for this session.
+      }
+      return;
+    }
+    setDismissedGuideIds((prev) => {
       const next = new Set(prev);
       next.add(id);
+      try {
+        localStorage.setItem(guideDismissKey(date), JSON.stringify([...next]));
+      } catch {
+        // Storage unavailable; the item can reappear after reload.
+      }
       return next;
     });
-    try {
-      localStorage.setItem(`eaj-tip-dismissed:${date}:${id}`, "1");
-    } catch {
-      // The prompt can reappear after reload when storage is unavailable.
-    }
   }
-
-  useEffect(() => {
-    const dismissed = new Set<string>();
-    for (const suggestion of activitySuggestions) {
-      try {
-        if (localStorage.getItem(`eaj-tip-dismissed:${date}:${suggestion.id}`) === "1") {
-          dismissed.add(suggestion.id);
-        }
-      } catch {
-        /* storage unavailable */
-      }
-    }
-    setDismissedTipIds(dismissed);
-  }, [activitySuggestions, date]);
 
   async function addLine(
     side: "deposit" | "withdrawal",
     label: string,
     cost: number,
     hash?: string,
+    targetDate?: string,
   ): Promise<boolean> {
     const dek = getSessionDek();
     if (!dek || !day) return false;
-    if (cost > day.availableCapacity) {
+    const crossDay = !!targetDate && targetDate !== date;
+    // The server re-checks capacity for any date; this is just a faster error.
+    if (!crossDay && cost > day.availableCapacity) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
       );
@@ -566,18 +622,37 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
     const { ciphertext, iv } = await encryptText(dek, label.trim(), "eaj-label");
     const lh = hash ?? (await labelHash(label));
-    await api(`/api/days/${date}/lines`, {
-      method: "POST",
-      body: JSON.stringify({
-        side,
-        labelCiphertext: ciphertext,
-        labelIv: iv,
-        labelHash: lh,
-        plannedCost: cost,
-      }),
-    });
-    await load();
+    try {
+      await api(`/api/days/${targetDate ?? date}/lines`, {
+        method: "POST",
+        body: JSON.stringify({
+          side,
+          labelCiphertext: ciphertext,
+          labelIv: iv,
+          labelHash: lh,
+          plannedCost: cost,
+        }),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the item.");
+      return false;
+    }
+    if (!crossDay) await load();
     return true;
+  }
+
+  /** Apply a guide action; returns whether the line was added. */
+  async function applyGuideAction(item: GuideItem): Promise<boolean> {
+    if (!item.action) return false;
+    const ok = await addLine(
+      item.action.side,
+      item.action.label,
+      item.action.cost,
+      undefined,
+      item.action.targetDate,
+    );
+    if (ok) dismissGuideItem(item.id);
+    return ok;
   }
 
   function closeDraft() {
@@ -648,15 +723,42 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const res = await api<{ closingBalance: number }>(`/api/days/${date}/close`, {
         method: "POST",
       });
+      // Recovery is offered at close with final numbers, so the "plan
+      // tomorrow" prompt reflects what actually happened, not projections.
+      const recoveryId = `recovery:${date}`;
+      const closedRecovery =
+        day && !dismissedGuideIds.has(recoveryId)
+          ? recoveryPlan({
+              date,
+              feelRating: day.feelRating,
+              openingBalance: day.openingBalance,
+              closingBalance: res.closingBalance,
+              plannedTotal: day.lines.reduce((sum, l) => sum + l.plannedCost, 0),
+              actualTotal: day.lines.reduce(
+                (sum, l) => sum + (l.actualCost ?? l.plannedCost),
+                0,
+              ),
+              incompleteWithdrawals: day.lines.filter(
+                (l) => l.side === "withdrawal" && !l.completed,
+              ).length,
+              series: statSeries,
+              candidates: suggestions,
+            })
+          : null;
       try {
         const series = await fetchRecentStats(date);
         setCloseCelebration({
           closingBalance: res.closingBalance,
           insights: closeDayInsights(series, date),
+          recovery: closedRecovery,
         });
       } catch {
         // The day still closed; skip the celebration if stats are unavailable.
-        setCloseCelebration({ closingBalance: res.closingBalance, insights: [] });
+        setCloseCelebration({
+          closingBalance: res.closingBalance,
+          insights: [],
+          recovery: closedRecovery,
+        });
       }
     } else {
       await api(`/api/days/${date}`, {
@@ -671,14 +773,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const dek = getSessionDek();
     if (!dek) return;
     const j = await encryptText(dek, journalRef.current, "eaj-journal");
-    const c = await encryptText(dek, compensateRef.current, "eaj-compensate");
+    // Compensate fields are omitted on purpose: the server keeps whatever was
+    // stored before the manual note was replaced by the recovery plan.
     await api(`/api/days/${date}`, {
       method: "PATCH",
       body: JSON.stringify({
         journalCiphertext: j.ciphertext,
         journalIv: j.iv,
-        compensateNoteCiphertext: c.ciphertext,
-        compensateNoteIv: c.iv,
         feelRating: day?.feelRating ?? null,
       }),
     });
@@ -826,7 +927,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     <div className="today-root">
       <div
         aria-hidden={
-          closeCelebration || detailLineId || (draftSide && !closed) ? true : undefined
+          closeCelebration || detailLineId || guideOpen || (draftSide && !closed)
+            ? true
+            : undefined
         }
       >
       <div className="panel">
@@ -863,19 +966,42 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
         <div className="stats" style={{ marginTop: "1rem" }}>
           <div className="stat">
-            <div className="label">Opening</div>
+            <div className="label">
+              Opening
+              <HelpTip label="opening balance">
+                Where the battery started today: yesterday’s closing balance, carried forward.
+              </HelpTip>
+            </div>
             <div className="value">{day.openingBalance}</div>
           </div>
           <div className="stat">
-            <div className="label">Available</div>
+            <div className="label">
+              Available
+              <HelpTip label="available capacity">
+                Points not yet reserved by pending tasks. Completing a task frees its reservation
+                back into this number.
+              </HelpTip>
+            </div>
             <div className="value">{day.availableCapacity}</div>
           </div>
           <div className="stat">
-            <div className="label">Projected close</div>
+            <div className="label">
+              Projected close
+              <HelpTip label="projected close">
+                Where today lands if every planned line costs what you estimated. Closing the day
+                locks the real number in.
+              </HelpTip>
+            </div>
             <div className="value">{day.projectedClosing}</div>
           </div>
           <div className="stat">
-            <div className="label">Attwood net</div>
+            <div className="label">
+              Attwood net
+              <HelpTip label="Attwood net">
+                Deposits minus withdrawals, the core Energy Accounting measure from Maja Toudal and
+                Dr. Tony Attwood. Positive means today gave more than it took.
+              </HelpTip>
+            </div>
             <div className="value">{day.attwood.attwoodNet}</div>
           </div>
           <div className="stat">
@@ -888,7 +1014,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <div className="phase-bar" style={{ marginTop: "1rem" }}>
           <button
             type="button"
-            className="btn secondary"
+            className={`btn secondary${day.phase === "plan" ? " phase-active" : ""}`}
+            aria-pressed={day.phase === "plan"}
             disabled={closed}
             onClick={() => void setPhase("plan")}
           >
@@ -896,7 +1023,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
           </button>
           <button
             type="button"
-            className="btn secondary"
+            className={`btn secondary${day.phase === "audit" ? " phase-active" : ""}`}
+            aria-pressed={day.phase === "audit"}
             disabled={closed}
             onClick={() => void setPhase("audit")}
           >
@@ -905,24 +1033,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
           <button
             type="button"
             className="btn accent"
+            aria-pressed={closed}
             disabled={closed}
             onClick={() => void setPhase("closed")}
           >
-            Close day
+            {closed ? "Day closed" : "Close day"}
           </button>
+          <HelpTip label="the daily rhythm">
+            Plan the day’s deposits and withdrawals in the morning, audit real costs and how it
+            felt in the evening, then close to lock the sheet and carry the balance into tomorrow.
+          </HelpTip>
         </div>
-        {hint && day.phase === "plan" && !closed && (
-          <div className="hint-chip" role="status">
-            <span>{hint.text}</span>
-            <button
-              type="button"
-              className="linkish"
-              aria-label="Dismiss hint"
-              onClick={dismissHint}
-            >
-              Dismiss
-            </button>
-          </div>
+        {guide.primary && !closed && (
+          <GuideCard
+            item={guide.primary}
+            closed={closed}
+            onAction={(item) => void applyGuideAction(item)}
+            onDismiss={dismissGuideItem}
+          />
         )}
         {error && <p className="error">{error}</p>}
       </div>
@@ -975,12 +1103,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
             className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
             suggestions={suggestions.filter((s) => s.side === "deposit")}
-            playSuggestions={playSuggestions}
             closed={closed}
             audit={day.phase === "audit"}
             onAdd={() => setDraftSide("deposit")}
             onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
-            onPlay={(p) => void addLine("deposit", p.label, p.typicalCost)}
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
@@ -1049,148 +1175,88 @@ export function TodayPage({ user }: { user: UserProfile }) {
               Save journal
             </button>
           </div>
-          <div className="field">
-            <label htmlFor="compensate">What can I schedule tomorrow to compensate?</label>
-            <textarea
-              id="compensate"
-              value={compensate}
-              disabled={closed}
-              onChange={(e) => setCompensate(e.target.value)}
-            />
-          </div>
         </div>
       )}
 
-      {promptSuggestion && !closed && !tipsOpen && (
-        <aside className="action-tip" role="status" aria-label="Suggested energy deposit">
-          <span className="action-tip-icon" aria-hidden="true">
-            <LightbulbIcon />
-          </span>
-          <div className="action-tip-copy">
-            <strong>Deposit that fits now</strong>
-            <span>
-              {promptSuggestion.label} fits the {day.availableCapacity} points available now.
-            </span>
-            <button
-              type="button"
-              className="linkish"
-              onClick={() => {
-                void addLine(
-                  "deposit",
-                  promptSuggestion.label,
-                  promptSuggestion.typicalCost,
-                ).then((ok) => {
-                  if (ok) dismissPrompt(promptSuggestion.id);
-                });
-              }}
-            >
-              Add {promptSuggestion.label} · {promptSuggestion.typicalCost}
-            </button>
-          </div>
-          <button
-            type="button"
-            className="icon-btn action-tip-dismiss"
-            aria-label="Dismiss suggestion for today"
-            onClick={() => dismissPrompt(promptSuggestion.id)}
-          >
-            ×
-          </button>
-        </aside>
-      )}
-
-      <button
-        type="button"
-        className={`tips-fab${tipsOpen ? " open" : ""}`}
-        aria-label="Open tips"
-        title="Tips"
-        onClick={() => {
-          prefetchSuggestModel();
-          setTipsOpen((o) => !o);
-        }}
-      >
-        <LightbulbIcon />
-        {tips.length + activitySuggestions.length > 0 && !tipsOpen && (
-          <span className="tips-badge" aria-hidden="true">
-            {tips.length + activitySuggestions.length}
-          </span>
-        )}
-      </button>
-      {tipsOpen && (
-        <div className="tips-sheet panel" role="dialog" aria-label="Tips">
-          <div className="col-head">
-            <h2>Tips</h2>
-            <button type="button" className="btn secondary" onClick={() => {
-              setTipsOpen(false);
-              setJustFreed(undefined);
-            }}>
-              Close
-            </button>
-          </div>
-          {tips.map((t) => (
-            <div key={t.id} className="tip-card">
-              <strong>{t.title}</strong>
-              <p>{t.body}</p>
-            </div>
-          ))}
-          {activitySuggestions.length > 0 && (
-            <div className="tip-card">
-              <strong>Deposits that fit now</strong>
-              <p>
-                {activitySuggestions.some((s) => s.familiar)
-                  ? "Chosen on this device from your patterns, capacity, and today’s conditions."
-                  : "Research-backed options matched to capacity and today’s conditions on this device."}
-              </p>
-              <div className="activity-suggestion-list">
-                {activitySuggestions.map((suggestion) => (
-                  <div key={suggestion.id} className="activity-suggestion">
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={closed}
-                      onClick={() => {
-                        void addLine("deposit", suggestion.label, suggestion.typicalCost);
-                        setTipsOpen(false);
-                      }}
-                    >
-                      + {suggestion.label} · {suggestion.typicalCost}
-                    </button>
-                    <span>{suggestion.reason}</span>
-                    <span className="activity-suggestion-research">{suggestion.research}</span>
-                    {suggestion.sourceUrl && (
-                      <a href={suggestion.sourceUrl} target="_blank" rel="noreferrer">
-                        Evidence
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {playHeavy && playSuggestions.length > 0 && (
-            <div className="tip-card">
-              <strong>Play deposits</strong>
-              <p>Withdrawals are ahead. Try a play-category deposit to rebalance.</p>
-              <div className="play-chips">
-                {playSuggestions.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    className="btn secondary"
-                    disabled={closed}
-                    onClick={() => {
-                      void addLine("deposit", p.label, p.typicalCost);
-                      setTipsOpen(false);
-                    }}
-                  >
-                    {playCategoryTitle(p.category)} · {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       </div>
+
+      {/* No suggestions, no lightbulb: the FAB earns its place or leaves.
+          Stays while the sheet is open so dismissing the last item doesn't
+          yank the control out from underneath. */}
+      {(guide.items.length > 0 || guideOpen) && (
+        <button
+          type="button"
+          className={`tips-fab${guideOpen ? " open" : ""}`}
+          aria-label={
+            guideOpen
+              ? "Close energy guide"
+              : `Open energy guide (${guide.items.length} suggestions)`
+          }
+          aria-expanded={guideOpen}
+          title="Energy guide"
+          onClick={() => {
+            prefetchSuggestModel();
+            setGuideOpen((o) => !o);
+          }}
+        >
+          <LightbulbIcon />
+          {guide.items.length > 0 && !guideOpen && (
+            <span className="tips-badge" aria-hidden="true">
+              {guide.items.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {guideOpen && (
+        <div
+          className="guide-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setGuideOpen(false);
+          }}
+        >
+          <div
+            id="guide-sheet"
+            className="tips-sheet panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="guide-title"
+            aria-describedby="guide-privacy"
+          >
+            <div className="col-head">
+              <h2 id="guide-title">Energy guide</h2>
+              <button type="button" className="btn secondary" onClick={() => setGuideOpen(false)}>
+                Close
+              </button>
+            </div>
+            {guide.items.length === 0 && (
+              <p className="muted">
+                Nothing to suggest right now. Plan deposits and withdrawals, complete what you can,
+                and the guide will speak up when it has something concrete.
+              </p>
+            )}
+            {guide.items.map((item) => (
+              <GuideCard
+                key={item.id}
+                item={item}
+                closed={closed}
+                inSheet
+                onAction={(entry) => {
+                  void applyGuideAction(entry).then((ok) => {
+                    if (ok) setGuideOpen(false);
+                  });
+                }}
+                onDismiss={dismissGuideItem}
+              />
+            ))}
+            <p id="guide-privacy" className="muted guide-privacy">
+              Suggestions are ranked on this device from your history, capacity, and today’s
+              conditions. Numeric totals power trends; labels stay encrypted and never leave the
+              browser.
+            </p>
+          </div>
+        </div>
+      )}
 
       {draftSide && !closed && (
         <div
@@ -1354,6 +1420,25 @@ export function TodayPage({ user }: { user: UserProfile }) {
             {closeCelebration.insights.length === 0 && (
               <p className="muted">The sheet is locked. Rest is also productive.</p>
             )}
+            {closeCelebration.recovery && (
+              <GuideCard
+                item={closeCelebration.recovery}
+                closed={false}
+                actionLabel="Plan for tomorrow"
+                onAction={(item) => {
+                  void applyGuideAction(item).then((ok) => {
+                    if (ok) {
+                      setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
+                    }
+                  });
+                }}
+                onDismiss={(id) => {
+                  dismissGuideItem(id);
+                  setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
+                }}
+                dismissLabel="Not now"
+              />
+            )}
             <button
               type="button"
               className="btn accent"
@@ -1368,6 +1453,89 @@ export function TodayPage({ user }: { user: UserProfile }) {
   );
 }
 
+/**
+ * One guide recommendation: action-first summary with a "Why this?"
+ * disclosure that separates personal signals from research grounding.
+ */
+function GuideCard(props: {
+  item: GuideItem;
+  closed: boolean;
+  inSheet?: boolean;
+  actionLabel?: string;
+  dismissLabel?: string;
+  onAction: (item: GuideItem) => void;
+  onDismiss: (id: string) => void;
+}) {
+  const [whyOpen, setWhyOpen] = useState(false);
+  const { item } = props;
+  const whyId = `guide-why-${item.id.replace(/[^a-z0-9-]/gi, "-")}${props.inSheet ? "-sheet" : ""}`;
+  return (
+    <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
+      <div className="guide-card-head">
+        <strong>{item.title}</strong>
+        <span className="guide-provenance">
+          {item.provenance ??
+            (item.personalized ? "From your history, on this device" : "Research-backed")}
+        </span>
+      </div>
+      <p className="guide-card-body">{item.body}</p>
+      <div className="guide-card-actions">
+        {item.action && (
+          <button
+            type="button"
+            className="btn accent"
+            disabled={props.closed}
+            onClick={() => props.onAction(item)}
+          >
+            {props.actionLabel ??
+              `Add ${item.action.label} · ${item.action.cost}${
+                item.action.targetDate ? " tomorrow" : ""
+              }`}
+          </button>
+        )}
+        <button
+          type="button"
+          className="linkish"
+          aria-expanded={whyOpen}
+          aria-controls={whyId}
+          onClick={() => setWhyOpen((o) => !o)}
+        >
+          Why this?
+        </button>
+        <button
+          type="button"
+          className="linkish"
+          onClick={() => props.onDismiss(item.id)}
+        >
+          {props.dismissLabel ?? "Dismiss"}
+        </button>
+      </div>
+      {whyOpen && (
+        <div id={whyId} className="guide-why">
+          <ul>
+            {item.because.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+          {item.research && (
+            <p className="guide-research">
+              Research basis: {item.research}
+              {item.sourceUrl && (
+                <>
+                  {" "}
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                    Evidence
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
 function Column(props: {
   title: string;
   side: "deposit" | "withdrawal";
@@ -1375,12 +1543,10 @@ function Column(props: {
   className: string;
   lines: Line[];
   suggestions: Suggestion[];
-  playSuggestions?: ReturnType<typeof suggestPlayDeposits>;
   closed: boolean;
   audit: boolean;
   onAdd: () => void;
   onConfirm: (s: Suggestion) => void;
-  onPlay?: (p: { label: string; typicalCost: number }) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line) => void;
   onRemove: (id: string) => void;
@@ -1418,26 +1584,6 @@ function Column(props: {
           />
         ))}
       </SortableContext>
-      {props.side === "deposit" &&
-        props.playSuggestions?.map((p) => (
-          <div key={p.label} className="task-row suggestion play-suggestion">
-            <button
-              type="button"
-              className="btn plus confirm-add"
-              disabled={props.closed}
-              aria-label="Add play deposit"
-              onClick={() => props.onPlay?.(p)}
-            >
-              +
-            </button>
-            <div>
-              <div>{p.label}</div>
-              <div className="task-meta">
-                Play · {playCategoryTitle(p.category)} · {p.typicalCost}
-              </div>
-            </div>
-          </div>
-        ))}
       {props.suggestions.map((s) => (
         <div key={s.id} className="task-row suggestion">
           <button
@@ -1457,7 +1603,7 @@ function Column(props: {
           </div>
         </div>
       ))}
-      {!props.lines.length && !props.suggestions.length && !props.playSuggestions?.length && (
+      {!props.lines.length && !props.suggestions.length && (
         <p className="muted">
           {props.side === "withdrawal"
             ? "Nothing draining yet. Suspiciously well-rested."
