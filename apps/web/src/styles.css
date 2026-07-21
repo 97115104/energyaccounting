@@ -547,7 +547,7 @@ html[data-weather="thunder"] .sky-layer {
 }
 
 /* Grid gap already spaces panels; the sibling margin above would push the
-   second column down and misalign Withdrawals/Deposits. */
+   second column down and misalign the energy columns. */
 .grid-2 > .panel + .panel {
   margin-top: 0;
 }
@@ -765,7 +765,7 @@ html[data-theme="night"] .task-row {
   color: var(--ink);
 }
 
-.task-row.ledger-task {
+.task-row.day-task {
   grid-template-columns: 44px minmax(0, 1fr) auto;
   gap: 0.35rem;
 }

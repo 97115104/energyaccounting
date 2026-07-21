@@ -47,15 +47,15 @@ const CLASSIC: Record<Slot, Pool> = {
       "Hi {name}, what do we have on today?",
       "Morning, {name}. Let's plan the day.",
     ],
-    anonymous: ["Good morning", "What do we have on today?", "A fresh sheet awaits."],
+    anonymous: ["Good morning", "What do we have on today?", "A fresh day awaits."],
   },
   afternoon: {
     named: [
       "Good afternoon, {name}",
-      "Hi {name}, how's the balance holding?",
-      "{name}, checking in on the ledger?",
+      "Hi {name}, how's your energy holding?",
+      "{name}, checking in on your day?",
     ],
-    anonymous: ["Good afternoon", "How's the balance holding?", "Midday check-in."],
+    anonymous: ["Good afternoon", "How's your energy holding?", "Midday check-in."],
   },
   evening: {
     named: [
@@ -68,10 +68,10 @@ const CLASSIC: Record<Slot, Pool> = {
   night: {
     named: [
       "Quiet hours, {name}",
-      "Hi {name}, the ledger's still open.",
-      "{name}, a late look at the sheet.",
+      "Hi {name}, your day's still open.",
+      "{name}, a late look at your day.",
     ],
-    anonymous: ["Quiet hours", "The ledger's still open.", "A late look at the sheet."],
+    anonymous: ["Quiet hours", "Your day's still open.", "A late look at your day."],
   },
 };
 
@@ -81,7 +81,7 @@ const HUMOR: Pool = {
     "Hi {name}. All 84 brain tabs are open and every one is important.",
     "Executive function is loading, {name}. Thanks for your patience.",
     "Welcome back, {name}. The hyperfocus chooses you, never the reverse.",
-    "{name}, your social battery called. It wants a deposit.",
+    "{name}, your social battery called. Please add energy.",
     "One quick weather check later, {name}, it's 3 am and you know everything about orcas.",
     "Hi {name}. Today's plan: one thing. Today's brain: forty things.",
     "The dopamine is stored in the checked-off task, {name}.",
@@ -99,7 +99,7 @@ const HUMOR: Pool = {
     "All 84 brain tabs are open and every one is important.",
     "Executive function is loading. Thanks for your patience.",
     "The hyperfocus chooses you, never the reverse.",
-    "Your social battery called. It wants a deposit.",
+    "Your social battery called. Please add energy.",
     "One quick weather check later, it's 3 am and you know everything about orcas.",
     "Today's plan: one thing. Today's brain: forty things.",
     "The dopamine is stored in the checked-off task.",

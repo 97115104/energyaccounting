@@ -103,7 +103,7 @@ describe("closeDayInsights", () => {
 });
 
 describe("recentClosedCount", () => {
-  test("counts closed ledgers started within the window", () => {
+  test("counts closed days started within the window", () => {
     const now = Date.now();
     const recent = new Date(now - 2 * 86_400_000).toISOString();
     const old = new Date(now - 10 * 86_400_000).toISOString();
@@ -116,7 +116,7 @@ describe("recentClosedCount", () => {
     expect(recentClosedCount(series, 7)).toBe(3);
   });
 
-  test("ignores open ledgers", () => {
+  test("ignores open days", () => {
     const recent = new Date().toISOString();
     const series = [day("2026-07-20", { startedAt: recent, phase: "plan" })];
     expect(recentClosedCount(series, 7)).toBe(0);

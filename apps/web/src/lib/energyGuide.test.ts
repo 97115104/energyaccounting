@@ -102,7 +102,7 @@ describe("buildGuide", () => {
     expect(dismissed.primary?.id).not.toBe("event:freed");
   });
 
-  test("actionable items never repeat labels already on the ledger", () => {
+  test("actionable items never repeat labels already on the day", () => {
     const guide = buildGuide(
       guideContext({
         existingLabels: ["Take a short walk"],
@@ -116,7 +116,7 @@ describe("buildGuide", () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  test("play deposits over remaining capacity are excluded", () => {
+  test("play options that add too much energy for remaining capacity are excluded", () => {
     const guide = buildGuide(
       guideContext({ withdrawalHeavy: true, withdrawalTotal: 60, available: 5 }),
     );
@@ -128,7 +128,7 @@ describe("buildGuide", () => {
   });
 
   test("low-signal context produces no interrupting primary", () => {
-    // Night, unknown UV, nothing on the ledger, no capacity: sheet-only content.
+    // Night, unknown UV, nothing on the day, no capacity: sheet-only content.
     const guide = buildGuide(
       guideContext({
         available: 0,
@@ -155,7 +155,7 @@ describe("buildGuide", () => {
     }
   });
 
-  test("next ledger capacity is always 100", () => {
+  test("next day capacity is always 100", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -223,7 +223,7 @@ describe("recoveryPlan", () => {
     expect(plan).not.toBeNull();
   });
 
-  test("picks a familiar low-difficulty deposit for the next ledger", () => {
+  test("picks a familiar low-difficulty way to add energy for the next day", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -246,7 +246,7 @@ describe("recoveryPlan", () => {
     expect(plan?.because.some((b) => b.includes("5×"))).toBe(true);
   });
 
-  test("suggests a buffer when no familiar deposit fits the next ledger", () => {
+  test("suggests a buffer when no familiar way to add energy fits the next day", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,
@@ -259,7 +259,7 @@ describe("recoveryPlan", () => {
     expect(plan!.body).toContain("fresh 100");
   });
 
-  test("negative remaining still allows deposits within a fresh 100", () => {
+  test("negative remaining still allows adding energy within a fresh 100", () => {
     const plan = recoveryPlan(
       recoveryContext({
         feelRating: 2,

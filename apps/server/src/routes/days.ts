@@ -69,30 +69,80 @@ async function ownedDay(userId: string, dayId: string) {
   });
 }
 
-async function linesForDay(dayId: string) {
-  return db
+type WriteDb = Pick<typeof db, "select" | "insert" | "update" | "delete">;
+
+async function linesForDay(dayId: string, executor: WriteDb = db) {
+  return executor
     .select()
     .from(taskLineTable)
     .where(eq(taskLineTable.dayId, dayId))
     .orderBy(taskLineTable.sort);
 }
 
-/** Closed ledgers accept amendments; keep the stored closing balance honest after each one. */
-async function refreshClosedBalance(day: typeof dayTable.$inferSelect) {
+/** Closed days accept amendments; keep the stored closing balance honest after each one. */
+async function refreshClosedBalance(day: typeof dayTable.$inferSelect, executor: WriteDb = db) {
   if (day.phase !== "closed") return;
-  const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, day.id));
+  const lines = await executor.select().from(taskLineTable).where(eq(taskLineTable.dayId, day.id));
   const tasks: TaskCosts[] = lines.map((l) => ({
     side: l.side as TaskCosts["side"],
     planned: l.plannedCost,
     actual: l.actualCost,
   }));
-  await db
+  await executor
     .update(dayTable)
     .set({ closingBalance: closingBalance(day.openingBalance, tasks) })
     .where(eq(dayTable.id, day.id));
 }
 
-/** Plaintext stat row for one ledger, shared by /stats and export. */
+/** Rebuild derived activity history after permanent day deletion. */
+async function rebuildCatalog(userId: string, executor: WriteDb = db) {
+  const days = await executor
+    .select()
+    .from(dayTable)
+    .where(eq(dayTable.userId, userId))
+    .orderBy(dayTable.startedAt, dayTable.id);
+  const entries = new Map<
+    string,
+    {
+      side: string;
+      labelCiphertext: string;
+      labelIv: string;
+      labelHash: string;
+      typicalCost: number;
+      weekdayMask: number;
+      useCount: number;
+      difficultyTotal: number;
+      difficultyCount: number;
+      lastUsed: string;
+    }
+  >();
+  for (const day of days) {
+    const lines = await linesForDay(day.id, executor);
+    for (const line of lines) {
+      if (!line.labelHash) continue;
+      const key = `${line.side}:${line.labelHash}`;
+      const current = entries.get(key);
+      entries.set(key, {
+        side: line.side,
+        labelCiphertext: line.labelCiphertext,
+        labelIv: line.labelIv,
+        labelHash: line.labelHash,
+        typicalCost: line.plannedCost,
+        weekdayMask: (current?.weekdayMask ?? 0) | weekdayBit(day.date),
+        useCount: (current?.useCount ?? 0) + 1,
+        difficultyTotal: (current?.difficultyTotal ?? 0) + (line.difficulty ?? 0),
+        difficultyCount: (current?.difficultyCount ?? 0) + (line.difficulty === null ? 0 : 1),
+        lastUsed: day.date,
+      });
+    }
+  }
+  await executor.delete(taskCatalogTable).where(eq(taskCatalogTable.userId, userId));
+  for (const entry of entries.values()) {
+    await executor.insert(taskCatalogTable).values({ id: newId(), userId, ...entry });
+  }
+}
+
+/** Plaintext stat row for one day, shared by /stats and export. */
 async function statPointForDay(d: typeof dayTable.$inferSelect) {
   const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
   const tasks: AllocatableTask[] = lines.map((l) => ({
@@ -402,7 +452,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         actual: l.actualCost,
         completed: l.completed,
       }));
-      // Amendments to a closed ledger record what actually happened, so the
+      // Amendments to a closed day record what actually happened, so the
       // live capacity guard does not apply to them.
       const avail = availableCapacity(day.openingBalance, allocatable);
       if (day.phase !== "closed" && planned > avail) {
@@ -417,7 +467,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         return { error: "Task notes need both ciphertext and IV, or neither." };
       }
       const id = newId();
-      await db.insert(taskLineTable).values({
+      const newLine = {
         id,
         dayId: day.id,
         side: body.side,
@@ -431,7 +481,17 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         difficulty,
         detailsCiphertext: details.ciphertext,
         detailsIv: details.iv,
-      });
+      };
+      if (day.phase === "closed") {
+        await db.transaction(async (tx) => {
+          await tx.insert(taskLineTable).values(newLine);
+          await rebuildCatalog(user.id, tx);
+          await refreshClosedBalance(day, tx);
+        });
+        return { id };
+      }
+
+      await db.insert(taskLineTable).values(newLine);
       const bit = weekdayBit(day.date);
       const catalog = await db.query.taskCatalogTable.findFirst({
         where: and(
@@ -470,7 +530,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           lastUsed: day.date,
         });
       }
-      await refreshClosedBalance(day);
       return { id };
     },
     {
@@ -578,7 +637,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       // Move difficulty samples when rating, side, or label identity changes.
       const catalogKeyChanged =
         nextLabelHash !== line.labelHash || nextSide !== line.side;
-      if (nextDifficulty !== line.difficulty || catalogKeyChanged) {
+      if (day.phase !== "closed" && (nextDifficulty !== line.difficulty || catalogKeyChanged)) {
         if (line.difficulty !== null) {
           await adjustCatalogDifficulty(
             user.id,
@@ -599,23 +658,28 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         }
       }
 
-      await db
-        .update(taskLineTable)
-        .set({
-          plannedCost: nextPlanned,
-          actualCost: nextActual,
-          labelCiphertext: body.labelCiphertext ?? line.labelCiphertext,
-          labelIv: body.labelIv ?? line.labelIv,
-          labelHash: nextLabelHash,
-          completed: nextCompleted,
-          difficulty: nextDifficulty,
-          detailsCiphertext: nextDetailsCiphertext,
-          detailsIv: nextDetailsIv,
-          side: nextSide,
-          sort: body.sort === undefined ? line.sort : body.sort,
-        })
-        .where(eq(taskLineTable.id, line.id));
-      await refreshClosedBalance(day);
+      const changes = {
+        plannedCost: nextPlanned,
+        actualCost: nextActual,
+        labelCiphertext: body.labelCiphertext ?? line.labelCiphertext,
+        labelIv: body.labelIv ?? line.labelIv,
+        labelHash: nextLabelHash,
+        completed: nextCompleted,
+        difficulty: nextDifficulty,
+        detailsCiphertext: nextDetailsCiphertext,
+        detailsIv: nextDetailsIv,
+        side: nextSide,
+        sort: body.sort === undefined ? line.sort : body.sort,
+      };
+      if (day.phase === "closed") {
+        await db.transaction(async (tx) => {
+          await tx.update(taskLineTable).set(changes).where(eq(taskLineTable.id, line.id));
+          await rebuildCatalog(user.id, tx);
+          await refreshClosedBalance(day, tx);
+        });
+      } else {
+        await db.update(taskLineTable).set(changes).where(eq(taskLineTable.id, line.id));
+      }
       return { ok: true };
     },
     {
@@ -652,13 +716,13 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 404;
       return { error: "Line not found." };
     }
-    if (line.difficulty !== null) {
-      await adjustCatalogDifficulty(user.id, line.labelHash, line.side, -line.difficulty, -1);
-    }
-    await db
-      .delete(taskLineTable)
-      .where(and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)));
-    await refreshClosedBalance(day);
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(taskLineTable)
+        .where(and(eq(taskLineTable.id, params.lineId), eq(taskLineTable.dayId, day.id)));
+      await rebuildCatalog(user.id, tx);
+      await refreshClosedBalance(day, tx);
+    });
     return { ok: true };
   })
   .delete("/days/:dayId", async ({ params, request, set }) => {
@@ -676,8 +740,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 400;
       return { error: "Only a closed day can be deleted from Previous days." };
     }
-    // Foreign-key cascading removes the encrypted lines with the ledger.
-    await db.delete(dayTable).where(eq(dayTable.id, day.id));
+    // One write transaction keeps deletion and its derived activity history atomic.
+    await db.transaction(async (tx) => {
+      await tx.delete(dayTable).where(eq(dayTable.id, day.id));
+      await rebuildCatalog(user.id, tx);
+    });
     return { ok: true };
   })
   .patch(
@@ -693,11 +760,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         set.status = 404;
         return { error: "Day not found." };
       }
-      // A closed ledger accepts amendments to its reflections but never
-      // returns to the plan/audit lifecycle: one active ledger at a time.
+      // A closed day accepts amendments to its reflections but never
+      // returns to the plan/audit lifecycle: one active day at a time.
       if (day.phase === "closed" && body.phase !== undefined) {
         set.status = 400;
-        return { error: "A closed ledger cannot be reopened." };
+        return { error: "A closed day cannot be reopened." };
       }
       await db
         .update(dayTable)
@@ -826,7 +893,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         )
         .orderBy(dayTable.startedAt, dayTable.id);
 
-      // Spanning ledgers can start before the visible range but still be the live sheet.
+      // Spanning days can start before the visible range but still be the live sheet.
       const active = await db.query.dayTable.findFirst({
         where: and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")),
       });

@@ -103,11 +103,18 @@ listeners_on_port() {
   fi
 }
 
-# A pre-day-lifecycle API returns 404 for /api/days/active; 401 means the route exists.
-stale_api_listener() {
-  local code
-  code="$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/api/days/active" 2>/dev/null || echo "000")"
-  [[ "$code" == "404" ]]
+api_health_payload() {
+  curl -sf "http://localhost:${PORT}/api/health" 2>/dev/null || true
+}
+
+api_listener_is_eaj() {
+  [[ "$(api_health_payload)" == *'"service":"eaj"'* ]]
+}
+
+api_listener_is_current() {
+  local payload
+  payload="$(api_health_payload)"
+  [[ "$payload" == *'"service":"eaj"'* && "$payload" == *'"apiVersion":4'* ]]
 }
 
 stop_port_listeners() {
@@ -136,12 +143,15 @@ start_services() {
   mkdir -p "$DATA_DIR"
 
   if port_in_use "$PORT"; then
-    if stale_api_listener; then
-      warn "Port $PORT is serving an outdated API (missing /api/days/active); restarting"
+    if api_listener_is_current; then
+      warn "Port $PORT already has the current EAJ API; will health-check it"
+    elif api_listener_is_eaj; then
+      warn "Port $PORT is serving an outdated EAJ API; restarting"
       stop_port_listeners "$PORT"
       start_background "cd \"$REPO_ROOT\" && bun run --filter @eaj/server dev"
     else
-      warn "Port $PORT already in use; will health-check existing listener"
+      error "Port $PORT is used by a non-EAJ process; stop it or choose another PORT"
+      exit 1
     fi
   else
     start_background "cd \"$REPO_ROOT\" && bun run --filter @eaj/server dev"

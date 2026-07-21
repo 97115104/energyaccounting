@@ -19,6 +19,7 @@ const app = new Elysia()
   .get("/api/health", () => ({
     ok: true,
     service: "eaj",
+    apiVersion: 4,
   }))
   .use(authRoutes)
   .use(dayRoutes);

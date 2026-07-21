@@ -22,7 +22,7 @@ function SunGlyph() {
   );
 }
 
-function LedgerGlyph() {
+function DayGlyph() {
   return (
     <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
       <rect x="12" y="8" width="40" height="48" fill="none" stroke="currentColor" strokeWidth="3.5" />
@@ -76,13 +76,13 @@ type Step = {
 // Deliberately short: the core loop and the privacy boundary. Everything
 // else (capacity mechanics, the Attwood terms, how suggestions are ranked)
 // is taught in place on the Today page via help disclosures and the Energy
-// Guide, where it can attach to a real ledger instead of theory.
+// Guide, where it can attach to a real day instead of theory.
 const STEPS: Step[] = [
   {
     eyebrow: "The idea",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. Each energy day starts with 100 points. Deposits add energy, withdrawals spend it, and planned tasks reserve capacity until they are completed.",
+      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. You explicitly start each energy day when you're ready; nothing starts automatically. Every day gets a fresh 100 points with no carry from the last one. Add energy with restorative activities, track what uses energy, and complete planned tasks to free their reserved capacity.",
     glyph: <SunGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
   },
@@ -90,15 +90,15 @@ const STEPS: Step[] = [
     eyebrow: "Your day, your boundary",
     thesis: "Close it when you're done.",
     whisper:
-      "Your day ends when you close it, and not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open ledger stays active across calendar days with no penalty. When you're ready, close it and start the next ledger fresh at 100.",
-    glyph: <LedgerGlyph />,
+      "Your energy day ends when you close it, not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open day stays active across calendar dates with no penalty. When you're ready, close it and explicitly start the next day fresh at 100.",
+    glyph: <DayGlyph />,
   },
   {
     eyebrow: "The rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Plan deposits and withdrawals, audit how it actually felt, then close the energy day. Closed days appear under Previous days on the Dashboard: open one to review it, explicitly edit the record, or permanently delete it. Editing updates the record without reopening the day.",
-    glyph: <LedgerGlyph />,
+      "Plan what will add energy and what will use it, audit how it actually felt, then close the energy day. Closed days appear under Previous days on the Dashboard and open read-only. Choose Edit this day to amend the record without reopening it, or Delete this day and confirm to remove it permanently.",
+    glyph: <DayGlyph />,
   },
   {
     eyebrow: "The boundary",

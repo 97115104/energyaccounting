@@ -205,10 +205,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [dndBusy, setDndBusy] = useState(false);
   // Swallow the click that browsers fire immediately after a drag ends.
   const suppressOpenRef = useRef(false);
-  // Explicit edit mode for a closed ledger opened from history: amendments
+  // Explicit edit mode for a closed day opened from history: amendments
   // correct the record without reopening the day's lifecycle.
   const [amending, setAmending] = useState(false);
   const [deletingDay, setDeletingDay] = useState(false);
+  const deletingDayRef = useRef(false);
   // In-app confirmation for deleting a previous day (styled like other dialogs).
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // End-of-day insights modal, populated when the day closes.
@@ -225,10 +226,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Text committed before/while dictating, per active target; interim results render on top of it.
   const speechBaseRef = useRef("");
   const journalRef = useRef("");
+  const loadGenerationRef = useRef(0);
 
   useEffect(() => {
     journalRef.current = journal;
   }, [journal]);
+
+  useEffect(() => {
+    deletingDayRef.current = deletingDay;
+  }, [deletingDay]);
 
   useEffect(() => {
     setJustFreed(undefined);
@@ -258,6 +264,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const load = useCallback(async (forcedDayId?: string) => {
+    const generation = ++loadGenerationRef.current;
     setError(null);
     setLoading(true);
     const dek = getSessionDek();
@@ -268,11 +275,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
     let d: DayPayload | null;
     if (forcedDayId) {
       d = await api<DayPayload>(`/api/days/${forcedDayId}`);
+      if (generation !== loadGenerationRef.current) return;
       setNoActive(false);
     } else if (historyDayId) {
       d = await api<DayPayload>(`/api/days/${historyDayId}`);
+      if (generation !== loadGenerationRef.current) return;
       // History deep-links open read-only (with an explicit edit toggle);
-      // a still-open ledger belongs on the active view instead.
+      // a still-open day belongs on the active view instead.
       if (d && d.phase !== "closed") {
         setSearchParams({}, { replace: true });
         setLoading(false);
@@ -281,6 +290,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setNoActive(false);
     } else {
       const active = await api<{ day: DayPayload | null }>(`/api/days/active`);
+      if (generation !== loadGenerationRef.current) return;
       d = active.day;
       setNoActive(d === null);
     }
@@ -312,15 +322,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
         lines.push({ ...l, completed: !!l.completed, label: "(unable to decrypt)", details: "" });
       }
     }
+    if (generation !== loadGenerationRef.current) return;
     setDay({ ...d, lines });
     setDismissedGuideIds(loadDismissedGuideIds(d.id));
+    let decryptedJournal = "";
     if (d.journalCiphertext && d.journalIv) {
       try {
-        setJournal(await decryptText(dek, d.journalCiphertext, d.journalIv, "eaj-journal"));
+        decryptedJournal = await decryptText(
+          dek,
+          d.journalCiphertext,
+          d.journalIv,
+          "eaj-journal",
+        );
       } catch {
-        setJournal("");
+        decryptedJournal = "";
       }
-    } else setJournal("");
+    }
+    if (generation !== loadGenerationRef.current) return;
+    setJournal(decryptedJournal);
 
     const sug = await api<{ suggestions: Suggestion[] }>(`/api/suggestions/${d.id}`);
     const decrypted: Suggestion[] = [];
@@ -332,13 +351,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
         /* skip */
       }
     }
+    if (generation !== loadGenerationRef.current) return;
     setSuggestions(decrypted);
     setLoading(false);
   }, [historyDayId, setSearchParams]);
 
   useEffect(() => {
     void load().catch((e) => {
-      setError(e instanceof Error ? e.message : "Load failed");
+      setError(e instanceof Error ? e.message : "Could not load your day.");
       setLoading(false);
     });
   }, [load]);
@@ -360,15 +380,45 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [dayPhase, day?.id]);
 
-  // Escape dismisses the delete confirmation unless a request is in flight.
+  // Keep keyboard focus inside the destructive confirmation.
   useEffect(() => {
     if (!confirmingDelete) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("delete-day-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((element) => !element.hasAttribute("disabled"))
+        : [];
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !deletingDay) setConfirmingDelete(false);
+      if (e.key === "Escape" && !deletingDayRef.current) {
+        setConfirmingDelete(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [confirmingDelete, deletingDay]);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [confirmingDelete]);
 
   // Escape closes the celebration modal; Tab stays inside it.
   useEffect(() => {
@@ -576,7 +626,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   // Trend hint while planning; recovery only at close (never during audit,
   // so tomorrow's day row is not created before today locks).
-  const ledgerDate = day?.date ?? isoDate();
+  const dayDate = day?.date ?? isoDate();
   const spansMidnight = !!day && !isHistoryView && day.date < isoDate() && day.phase !== "closed";
 
   const hint = useMemo(
@@ -593,8 +643,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
         id: "welcome",
         kind: "event",
         title: "Start with one honest line",
-        body: "Add a withdrawal for something today will ask of you, and a deposit for something that refills you. Completing a task frees its reserved points back into Available.",
-        because: ["This day's ledger is empty, and you haven't dismissed this walkthrough."],
+        body: "Add something that will use energy today, and something that will add energy back. Completing a task frees its reserved points back into Available.",
+        because: ["This day is empty, and you haven't dismissed this walkthrough."],
         provenance: "Getting started",
         personalized: false,
         score: 70,
@@ -683,9 +733,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     dayId?: string,
   ): Promise<boolean> {
     const dek = getSessionDek();
-    const ledgerId = dayId ?? day?.id;
-    if (!dek || !ledgerId) return false;
-    // Closed-ledger amendments record what happened; capacity only limits live planning.
+    const targetDayId = dayId ?? day?.id;
+    if (!dek || !targetDayId) return false;
+    // Closed-day amendments record what happened; capacity only limits live planning.
     if (!dayId && day && day.phase !== "closed" && cost > day.availableCapacity) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
@@ -695,7 +745,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const { ciphertext, iv } = await encryptText(dek, label.trim(), "eaj-label");
     const lh = hash ?? (await labelHash(label));
     try {
-      await api(`/api/days/${ledgerId}/lines`, {
+      await api(`/api/days/${targetDayId}/lines`, {
         method: "POST",
         body: JSON.stringify({
           side,
@@ -727,7 +777,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       await load(created.id);
       return created.id;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not start a new ledger.");
+      setError(e instanceof Error ? e.message : "Could not start a new day.");
       return null;
     } finally {
       setStarting(false);
@@ -751,21 +801,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   /** Apply a guide action; returns whether the line was added. */
   async function applyGuideAction(item: GuideItem): Promise<boolean> {
     if (!item.action) return false;
-    let ledgerId = day?.id;
+    let targetDayId = day?.id;
     if (item.action.requiresStart) {
       if (day && day.phase !== "closed") {
-        setError("Close your active ledger before starting a new one.");
+        setError("Close your active day before starting a new one.");
         return false;
       }
-      ledgerId = (await startNewDay()) ?? undefined;
-      if (!ledgerId) return false;
+      targetDayId = (await startNewDay()) ?? undefined;
+      if (!targetDayId) return false;
     }
     const ok = await addLine(
       item.action.side,
       item.action.label,
       item.action.cost,
       undefined,
-      ledgerId,
+      targetDayId,
     );
     if (ok) dismissGuideItem(item.id);
     return ok;
@@ -806,7 +856,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function saveTaskDetails() {
-    if (!detailLine || !day || day.phase === "closed") return;
+    if (!detailLine || !day || (day.phase === "closed" && !amending)) return;
     const dek = getSessionDek();
     if (!dek) return;
     // Release the mic first so nothing lands in the field after we snapshot it.
@@ -1029,7 +1079,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     window.setTimeout(() => {
       suppressOpenRef.current = false;
     }, 200);
-    if (!day || day.phase === "closed" || isHistoryView || dndBusy) return;
+    if (!day || (day.phase === "closed" && !amending) || dndBusy) return;
     setDndBusy(true);
     try {
       const activeId = String(e.active.id);
@@ -1118,10 +1168,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
           aria-labelledby="insight-title"
         >
           <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
-            Ledger closed
+            Day closed
           </h2>
           <p className="muted">
-            Ended with {closeCelebration.closingBalance} energy remaining. Your next ledger starts
+            Ended with {closeCelebration.closingBalance} energy remaining. Your next day starts
             fresh at 100 when you start it.
           </p>
           {closeCelebration.insights.map((i) => (
@@ -1136,7 +1186,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <GuideCard
               item={closeCelebration.recovery}
               closed={false}
-              actionLabel="Start new day with this deposit"
+              actionLabel="Start new day · Add energy"
               onAction={(item) => {
                 void applyGuideAction(item).then((ok) => {
                   if (ok) {
@@ -1176,7 +1226,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     );
 
   if (loading && !closeCelebration) {
-    return <p className="muted">Loading your ledger…</p>;
+    return <p className="muted">Loading your day…</p>;
   }
 
   if (noActive && !isHistoryView && !closeCelebration) {
@@ -1187,7 +1237,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         <p className="muted">
           Your energy day follows you, not the clock. Irregular sleep, long focus stretches, shift
           work, and time blindness are all normal here, and there is no missed-day penalty. Start a
-          ledger when you want to plan; it stays open until you close it, even across midnight.
+          day when you want to plan; it stays open until you close it, even across midnight.
         </p>
         {error && <p className="error">{error}</p>}
         <button
@@ -1210,7 +1260,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return (
       <div className="panel">
         <p className="muted">
-          {isHistoryView ? "That ledger could not be found." : "Nothing to show yet."}
+          {isHistoryView ? "That day could not be found." : "Nothing to show yet."}
         </p>
         {isHistoryView && (
           <button
@@ -1219,7 +1269,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             style={{ marginTop: "1rem" }}
             onClick={() => setSearchParams({}, { replace: true })}
           >
-            Back to active ledger
+            Back to active day
           </button>
         )}
       </div>
@@ -1240,9 +1290,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
         }
       >
       <div className="panel">
-        <p className="ob-eyebrow">Energy ledger · started {ledgerDate}</p>
+        <p className="ob-eyebrow">Energy day · started {dayDate}</p>
         {spansMidnight && (
-          <p className="muted ledger-span-note">
+          <p className="muted day-span-note">
             This is still your active energy day; close it when your day is actually done.
           </p>
         )}
@@ -1250,8 +1300,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
           <div style={{ marginBottom: "0.75rem" }}>
             <p className="muted">
               {amending
-                ? "Editing a closed ledger. Changes update its recorded balance."
-                : "Viewing a closed ledger from history."}
+                ? "Editing a closed day. Changes update its recorded energy remaining."
+                : "Viewing a closed day from Previous days in read-only mode."}
             </p>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button
@@ -1259,14 +1309,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 className="btn secondary"
                 onClick={() => setSearchParams({}, { replace: true })}
               >
-                Back to active ledger
+                Back to active day
               </button>
               <button
                 type="button"
                 className="btn secondary"
                 onClick={() => setAmending((v) => !v)}
               >
-                {amending ? "Done editing" : "Edit this ledger"}
+                {amending ? "Done editing" : "Edit this day"}
               </button>
               <button
                 type="button"
@@ -1277,7 +1327,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 Delete this day
               </button>
               <HelpTip label="deleting a previous day">
-                Deleting removes this closed day and all of its entries from your history and
+                Deleting removes this closed day and all of its entries from Previous days and
                 Dashboard trends. Your active day is never affected. This cannot be undone.
               </HelpTip>
             </div>
@@ -1310,8 +1360,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <div className="label">
               Daily energy
               <HelpTip label="daily energy">
-                Your full daily charge: 100 points, fresh for each ledger you start. Energy does not
-                carry between ledgers.
+                Your full daily charge: 100 points, fresh for each day you start. Energy does not
+                carry between days.
               </HelpTip>
             </div>
             <div className="value">{day.openingBalance}</div>
@@ -1328,26 +1378,34 @@ export function TodayPage({ user }: { user: UserProfile }) {
           </div>
           <div className="stat">
             <div className="label">
-              Projected remaining
-              <HelpTip label="projected remaining">
-                Energy left at close if every planned line costs what you estimated. Closing the
-                ledger locks the real number in.
+              {closed ? "Energy remaining" : "Projected remaining"}
+              <HelpTip label={closed ? "energy remaining" : "projected remaining"}>
+                {closed
+                  ? "The recorded energy remaining when this day closed, including any later amendments."
+                  : "Energy left at close if every planned line costs what you estimated. Closing the day records the real number."}
               </HelpTip>
             </div>
-            <div className="value">{day.projectedClosing}</div>
+            <div className="value">
+              {closed ? day.closingBalance ?? day.projectedClosing : day.projectedClosing}
+            </div>
           </div>
           <div className="stat">
             <div className="label">
               Attwood net
               <HelpTip label="Attwood net">
-                Deposits minus withdrawals, the core Energy Accounting measure from Maja Toudal and
-                Dr. Tony Attwood. Positive means today gave more than it took.
+                Energy added minus energy used, the core Energy Accounting measure from Maja Toudal
+                and Dr. Tony Attwood. Positive means today gave more than it took.
               </HelpTip>
             </div>
             <div className="value">{day.attwood.attwoodNet}</div>
           </div>
           <div className="stat">
-            <div className="label">Deposits / withdrawals</div>
+            <div className="label">
+              Add energy / use energy
+              <HelpTip label="energy added and used">
+                The first number is energy added today. The second is energy used.
+              </HelpTip>
+            </div>
             <div className="value" style={{ fontSize: "1.2rem" }}>
               {day.attwood.depositTotal} / {day.attwood.withdrawalTotal}
             </div>
@@ -1379,12 +1437,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
             disabled={closed}
             onClick={() => void setPhase("closed")}
           >
-            {closed ? "Ledger closed" : "Close ledger"}
+            {closed ? "Day closed" : "Close day"}
           </button>
           <HelpTip label="the daily rhythm">
-            Plan deposits and withdrawals, audit real costs and how it felt, then close the energy
-            day. Previous days stay available on the Dashboard to review, edit, or delete. Your next
-            ledger starts fresh at 100 when you choose to start it.
+            Plan what will add energy and what will use it, audit real costs and how it felt,
+            then close the energy day. Previous days open read-only on the Dashboard; choose Edit
+            this day to amend one, or confirm before deleting it. Your next day starts fresh at 100
+            when you choose to start it.
           </HelpTip>
         </div>
         {guide.primary && !closed && (
@@ -1404,14 +1463,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
         onDragStart={onDragStart}
         onDragEnd={(e) => void onDragEnd(e)}
       >
-        <div className="col-tabs" role="group" aria-label="Choose ledger column">
+        <div className="col-tabs" role="group" aria-label="Choose day column">
           <button
             type="button"
             className={`col-tab${mobileCol === "withdrawal" ? " active" : ""}`}
             aria-pressed={mobileCol === "withdrawal"}
             onClick={() => setMobileCol("withdrawal")}
           >
-            Withdrawals
+            Use energy
           </button>
           <button
             type="button"
@@ -1419,19 +1478,19 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-pressed={mobileCol === "deposit"}
             onClick={() => setMobileCol("deposit")}
           >
-            Deposits
+            Add energy
           </button>
         </div>
         <div className="grid-2 equal-cols" style={{ marginTop: "1rem" }}>
           <Column
-            title="Withdrawals"
+            title="Use energy"
             side="withdrawal"
             droppableId="col-withdrawal"
             className={`withdraw-col${mobileCol !== "withdrawal" ? " mobile-hidden" : ""}`}
             lines={withdrawals}
             suggestions={suggestions.filter((s) => s.side === "withdrawal")}
             closed={readOnly}
-            audit={day.phase === "audit"}
+            audit={day.phase === "audit" || (closed && amending)}
             onAdd={() => setDraftSide("withdrawal")}
             onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
             onActual={updateActual}
@@ -1440,14 +1499,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onOpen={openTaskDetails}
           />
           <Column
-            title="Deposits"
+            title="Add energy"
             side="deposit"
             droppableId="col-deposit"
             className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
             suggestions={suggestions.filter((s) => s.side === "deposit")}
             closed={readOnly}
-            audit={day.phase === "audit"}
+            audit={day.phase === "audit" || (closed && amending)}
             onAdd={() => setDraftSide("deposit")}
             onConfirm={(s) => void addLine(s.side, s.label!, s.typicalCost, s.labelHash)}
             onActual={updateActual}
@@ -1465,7 +1524,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </DragOverlay>
       </DndContext>
 
-      {(day.phase === "audit" || closed) && !isHistoryView && (
+      {(day.phase === "audit" || closed) && (
         <div className="panel" style={{ marginTop: "1rem" }}>
           <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Evening audit</h2>
           <p className="muted">How do you feel, on a scale from 1 to 10?</p>
@@ -1582,8 +1641,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
             {guide.items.length === 0 && (
               <p className="muted">
-                Nothing to suggest right now. Plan deposits and withdrawals, complete what you can,
-                and the guide will speak up when it has something concrete.
+                Nothing to suggest right now. Plan what will add energy and what will use it,
+                complete what you can, and the guide will speak up when it has something concrete.
               </p>
             )}
             {guide.items.map((item) => (
@@ -1627,7 +1686,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             }}
           >
             <h2 id="draft-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
-              Add {draftSide === "deposit" ? "deposit" : "withdrawal"}
+              {draftSide === "deposit" ? "Add energy" : "Use energy"}
             </h2>
             <p className="muted">Available to allocate · {day.availableCapacity}</p>
             <div className="field">
@@ -1653,7 +1712,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button type="submit" className="btn accent">
-                Add to ledger
+                Save to day
               </button>
               <button type="button" className="btn secondary" onClick={closeDraft}>
                 Cancel
@@ -1685,7 +1744,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             }}
           >
             <p className="ob-eyebrow">
-              {detailLine.side === "deposit" ? "Deposit" : "Withdrawal"}
+              {detailLine.side === "deposit" ? "Add energy" : "Use energy"}
             </p>
             <h2 id="task-detail-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               {detailLine.label}
@@ -1811,6 +1870,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           }}
         >
           <div
+            id="delete-day-modal"
             className="panel insight-modal"
             role="alertdialog"
             aria-modal="true"
@@ -1821,18 +1881,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
               Delete this day?
             </h2>
             <p id="delete-day-body" className="muted">
-              The ledger from {day.date} and all of its entries will be removed from your history
+              The day from {day.date} and all of its entries will be removed from Previous days
               and Dashboard trends. This cannot be undone.
             </p>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn danger"
-                disabled={deletingDay}
-                onClick={() => void deletePreviousDay()}
-              >
-                {deletingDay ? "Deleting…" : "Delete this day"}
-              </button>
               <button
                 type="button"
                 className="btn secondary"
@@ -1840,6 +1892,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 onClick={() => setConfirmingDelete(false)}
               >
                 Keep it
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={deletingDay}
+                onClick={() => void deletePreviousDay()}
+              >
+                {deletingDay ? "Deleting…" : "Delete this day"}
               </button>
             </div>
           </div>
@@ -1887,8 +1947,8 @@ function GuideCard(props: {
           >
             {props.actionLabel ??
               (item.action.requiresStart
-                ? `Start new day with ${item.action.label} · ${item.action.cost}`
-                : `Add ${item.action.label} · ${item.action.cost}`)}
+                ? `Start new day · Add energy: ${item.action.label} · ${item.action.cost}`
+                : `Add energy: ${item.action.label} · ${item.action.cost}`)}
           </button>
         )}
         <button
@@ -1962,7 +2022,11 @@ function Column(props: {
           type="button"
           className="btn plus"
           disabled={props.closed}
-          aria-label={`Add ${props.side}`}
+          aria-label={
+            props.side === "deposit"
+              ? "Add energy"
+              : "Use energy"
+          }
           onClick={props.onAdd}
         >
           +
@@ -1988,7 +2052,11 @@ function Column(props: {
             type="button"
             className="btn plus confirm-add"
             disabled={props.closed}
-            aria-label="Confirm suggestion"
+            aria-label={
+              props.side === "deposit"
+                ? `Add energy: ${s.label}`
+                : `Use energy: ${s.label}`
+            }
             onClick={() => props.onConfirm(s)}
           >
             +
@@ -2004,8 +2072,8 @@ function Column(props: {
       {!props.lines.length && !props.suggestions.length && (
         <p className="muted">
           {props.side === "withdrawal"
-            ? "Nothing draining yet. Suspiciously well-rested."
-            : "No deposits yet. Your battery has questions."}
+            ? "Nothing using energy yet. Suspiciously well-rested."
+            : "Nothing that adds energy yet. Your battery has questions."}
         </p>
       )}
     </div>
@@ -2034,7 +2102,7 @@ function SortableTask(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-row ledger-task${props.line.completed ? " completed" : ""}`}
+      className={`task-row day-task${props.line.completed ? " completed" : ""}`}
       {...attributes}
       {...listeners}
       role="group"

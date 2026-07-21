@@ -33,7 +33,7 @@ export type StatPoint = {
 export type InsightTone = "celebrate" | "notice" | "gentle";
 export type Insight = { id: string; tone: InsightTone; text: string };
 
-/** Closed ledgers strictly before the target row, oldest first. */
+/** Closed days strictly before the target row, oldest first. */
 const MIN_HISTORY = 5;
 
 function historyBefore(series: StatPoint[], target: StatPoint): StatPoint[] {
@@ -90,7 +90,7 @@ export function closeDayInsights(series: StatPoint[], dayId: string): Insight[] 
       out.push({
         id: "best-balance",
         tone: "celebrate",
-        text: `Most energy left at day's end in ${Math.min(recent.length, 21)} closed ledgers. That margin is real.`,
+        text: `Most energy left at day's end across ${Math.min(recent.length, 21)} closed days. That margin is real.`,
       });
     }
 
@@ -109,7 +109,7 @@ export function closeDayInsights(series: StatPoint[], dayId: string): Insight[] 
       });
     }
 
-    // Deposit discipline: banked noticeably more rest than usual.
+    // Energy-adding discipline: banked noticeably more rest than usual.
     const avgDeposit = mean(recent.map((p) => p.depositTotal));
     if (avgDeposit > 0 && today.depositTotal >= avgDeposit * 1.25 && today.depositTotal > 0) {
       out.push({
@@ -136,13 +136,13 @@ export function closeDayInsights(series: StatPoint[], dayId: string): Insight[] 
     }
   }
 
-  // Recent closes: count by ledger start time, not calendar gaps.
+  // Recent closes: count by day start time, not calendar gaps.
   const recentClosed = recentClosedCount(series, 7);
   if (recentClosed >= 3) {
     out.push({
       id: "streak",
       tone: "celebrate",
-      text: `That's ${recentClosed} ledgers closed in the last week. The practice is sticking.`,
+      text: `That's ${recentClosed} energy days closed in the last week. The practice is sticking.`,
     });
   }
 
@@ -179,7 +179,7 @@ export function planningHint(series: StatPoint[], date: string): Insight | null 
     return {
       id: "weekday-pattern",
       tone: "gentle",
-      text: `${weekday}s usually cost you more than they give. Worth planning a deposit up front.`,
+      text: `${weekday}s usually cost you more than they give. Worth planning something that adds energy up front.`,
     };
   }
   return null;

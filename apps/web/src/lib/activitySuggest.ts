@@ -95,13 +95,13 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       outdoor && lowUv
         ? " Dry weather and low UV make the timing favorable."
         : outdoor
-          ? " Current daylight and weather fit an outdoor deposit."
+          ? " Current daylight and weather fit an outdoor activity that adds energy."
           : "";
     ranked.push({
       id: `familiar:${candidate.id}`,
       label,
       typicalCost: candidate.typicalCost,
-      reason: `You have used this deposit ${candidate.useCount}×.${conditionReason}${
+      reason: `You have used this to add energy ${candidate.useCount}×.${conditionReason}${
         difficultyKnown
           ? ` You usually rate it ${candidate.typicalDifficulty}/10 for difficulty.`
           : ""
@@ -132,8 +132,8 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       label: "Try a 5-minute mindfulness pause",
       typicalCost: 10,
       reason: ctx.withdrawalHeavy
-        ? "Withdrawals are ahead, so a low-demand reset may fit."
-        : "A brief, low-demand pause can be an easy deposit.",
+        ? "More energy is going out than coming in, so a low-demand reset may fit."
+        : "A brief, low-demand pause can be an easy way to add energy.",
       research: "Brief mindfulness and acceptance-based practices may reduce immediate anxiety.",
       sourceUrl: "https://doi.org/10.3389/fpsyg.2024.1412928",
       familiar: false,
@@ -157,7 +157,7 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       typicalCost: 10,
       reason: safeOutdoor
         ? "A light movement option is available if going outside feels too large."
-        : "Conditions favor a simple indoor movement deposit.",
+        : "Conditions favor simple indoor movement that adds energy.",
       research: "WHO recommends replacing sedentary time with movement of any intensity.",
       sourceUrl: "https://www.who.int/publications/i/item/9789240015128",
       familiar: false,

@@ -244,7 +244,7 @@ export function App() {
   if (booting) {
     return (
       <div className="app-shell">
-        <p className="muted">Opening the ledger…</p>
+        <p className="muted">Opening your day…</p>
       </div>
     );
   }
@@ -299,8 +299,8 @@ export function App() {
             <>
               <h1 className="brand">Your Energy Matters</h1>
               <p className="tagline">
-                EAJ is for neurodivergent productivity 💖 Plan deposits and withdrawals, audit the
-                day, and close it when your day is actually done.
+                EAJ is for neurodivergent productivity 💖 Plan what will add energy and what will
+                use it, audit the day, and close it when your day is actually done.
               </p>
             </>
           )}

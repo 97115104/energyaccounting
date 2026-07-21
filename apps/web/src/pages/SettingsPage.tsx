@@ -285,7 +285,7 @@ export function SettingsPage({ user, onUser }: Props) {
             energyaccounting.com
           </a>
           ), and on iceberg-aware neurodivergent practice as framed in Dr. Samantha Hiew’s Tip of the
-          ADHD Iceberg. Play-category deposit suggestions follow Stuart Brown and the National
+          ADHD Iceberg. Play suggestions that add energy follow Stuart Brown and the National
           Institute for Play styles. Weather data comes from{" "}
           <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
             Open-Meteo

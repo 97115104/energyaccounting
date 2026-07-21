@@ -70,7 +70,7 @@ function bucketSeries(series: Point[]): Point[] {
   return [...groups.values()].map(summarizeGroup);
 }
 
-function ledgerLabel(p: Pick<Point, "date" | "startedAt">): string {
+function dayLabel(p: Pick<Point, "date" | "startedAt">): string {
   const start = new Date(p.startedAt);
   const time = start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   return `${p.date} · ${time}`;
@@ -105,7 +105,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     setError(null);
     void api<{ series: Point[] }>(`/api/stats?from=${from}&to=${to}`)
       .then((r) => setSeries(r.series))
-      .catch((e) => setError(e instanceof Error ? e.message : "Stats failed"))
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load your day summary."))
       .finally(() => setLoading(false));
   }, [range]);
 
@@ -119,19 +119,19 @@ export function DashboardPage({ user }: { user: UserProfile }) {
       .catch(() => undefined);
   }, []);
 
-  const displayed = useMemo(() => bucketSeries(series), [series]);
   const previousDays = useMemo(
     () => series.filter((point) => point.phase === "closed"),
     [series],
   );
+  const displayed = useMemo(() => bucketSeries(previousDays), [previousDays]);
   const maxAbs = useMemo(() => {
     let m = 1;
     for (const p of displayed) m = Math.max(m, Math.abs(p.closingBalance), Math.abs(p.attwoodNet));
     return m;
   }, [displayed]);
 
-  const avgClose = series.length
-    ? Math.round(series.reduce((a, p) => a + p.closingBalance, 0) / series.length)
+  const avgClose = previousDays.length
+    ? Math.round(previousDays.reduce((a, p) => a + p.closingBalance, 0) / previousDays.length)
     : 0;
 
   const insights = useMemo<Insight[]>(() => {
@@ -159,10 +159,10 @@ export function DashboardPage({ user }: { user: UserProfile }) {
   const takeaway = latest
     ? latest.phase === "closed"
       ? latest.closingBalance >= avgClose
-        ? `Latest ledger ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
-        : `Latest ledger ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
+        ? `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
+        : `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
       : `${latest.availableCapacity ?? 0} points available now · ${latest.closingBalance} projected remaining if plans hold.`
-    : "Close a ledger to begin building a useful energy history.";
+    : "Close a day to begin building a useful energy history.";
 
   return (
     <div className="dashboard">
@@ -186,7 +186,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           </div>
         </div>
         {error && <p className="error">{error}</p>}
-        {loading && <p className="muted">Reading the ledger…</p>}
+        {loading && <p className="muted">Reading your days…</p>}
         <div className="dashboard-primary">
           <div>
             <span className="dashboard-value">{latest?.closingBalance ?? "Unavailable"}</span>
@@ -200,7 +200,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           aria-label={
             bucketing
               ? "Weekly average energy remaining by week"
-              : "Energy remaining at ledger close"
+              : "Energy remaining when the day closed"
           }
         >
           <div className="balance-zero" aria-hidden="true" />
@@ -216,12 +216,12 @@ export function DashboardPage({ user }: { user: UserProfile }) {
                 aria-label={
                   bucketing
                     ? `Week of ${weekLabel}, average energy remaining ${p.closingBalance}.`
-                    : `${ledgerLabel(p)}, energy remaining ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
+                    : `${dayLabel(p)}, energy remaining ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
                 }
                 title={
                   bucketing
                     ? `Week of ${weekLabel}: avg remaining ${p.closingBalance}`
-                    : `${ledgerLabel(p)}: remaining ${p.closingBalance}, net ${p.attwoodNet}`
+                    : `${dayLabel(p)}: remaining ${p.closingBalance}, net ${p.attwoodNet}`
                 }
                 onClick={() => navigate(`/?day=${p.id}`)}
               >
@@ -233,13 +233,13 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               </button>
             );
           })}
-          {!loading && !series.length && (
-            <p className="muted dashboard-empty">No planned or closed days in this range yet.</p>
+          {!loading && !previousDays.length && (
+            <p className="muted dashboard-empty">No closed days in this range yet.</p>
           )}
         </div>
         <div className="chart-caption">
           <span>Negative</span>
-          <span>{bucketing ? "Calendar-week averages" : "Per ledger"}</span>
+          <span>{bucketing ? "Calendar-week averages" : "Per day"}</span>
           <span>Positive</span>
         </div>
       </section>
@@ -248,10 +248,10 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         <div>
           <p className="ob-eyebrow">Reusable capacity</p>
           <h2>Completed work releases reservations for reuse.</h2>
-          <p className="muted">Freed points are throughput within the same ledger; they do not add to energy remaining.</p>
+          <p className="muted">Freed points are throughput within the same day; they do not add to energy remaining.</p>
         </div>
         <div className="capacity-values">
-          <div><strong>{latest?.availableCapacity ?? 0}</strong><span>Available on latest ledger</span></div>
+          <div><strong>{latest?.availableCapacity ?? 0}</strong><span>Available on latest day</span></div>
           <div><strong>{latest?.pendingReservedEnergy ?? 0}</strong><span>Still reserved</span></div>
           <div><strong>{latest?.completedFreedEnergy ?? 0}</strong><span>Freed on that day</span></div>
         </div>
@@ -273,7 +273,8 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           <div>
             <h2>Previous days</h2>
             <p className="muted">
-              Open a closed energy day to review it, edit the record, or delete it.
+              Closed days open read-only. From there, choose to edit the record or confirm permanent
+              deletion.
             </p>
           </div>
           <button type="button" className="btn secondary" onClick={() => setDetailsOpen((open) => !open)}>
@@ -306,7 +307,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
                   className="dashboard-day-row"
                   tabIndex={0}
                   role="link"
-                  aria-label={`Open ledger ${ledgerLabel(p)}`}
+                  aria-label={`Open day ${dayLabel(p)}`}
                   onClick={() => navigate(`/?day=${p.id}`)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -316,7 +317,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
                   }}
                 >
                   <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {ledgerLabel(p)}
+                    {dayLabel(p)}
                   </td>
                   <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
                     {p.closingBalance}

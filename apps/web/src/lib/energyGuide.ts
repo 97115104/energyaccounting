@@ -19,10 +19,10 @@ import type { WeatherKind } from "./weatherUi";
 
 export type GuideAction = {
   side: "deposit";
-  /** Activity label to add to the ledger. */
+  /** Activity label to add to the day. */
   label: string;
   cost: number;
-  /** When true, the user must explicitly start a new ledger before this line is added. */
+  /** When true, the user must explicitly start a new day before this line is added. */
   requiresStart?: boolean;
 };
 
@@ -93,17 +93,17 @@ function corpusBecause(entry: CorpusEntry, ctx: GuideContext): string[] {
   if (entry.id === "sun-general") out.push("Today's forecast is sunny.");
   if (entry.id === "rebalance-play") {
     out.push(
-      `Withdrawals (${ctx.withdrawalTotal}) are ahead of deposits (${ctx.depositTotal}) right now.`,
+      `So far, ${ctx.withdrawalTotal} points have been used and ${ctx.depositTotal} added.`,
     );
   }
   if (entry.id === "boundaries") {
-    out.push(`${ctx.incompleteWithdrawals} withdrawals are still open.`);
+    out.push(`${ctx.incompleteWithdrawals} things that use energy are still open.`);
   }
   if (entry.id === "deposit-window") {
     out.push(`${ctx.available} points remain available today.`);
   }
   if (out.length === 0) {
-    out.push(`Withdrawals ${ctx.withdrawalTotal}, deposits ${ctx.depositTotal}, ${ctx.available} points available.`);
+    out.push(`${ctx.withdrawalTotal} points used, ${ctx.depositTotal} added, and ${ctx.available} still available.`);
   }
   return out;
 }
@@ -156,7 +156,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     items.push({
       id: `activity:${suggestion.id}`,
       kind: "activity",
-      title: suggestion.familiar ? "A deposit you know works" : "A deposit that fits now",
+      title: suggestion.familiar ? "A familiar way to add energy" : "A way to add energy that fits now",
       body: `${suggestion.label} fits the ${ctx.available} points available now.`,
       because: [suggestion.reason],
       // Familiar items are personal inference, not research; keep the
@@ -169,7 +169,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     });
   });
 
-  // Play: rebalancing prompts when withdrawals dominate.
+  // Play: rebalancing prompts when energy used dominates.
   if (ctx.withdrawalHeavy && ctx.available > 0) {
     const plays = suggestPlayDeposits({
       existingLabels: ctx.existingLabels,
@@ -181,10 +181,10 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       items.push({
         id: `play:${play.label}`,
         kind: "play",
-        title: `Play deposit · ${playCategoryTitle(play.category)}`,
-        body: `${play.label} is a ${playCategoryTitle(play.category).toLowerCase()}-style way to tilt the ledger back.`,
+        title: `Play that adds energy · ${playCategoryTitle(play.category)}`,
+        body: `${play.label} is a ${playCategoryTitle(play.category).toLowerCase()}-style way to add energy back to the day.`,
         because: [
-          `Withdrawals (${ctx.withdrawalTotal}) are ahead of deposits (${ctx.depositTotal}) right now.`,
+          `So far, ${ctx.withdrawalTotal} points have been used and ${ctx.depositTotal} added.`,
         ],
         research: "Play styles follow Stuart Brown and the National Institute for Play.",
         personalized: false,
@@ -227,7 +227,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
       seenIds.add(item.id);
       if (item.action) {
         const key = normalizedLabel(item.action.label);
-        // Cross-date duplicates are allowed; only skip labels already on this ledger.
+        // Cross-date duplicates are allowed; only skip labels already on this day.
         if (seenLabels.has(key)) return false;
         seenLabels.add(key);
       }
@@ -243,13 +243,13 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
   };
 }
 
-// Recovery after close: suggest how to open the *next* ledger, never auto-start it.
+// Recovery after close: suggest how to open the *next* day, never auto-start it.
 
 export type RecoveryContext = {
-  /** The ledger that just closed. */
+  /** The day that just closed. */
   dayId: string;
   date: string;
-  /** Local calendar date when the user would start the next ledger (defaults to day after `date`). */
+  /** Local calendar date when the user would start the next day (defaults to day after `date`). */
   nextStartDate?: string;
   feelRating: number | null;
   openingBalance: number;
@@ -260,7 +260,7 @@ export type RecoveryContext = {
   incompleteWithdrawals: number;
   /** Numeric history, used for the next-weekday pattern check. */
   series: StatPoint[];
-  /** Decrypted personal catalog for picking a familiar deposit. */
+  /** Decrypted personal catalog for picking a familiar way to add energy. */
   candidates: ActivityCandidate[];
 };
 
@@ -295,8 +295,8 @@ function weekdayRunsHeavy(series: StatPoint[], dateIso: string): boolean {
 }
 
 /**
- * One conservative "start the next ledger gently" recommendation, or null when
- * the closed ledger gives no evidence recovery is needed.
+ * One conservative "start the next day gently" recommendation, or null when
+ * the closed day gives no evidence recovery is needed.
  */
 export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
   const because: string[] = [];
@@ -309,7 +309,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
   }
   const spent = ctx.openingBalance - ctx.closingBalance;
   if (spent >= 15) {
-    because.push(`This ledger ended with ${ctx.closingBalance} energy remaining (${spent} points spent from your daily ${DAILY_ENERGY}).`);
+    because.push(`This day ended with ${ctx.closingBalance} energy remaining (${spent} points spent from your daily ${DAILY_ENERGY}).`);
     strong += 1;
   }
   if (ctx.plannedTotal > 0 && ctx.actualTotal >= ctx.plannedTotal + 15) {
@@ -317,7 +317,7 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
     weak += 1;
   }
   if (ctx.incompleteWithdrawals >= 3) {
-    because.push(`${ctx.incompleteWithdrawals} withdrawals are still open.`);
+    because.push(`${ctx.incompleteWithdrawals} things that use energy are still open.`);
     weak += 1;
   }
   const nextStart = ctx.nextStartDate ?? nextIsoDate(ctx.date);
@@ -345,17 +345,17 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
     })[0];
 
   const research =
-    "Energy Accounting (Toudal & Attwood) schedules deliberate deposits after depleting days.";
+    "Energy Accounting (Toudal & Attwood) schedules deliberate ways to add energy after depleting days.";
 
   if (pick?.label) {
     return {
       id: `recovery:${ctx.dayId}`,
       kind: "recovery",
-      title: "Start your next ledger gently",
-      body: `When you start your next ledger, open with “${pick.label}” (${pick.typicalCost} points), a familiar deposit that fits a fresh ${DAILY_ENERGY} points.`,
+      title: "Start your next day gently",
+      body: `When you start your next day, add energy with “${pick.label}” (${pick.typicalCost} points), a familiar option that fits a fresh ${DAILY_ENERGY} points.`,
       because: [
         ...because,
-        `Each new ledger starts at ${DAILY_ENERGY}; energy does not carry over.`,
+        `Each new day starts at ${DAILY_ENERGY}; energy does not carry over.`,
         `You have used “${pick.label}” ${pick.useCount}× before.`,
       ],
       research,
@@ -373,8 +373,8 @@ export function recoveryPlan(ctx: RecoveryContext): GuideItem | null {
   return {
     id: `recovery:${ctx.dayId}`,
     kind: "recovery",
-    title: "Start your next ledger gently",
-    body: "When you start again, plan fewer withdrawal points than usual and leave room in your fresh 100.",
+    title: "Start your next day gently",
+    body: "When you start again, plan fewer points that use energy than usual and leave room in your fresh 100.",
     because,
     research,
     personalized: true,

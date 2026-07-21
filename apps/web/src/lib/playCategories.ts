@@ -1,4 +1,4 @@
-/** Play-category deposit starters when withdrawals dominate (Stuart Brown / NIFPlay styles). */
+/** Play-category starters that add energy when the day is depleting (Stuart Brown / NIFPlay). */
 
 export type PlayCategory =
   | "creator"
@@ -47,7 +47,7 @@ export function playCategoryTitle(c: PlayCategory): string {
   return CATEGORY_LABEL[c];
 }
 
-/** Pick a rotating set of play deposits, preferring labels already in the catalog when possible. */
+/** Pick rotating play options that add energy, preferring familiar labels when possible. */
 export function suggestPlayDeposits(opts: {
   existingLabels: string[];
   count?: number;

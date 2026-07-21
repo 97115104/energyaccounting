@@ -211,7 +211,17 @@ WHERE started_at IS NULL;
 UPDATE day_table AS day
 SET
   phase = 'closed',
-  closing_balance = COALESCE(closing_balance, opening_balance)
+  opening_balance = 100,
+  closing_balance = 100 + COALESCE((
+    SELECT SUM(
+      CASE
+        WHEN line.side = 'deposit' THEN COALESCE(line.actual_cost, line.planned_cost)
+        ELSE -COALESCE(line.actual_cost, line.planned_cost)
+      END
+    )
+    FROM task_line_table AS line
+    WHERE line.day_id = day.id
+  ), 0)
 WHERE phase <> 'closed'
   AND EXISTS (
     SELECT 1
@@ -228,6 +238,23 @@ WHERE phase <> 'closed'
 UPDATE day_table
 SET opening_balance = 100
 WHERE phase <> 'closed' AND opening_balance <> 100;
+
+-- Recompute every closed row once per startup. This repairs rows force-closed
+-- by an earlier migration and consistently applies the fresh-100 model.
+UPDATE day_table AS day
+SET
+  opening_balance = 100,
+  closing_balance = 100 + COALESCE((
+    SELECT SUM(
+      CASE
+        WHEN line.side = 'deposit' THEN COALESCE(line.actual_cost, line.planned_cost)
+        ELSE -COALESCE(line.actual_cost, line.planned_cost)
+      END
+    )
+    FROM task_line_table AS line
+    WHERE line.day_id = day.id
+  ), 0)
+WHERE phase = 'closed';
 
 CREATE INDEX IF NOT EXISTS day_user_started_at
   ON day_table(user_id, started_at);
