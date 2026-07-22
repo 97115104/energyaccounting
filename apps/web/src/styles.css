@@ -1342,6 +1342,108 @@ html[data-theme="night"] .btn.secondary {
   font-weight: 600;
 }
 
+.praise-accent {
+  font-weight: 650;
+}
+
+.praise-accent-fire {
+  background-image: linear-gradient(
+    90deg,
+    #c43c12,
+    #e85d04,
+    #f48c06,
+    #ffba08,
+    #e85d04,
+    #c43c12
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: praise-fire-shift 2.8s ease-in-out infinite;
+}
+
+.praise-flame {
+  display: inline;
+  font-size: 0.95em;
+  color: #e85d04;
+  -webkit-text-fill-color: #e85d04;
+  animation: praise-flame-pulse 1.6s ease-in-out infinite;
+}
+
+.praise-accent-rainbow {
+  background-image: linear-gradient(
+    90deg,
+    #e63946,
+    #f4a261,
+    #e9c46a,
+    #2a9d8f,
+    #457b9d,
+    #9b5de5,
+    #e63946
+  );
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: praise-rainbow-shift 5s linear infinite;
+}
+
+@keyframes praise-fire-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes praise-rainbow-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes praise-flame-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .praise-accent-fire,
+  .praise-accent-rainbow,
+  .praise-flame {
+    animation: none !important;
+  }
+
+  .praise-accent-fire {
+    color: #c43c12;
+    -webkit-text-fill-color: #c43c12;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
+
+  .praise-accent-rainbow {
+    color: #9b5de5;
+    -webkit-text-fill-color: #9b5de5;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
+}
+
 .col-completed-list {
   margin-top: 0.35rem;
 }
@@ -2610,9 +2712,8 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 
 .day-rhythm-status .help-tip-panel,
 .day-rhythm-panel > .help-tip .help-tip-panel {
-  left: auto;
-  right: 0;
-  transform: none;
+  /* Align helper sets data-align; keep width readable in the rhythm card. */
+  width: min(260px, 78vw);
 }
 
 .day-flow-guide {
@@ -2945,10 +3046,6 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 }
 
 .guide-card-meta .help-tip-panel {
-  left: 0;
-  right: auto;
-  transform: none;
-  bottom: calc(100% + 0.35rem);
   width: min(280px, 78vw);
   text-align: left;
 }
@@ -2992,7 +3089,8 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   font-size: 0.8rem;
 }
 
-/* Progressive-disclosure help: quiet ? affordance, verbose only on demand. */
+/* Progressive-disclosure help: quiet ? affordance, verbose only on demand.
+   Desktop: panel above the trigger, clamped horizontally. Mobile: bottom sheet. */
 .help-tip {
   position: relative;
   display: inline-block;
@@ -3022,11 +3120,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 }
 
 .help-tip-panel {
-  position: absolute;
-  z-index: 30;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(100% + 0.4rem);
+  z-index: 70;
   width: min(260px, 78vw);
   display: block;
   padding: 0.6rem 0.7rem;
@@ -3042,14 +3136,84 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
-/* Stats sit near the viewport's left edge; keep panels on screen.
-   Corner ? tips open downward-left so they stay in view. */
-.stat .help-tip-panel {
-  left: auto;
-  right: 0;
-  top: calc(100% + 0.35rem);
-  bottom: auto;
-  transform: none;
+.help-tip-panel-fixed {
+  /* Position comes from inline style (fixed + clamped to the viewport). */
+  max-width: min(260px, calc(100vw - 1rem));
+}
+
+/* Mobile bottom sheet (Apple-style), shared by all HelpTip surfaces. */
+.help-tip-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--bg0) 10%, rgba(0, 0, 0, 0.28));
+  padding: 0;
+  animation: scrim-in 0.18s ease-out;
+}
+
+.help-tip-scrim-dismiss {
+  appearance: none;
+  flex: 1 1 auto;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.help-tip-sheet {
+  position: relative;
+  width: 100%;
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  padding: 1rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px 16px 0 0;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+  animation: sheet-in 0.22s cubic-bezier(0.32, 0.72, 0.35, 1.1);
+}
+
+.help-tip-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+  padding-right: 0.25rem;
+}
+
+.help-tip-sheet-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  line-height: 1.25;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.help-tip-sheet-body {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.help-tip-sheet-body p {
+  margin: 0 0 0.55rem;
+}
+
+.help-tip-sheet-body p:last-child {
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-tip-scrim,
+  .help-tip-sheet {
+    animation: none !important;
+  }
 }
 
 .task-detail-modal {

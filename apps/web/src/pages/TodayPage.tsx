@@ -15,7 +15,7 @@ import {
   rollCompletionDelight,
   type DelightTier,
 } from "../lib/completionDelight";
-import { completedFooterPraise } from "../lib/completedPraise";
+import { completedFooterPraise, type CompletedPraise } from "../lib/completedPraise";
 import {
   decryptText,
   encryptText,
@@ -2963,6 +2963,48 @@ function Column(props: {
     : [];
   const showEmptyCopy = !incomplete.length && !completedCount && !showRecent;
   const addingBusy = !!props.addingRecentId;
+  const [praise, setPraise] = useState<CompletedPraise>({
+    lead: "",
+    accent: "",
+    effect: "none",
+  });
+  const prevCompletedRef = useRef(0);
+  const praiseBootedRef = useRef(false);
+
+  // Roll VR accent effects only when completed count rises (a new win).
+  useEffect(() => {
+    if (completedCount <= 0) {
+      setPraise({ lead: "", accent: "", effect: "none" });
+      prevCompletedRef.current = 0;
+      praiseBootedRef.current = true;
+      return;
+    }
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!praiseBootedRef.current) {
+      setPraise(completedFooterPraise(completedCount, { side: props.side }));
+      prevCompletedRef.current = completedCount;
+      praiseBootedRef.current = true;
+      return;
+    }
+    if (completedCount > prevCompletedRef.current) {
+      setPraise(
+        completedFooterPraise(completedCount, {
+          side: props.side,
+          rollEffect: true,
+          reducedMotion,
+        }),
+      );
+    } else {
+      // Uncomplete or soft reload: refresh copy, keep an earned accent if any.
+      setPraise((prev) =>
+        completedFooterPraise(completedCount, {
+          side: props.side,
+          effect: prev.effect,
+        }),
+      );
+    }
+    prevCompletedRef.current = completedCount;
+  }, [completedCount, props.side]);
 
   function toggleShowCompleted() {
     setShowCompleted((prev) => {
@@ -2971,8 +3013,6 @@ function Column(props: {
       return next;
     });
   }
-
-  const doneLabel = completedFooterPraise(completedCount);
 
   return (
     <div className={`panel column-panel ${props.className}`}>
@@ -3006,7 +3046,7 @@ function Column(props: {
           onOpen={props.onOpen}
         />
       ))}
-      {completedCount > 0 && (
+      {completedCount > 0 && praise.lead && (
         <div className="col-completed">
           <button
             type="button"
@@ -3016,7 +3056,18 @@ function Column(props: {
             onClick={toggleShowCompleted}
           >
             <span className="col-completed-copy">
-              {doneLabel}
+              <span>
+                {praise.lead}{" "}
+                <span className={`praise-accent praise-accent-${praise.effect}`}>
+                  {praise.accent}
+                </span>
+                {praise.effect === "fire" && (
+                  <span className="praise-flame" aria-hidden="true">
+                    {" "}
+                    🔥
+                  </span>
+                )}
+              </span>
               <span className="col-completed-action">
                 · {showCompleted ? "Hide" : "Show"}
               </span>
