@@ -1108,8 +1108,7 @@ html[data-theme="night"] .btn.secondary {
   accent-color: var(--accent);
 }
 
-.field-legend,
-.ob-activity-pref legend {
+.field-legend {
   display: block;
   font-size: 0.85rem;
   font-weight: 600;
@@ -3614,6 +3613,10 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   text-align: left;
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 0.85rem;
+  box-sizing: border-box;
 }
 
 .ob-eyebrow {
@@ -3752,24 +3755,89 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   }
 }
 
-/* Final setup slide: name + coordinates. */
+/* Final setup slide: name + optional location. */
 .ob-setup {
   margin-top: 1.75rem;
   width: 100%;
   max-width: 26rem;
+  min-width: 0;
+  padding-right: 0.35rem;
+  box-sizing: border-box;
   animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) 300ms both;
 }
 
-.ob-location-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+.ob-location {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 1rem 0;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
 }
 
-@media (max-width: 480px) {
-  .ob-location-fields {
-    grid-template-columns: 1fr;
-  }
+.ob-location-label {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.ob-location-why,
+.ob-location-denied {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ob-location-city {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.ob-location-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: 0.2rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ob-activity-pref {
+  margin: 1rem 0 0;
+  padding: 1rem 0 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ob-activity-pref legend {
+  display: block;
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin: 0 0 0.45rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.ob-activity-pref::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+.ob-activity-pref .ob-style-example {
+  overflow-wrap: anywhere;
 }
 
 .ob-setup-note {
@@ -5493,6 +5561,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   margin: 0 0 0.55rem;
   font-size: 0.9rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .ob-color-rows {

@@ -19,6 +19,7 @@ import {
   type ButterflyPalette,
   type IdentityConfig,
 } from "../lib/identity";
+import { reverseGeocodeCity } from "../lib/reverseGeocode";
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import { SLOT_LABEL } from "../lib/youProfile";
 
@@ -413,7 +414,7 @@ function buildSteps(includeHomeScreen: boolean): Step[] {
     whisper: (
       <>
         Everything here is optional and editable later in Settings. A name makes greetings warmer,
-        and optional coordinates power your live sky and weather-aware suggestions. Greeting style
+        and optional location powers your live sky and weather-aware suggestions. Greeting style
         chooses the welcome line at the top of Today.
       </>
     ),
@@ -434,8 +435,12 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [direction, setDirection] = useState<"next" | "prev">("next");
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(user.displayName ?? "");
-  const [lat, setLat] = useState(String(user.lat ?? ""));
-  const [lon, setLon] = useState(String(user.lon ?? ""));
+  const [lat, setLat] = useState<number | null>(user.lat ?? null);
+  const [lon, setLon] = useState<number | null>(user.lon ?? null);
+  const [cityLabel, setCityLabel] = useState<string | null>(null);
+  const [cityStatus, setCityStatus] = useState<"idle" | "locating" | "resolving" | "denied">(
+    "idle",
+  );
   const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>(
     user.greetingStyle ?? "mix",
   );
@@ -458,12 +463,53 @@ export function OnboardingPage({ user, onUser }: Props) {
   const replay = params.get("replay") === "1";
 
   useEffect(() => {
-    if (lat === "" && user.lat != null) setLat(String(user.lat));
+    if (lat == null && user.lat != null) setLat(user.lat);
   }, [user.lat, lat]);
   useEffect(() => {
-    if (lon === "" && user.lon != null) setLon(String(user.lon));
+    if (lon == null && user.lon != null) setLon(user.lon);
   }, [user.lon, lon]);
 
+  // Resolve a read-only city label whenever we have coordinates.
+  useEffect(() => {
+    if (lat == null || lon == null) {
+      setCityLabel(null);
+      return;
+    }
+    const ac = new AbortController();
+    setCityStatus("resolving");
+    void reverseGeocodeCity(lat, lon, ac.signal)
+      .then((label) => {
+        if (ac.signal.aborted) return;
+        setCityLabel(label);
+        setCityStatus("idle");
+      })
+      .catch(() => {
+        if (ac.signal.aborted) return;
+        setCityLabel(null);
+        setCityStatus("idle");
+      });
+    return () => ac.abort();
+  }, [lat, lon]);
+
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setError("This browser cannot share location.");
+      return;
+    }
+    setError(null);
+    setCityStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude);
+        setLon(pos.coords.longitude);
+        setCityStatus("resolving");
+      },
+      () => {
+        setCityStatus("denied");
+      },
+      { maximumAge: 86_400_000, timeout: 12_000 },
+    );
+  }
   const last = step >= steps.length - 1;
   const current = steps[step]!;
   const tall =
@@ -526,37 +572,18 @@ export function OnboardingPage({ user, onUser }: Props) {
         identity,
         locationPrompted: true,
         onboardingCompleted: true,
+        lat,
+        lon,
       };
-      let nextLat = user.lat ?? null;
-      let nextLon = user.lon ?? null;
-      if (lat !== "") {
-        const n = Number(lat);
-        if (!Number.isFinite(n)) {
-          setError("Latitude must be a number.");
-          return;
-        }
-        body.lat = n;
-        nextLat = n;
-      }
-      if (lon !== "") {
-        const n = Number(lon);
-        if (!Number.isFinite(n)) {
-          setError("Longitude must be a number.");
-          return;
-        }
-        body.lon = n;
-        nextLon = n;
-      }
-      const nextName = name.trim() || null;
       await api("/api/auth/profile", {
         method: "PATCH",
         body: JSON.stringify(body),
       });
       onUser({
         ...user,
-        displayName: nextName,
-        lat: nextLat,
-        lon: nextLon,
+        displayName: name.trim() || null,
+        lat,
+        lon,
         greetingStyle,
         includePhysicalActivities,
         identity,
@@ -717,25 +744,34 @@ export function OnboardingPage({ user, onUser }: Props) {
                 onChange={setName}
                 dictateLabel="your name"
               />
-              <div className="ob-location-fields">
-                <div className="field">
-                  <label htmlFor="ob-lat">Latitude</label>
-                  <input
-                    id="ob-lat"
-                    inputMode="decimal"
-                    value={lat}
-                    onChange={(e) => setLat(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="ob-lon">Longitude</label>
-                  <input
-                    id="ob-lon"
-                    inputMode="decimal"
-                    value={lon}
-                    onChange={(e) => setLon(e.target.value)}
-                  />
-                </div>
+              <div className="ob-location">
+                <p className="ob-location-label">Location</p>
+                <p className="muted ob-location-why">
+                  Location powers your live sky and weather-aware suggestions.
+                </p>
+                {lat != null && lon != null ? (
+                  <p className="ob-location-city" aria-live="polite">
+                    {cityStatus === "resolving" && !cityLabel
+                      ? "Finding your city…"
+                      : cityLabel ?? "Location on"}
+                  </p>
+                ) : (
+                  <div className="ob-location-ask">
+                    {cityStatus === "denied" && (
+                      <p className="muted ob-location-denied">
+                        Permission stayed off. You can try again, or skip and keep timezone-only sky.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={cityStatus === "locating"}
+                      onClick={requestLocation}
+                    >
+                      {cityStatus === "locating" ? "Asking…" : "Use my location"}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="ob-greeting-style">Greeting style</label>
@@ -759,7 +795,7 @@ export function OnboardingPage({ user, onUser }: Props) {
                   {GREETING_STYLES.find((s) => s.value === greetingStyle)?.example}
                 </p>
               </div>
-              <fieldset className="field ob-activity-pref" style={{ border: "none", padding: 0 }}>
+              <fieldset className="field ob-activity-pref">
                 <legend>Activity suggestions</legend>
                 <label className="check-row" htmlFor="ob-include-physical">
                   <input
