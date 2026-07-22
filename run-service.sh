@@ -30,10 +30,10 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -d node_modules ]; then
-  echo "▸ Installing dependencies..."
-  bun install
-fi
+# Always install: rsync preserves node_modules, so new lockfile deps would
+# otherwise be skipped and break the Vite build (e.g. @fontsource/caveat).
+echo "▸ Installing dependencies..."
+bun install
 
 # Always rebuild: rsync excludes dist; code changes must refresh apps/web/dist
 echo "▸ Building web app..."
