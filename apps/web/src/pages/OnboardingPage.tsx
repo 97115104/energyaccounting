@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
+import { CompletionBurst } from "../components/CompletionBurst";
 import { DictatableField } from "../components/DictatableField";
 import { IdentityMark, NeuroMe } from "../components/IdentityMark";
 import { WingFamilyPicker } from "../components/IdentityPickers";
@@ -142,7 +143,7 @@ type Step = {
   setup?: boolean;
   identity?: "symbol" | "butterfly";
   neurome?: boolean;
-  demo?: "energy" | "day" | "privacy" | "reward" | "weather" | "built";
+  demo?: "energy" | "day" | "privacy" | "reward" | "weather" | "built" | "share" | "homescreen";
 };
 
 const NEUROME_DEMO_STATE = resolveButterflyState({
@@ -158,170 +159,270 @@ const NEUROME_DEMO_STATE = resolveButterflyState({
 });
 
 const SOURCE_REPO = "https://github.com/97115104/energyaccounting";
+const PRODUCT = "Your Energy Matters";
 
-// Eleven slides: loop, science (rewards + weather), privacy/values, identity, setup.
-const STEPS: Step[] = [
-  {
-    eyebrow: "Welcome",
-    thesis: "Your energy matters.",
-    whisper: (
-      <>
-        This journal helps you track energy the way neurodivergent brains often need to, following
-        the Energy Accounting method by{" "}
-        <ExtLink href="https://majatoudal.com/">Maja Toudal</ExtLink> and{" "}
-        <ExtLink href="https://www.tonyattwood.com.au/">Dr. Tony Attwood</ExtLink>. You start each
-        day when you are ready, and every day begins with 100 points you can restore and spend. Try
-        the buttons below to feel how that balance moves.
-      </>
-    ),
-    glyph: <SunGlyph />,
-    source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
-    demo: "energy",
-  },
-  {
-    eyebrow: "Your pace",
-    thesis: "Your day is important.",
-    whisper: (
-      <>
-        You decide when your energy day ends. An open day can stay with you across calendar dates,
-        which makes room for irregular sleep, long focus stretches, shift work, and time blindness.
-        When you are ready, you close the day and start the next one fresh at 100.
-      </>
-    ),
-    glyph: <DayDoneGlyph />,
-    demo: "day",
-  },
-  {
-    eyebrow: "Rhythm",
-    thesis: "Plan, audit, close.",
-    whisper: (
-      <>
-        Each day moves through three phases: planning, auditing how it actually felt, then closing.
-        Your NeuroMe seal beside the greeting keeps that beat with you, and the ring around your
-        mark shows today&apos;s remaining energy as you restore and spend it. Closed days live under
-        Previous days on the Dashboard, where you can amend the record or delete it permanently.
-      </>
-    ),
-    glyph: <DayGlyph />,
-    neurome: true,
-  },
-  {
-    eyebrow: "Careful rewards",
-    thesis: "Gentle rewards, on purpose.",
-    whisper: (
-      <>
-        Social apps often use{" "}
-        <ExtLink href="https://en.wikipedia.org/wiki/Reinforcement#Variable_ratio_schedules">
-          variable ratio reinforcement
-        </ExtLink>{" "}
-        to keep people scrolling. Here the same science shows up in a small, optional way when you
-        finish something, so a quiet spark or kind line can support momentum without trapping you.
-        You stay in control, and reduced motion settings still win.
-      </>
-    ),
-    glyph: <CheckGlyph />,
-    demo: "reward",
-  },
-  {
-    eyebrow: "Outside your window",
-    thesis: "The day outside matters.",
-    whisper: (
-      <>
-        The app paints a live sky from your place and reads the local weather so suggestions can
-        meet the day you are actually in. When daylight, dryness, and UV look friendly, outdoor ways
-        to add energy, including a walk or a stretch outside, can rise in the list, because{" "}
-        <ExtLink href="https://en.wikipedia.org/wiki/Green_exercise">green exercise</ExtLink>{" "}
-        research links moving in nature with better mood and attention. When conditions are rough,
-        the app leans indoor and gentler restores instead. Weather comes from{" "}
-        <ExtLink href="https://open-meteo.com/">Open-Meteo</ExtLink>. Location is optional on the
-        last slide; without it, the sky still follows time of day. Physical suggestions stay opt-in.
-      </>
-    ),
-    glyph: <SunGlyph />,
-    demo: "weather",
-  },
-  {
-    eyebrow: "Privacy",
-    thesis: "What you write stays yours.",
-    whisper: (
-      <>
-        The words you type, including notes, activity names, and task details, are locked up in your
-        browser before they go anywhere. Energy numbers stay readable so the app can spot patterns
-        and suggest restores. Every suggestion says why it appeared, and you can dismiss it.
-      </>
-    ),
-    glyph: <CheckGlyph />,
-    demo: "privacy",
-  },
-  {
-    eyebrow: "Our promise",
-    thesis: "Built by us, for us.",
-    whisper: (
-      <>
-        This tool is built by neurodivergents for neurodivergents. It is free forever and{" "}
-        <ExtLink href={SOURCE_REPO}>open source</ExtLink> under MIT. You can host your own copy and
-        leave whenever you want.
-      </>
-    ),
-    glyph: <PersonGlyph />,
-    source: { label: "View the source", url: SOURCE_REPO },
-    demo: "built",
-  },
-  {
-    eyebrow: "Getting to know you",
-    thesis: "A private picture of you.",
-    whisper: (
-      <>
-        As you log days, the You page builds a personal productivity intelligence from your own
-        history: what tends to restore you, what drains you, and what a typical day looks like.
-        Suggestions and drafts are computed on this device from that history. Your You notes leave
-        only as encrypted text you control, and stay private until you choose to share. How to work
-        with you turns the picture into a short note you can edit and show someone in your own words.
-      </>
-    ),
-    glyph: <PersonGlyph />,
-  },
-  {
-    eyebrow: "Symbolism matters",
-    thesis: "Choose your mark.",
-    whisper: (
-      <>
-        Neurodivergent people carry many symbols with pride. Pick the one that feels like yours, and
-        it will appear on shares, exports, and your sign-in welcome. Inside the app your butterfly is
-        always you, and you can change this any time on the You page.
-      </>
-    ),
-    glyph: <PersonGlyph />,
-    identity: "symbol",
-  },
-  {
-    eyebrow: "We are all butterflies",
-    thesis: "Meet your butterfly.",
-    whisper: (
-      <>
-        Your butterfly is your living mark inside the app. Pick a wing family that feels like you;
-        there are eight to choose from, because neurodivergent people are as varied as butterflies.
-        Its wings move with your energy, and you can tune the colors below or refine edges, tails,
-        and patterns any time on the You page.
-      </>
-    ),
-    glyph: <PersonGlyph />,
-    identity: "butterfly",
-  },
-  {
+function ShareGlyph() {
+  return (
+    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
+      <circle cx="46" cy="14" r="8" fill="none" stroke="currentColor" strokeWidth="3.5" />
+      <circle cx="46" cy="50" r="8" fill="none" stroke="currentColor" strokeWidth="3.5" />
+      <circle cx="18" cy="32" r="8" fill="none" stroke="currentColor" strokeWidth="3.5" />
+      <path
+        d="M25 28l14-10M25 36l14 10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function HomeScreenGlyph() {
+  return (
+    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
+      <rect
+        x="14"
+        y="8"
+        width="36"
+        height="48"
+        rx="6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+      />
+      <rect x="22" y="18" width="20" height="20" rx="4" fill="currentColor" opacity="0.35" />
+      <circle cx="32" cy="48" r="2.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** True only on mobile phones (not tablets, not desktop), and not already installed. */
+function useShowHomeScreenTip(): boolean {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const nav = window.navigator as Navigator & { standalone?: boolean; userAgentData?: { mobile?: boolean } };
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
+    if (standalone) {
+      setShow(false);
+      return;
+    }
+    const ua = nav.userAgent || "";
+    // iPadOS can report as Mac; exclude tablets. Prefer UA "Mobile" phones.
+    const iPad = /iPad/i.test(ua) || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1);
+    const iPhoneOrPod = /iPhone|iPod/i.test(ua);
+    const androidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
+    const uaDataPhone = nav.userAgentData?.mobile === true && !iPad;
+    setShow((iPhoneOrPod || androidPhone || uaDataPhone) && !iPad);
+  }, []);
+  return show;
+}
+
+function buildSteps(includeHomeScreen: boolean): Step[] {
+  const steps: Step[] = [
+    {
+      eyebrow: "Welcome",
+      thesis: "Your energy matters.",
+      whisper: (
+        <>
+          {PRODUCT} is a journal for neurodivergent minds, following Energy Accounting by{" "}
+          <ExtLink href="https://majatoudal.com/">Maja Toudal</ExtLink> and{" "}
+          <ExtLink href="https://www.tonyattwood.com.au/">Dr. Tony Attwood</ExtLink>. Adults,
+          children, and therapists use it to grow steadier days and clearer productivity. You start
+          each day when you are ready, and every day begins with 100 points. Adding energy back and
+          spending it with the same care is part of a healthy lifestyle, so restores and uses stay
+          visible side by side. Try the buttons below to feel how that balance moves.
+        </>
+      ),
+      glyph: <SunGlyph />,
+      source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
+      demo: "energy",
+    },
+    {
+      eyebrow: "Your pace",
+      thesis: "Your day is important.",
+      whisper: (
+        <>
+          You decide when your energy day ends. An open day can stay with you across calendar dates,
+          which makes room for irregular sleep, long focus stretches, shift work, and time blindness.
+          When you are ready, you close the day and start the next one fresh at 100.
+        </>
+      ),
+      glyph: <DayDoneGlyph />,
+      demo: "day",
+    },
+    {
+      eyebrow: "Rhythm",
+      thesis: "Plan, audit, close.",
+      whisper: (
+        <>
+          Each day moves through three phases: planning, auditing how it actually felt, then
+          closing. Your NeuroMe seal beside the greeting keeps that beat with you, and the ring
+          around your mark shows today&apos;s remaining energy as you restore and spend it. Closed
+          days live under Previous days on the Dashboard, where you can amend the record or delete
+          it permanently.
+        </>
+      ),
+      glyph: <DayGlyph />,
+      neurome: true,
+    },
+    {
+      eyebrow: "Careful rewards",
+      thesis: "Gentle rewards, on purpose.",
+      whisper: (
+        <>
+          Social apps often use{" "}
+          <ExtLink href="https://en.wikipedia.org/wiki/Reinforcement#Variable_ratio_schedules">
+            variable ratio reinforcement
+          </ExtLink>{" "}
+          to keep people scrolling. {PRODUCT} uses the same science in a small, optional way when
+          you finish something, so a quiet spark or kind line can support momentum without trapping
+          you. You stay in control, and reduced motion settings still win.
+        </>
+      ),
+      glyph: <CheckGlyph />,
+      demo: "reward",
+    },
+    {
+      eyebrow: "Outside your window",
+      thesis: "Your day outside matters.",
+      whisper: (
+        <>
+          {PRODUCT} factors weather and daylight into suggestions so outdoor restores show up when
+          they can help productivity and mood, and quieter indoor options come forward when
+          conditions are rough.{" "}
+          <ExtLink href="https://en.wikipedia.org/wiki/Green_exercise">Green exercise</ExtLink>{" "}
+          research supports that link. Location is optional later; without it, your sky still follows
+          time of day.
+        </>
+      ),
+      glyph: <SunGlyph />,
+      source: { label: "Weather from Open-Meteo", url: "https://open-meteo.com/" },
+      demo: "weather",
+    },
+    {
+      eyebrow: "Privacy",
+      thesis: "What you write stays yours.",
+      whisper: (
+        <>
+          Words you type, including notes, activity names, and task details, lock up in your browser
+          before they go anywhere. Energy numbers stay readable so {PRODUCT} can spot patterns and
+          suggest restores. Every suggestion says why it appeared, and you can dismiss it.
+        </>
+      ),
+      glyph: <CheckGlyph />,
+      demo: "privacy",
+    },
+    {
+      eyebrow: "Our promise",
+      thesis: "Built by us, for us.",
+      whisper: (
+        <>
+          {PRODUCT} is built by neurodivergents for neurodivergents. It is free forever and{" "}
+          <ExtLink href={SOURCE_REPO}>open source</ExtLink> under MIT. You can host your own copy
+          and leave whenever you want.
+        </>
+      ),
+      glyph: <PersonGlyph />,
+      source: { label: "View the source", url: SOURCE_REPO },
+      demo: "built",
+    },
+    {
+      eyebrow: "Getting to know you",
+      thesis: "A private picture of you.",
+      whisper: (
+        <>
+          As you log days, your You page builds a personal productivity intelligence from your own
+          history: what restores you, what drains you, and what a typical day looks like.
+          Suggestions and drafts compute on this device from that history. Your You notes leave only
+          as encrypted text you control, and stay private until you choose to share. How to work with
+          you turns the picture into a short note you can edit in your own words.
+        </>
+      ),
+      glyph: <PersonGlyph />,
+    },
+    {
+      eyebrow: "Sharing",
+      thesis: "Share when you are ready.",
+      whisper: (
+        <>
+          Neurodivergent people often work hard to name what energizes them, and harder still to
+          explain needs to friends, family, or a therapist. {PRODUCT} starts with private
+          intelligence so you can see what lights you up, then offers optional sharing when you want
+          help with that communication bandwidth: a butterfly image, a printable note, or a link you
+          can revoke. Nothing is required. You choose what leaves, and when.
+        </>
+      ),
+      glyph: <ShareGlyph />,
+      demo: "share",
+    },
+    {
+      eyebrow: "Symbolism matters",
+      thesis: "Choose your mark.",
+      whisper: (
+        <>
+          Neurodivergent people carry many symbols with pride. Pick the one that feels like yours,
+          and it will appear on shares, exports, and your sign-in welcome. Inside {PRODUCT}, your
+          butterfly is always you, and you can change this any time on the You page.
+        </>
+      ),
+      glyph: <PersonGlyph />,
+      identity: "symbol",
+    },
+    {
+      eyebrow: "We are all butterflies",
+      thesis: "Meet your butterfly.",
+      whisper: (
+        <>
+          Your butterfly is your living mark inside {PRODUCT}. Pick a wing family that feels like
+          you; there are eight to choose from, because neurodivergent people are as varied as
+          butterflies. Wings move with your energy, and you can tune colors below or refine edges,
+          tails, and patterns any time on the You page.
+        </>
+      ),
+      glyph: <PersonGlyph />,
+      identity: "butterfly",
+    },
+  ];
+
+  if (includeHomeScreen) {
+    steps.push({
+      eyebrow: "On your phone",
+      thesis: "Keep it close.",
+      whisper: (
+        <>
+          For the fullest experience on iPhone, open {PRODUCT} in Safari, tap Share, then Add to
+          Home Screen, and leave Open as Web App on. You get your own icon, full screen, no browser
+          chrome. On Android phones, look for Install app in the browser menu. Optional, and worth
+          it when you want {PRODUCT} to feel like a calm home for your days.
+        </>
+      ),
+      glyph: <HomeScreenGlyph />,
+      source: {
+        label: "Apple guide: Open as Web App",
+        url: "https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios",
+      },
+      demo: "homescreen",
+    });
+  }
+
+  steps.push({
     eyebrow: "Last step",
     thesis: "Make it yours.",
     whisper: (
       <>
-        Everything here is optional and editable later in Settings. A name makes the greetings
-        warmer, and optional coordinates power the live sky and weather-aware suggestions from the
-        earlier slide. Greeting style chooses the welcome line at the top of Today.
+        Everything here is optional and editable later in Settings. A name makes greetings warmer,
+        and optional coordinates power your live sky and weather-aware suggestions. Greeting style
+        chooses the welcome line at the top of Today.
       </>
     ),
     glyph: <PersonGlyph />,
     setup: true,
-  },
-];
+  });
+
+  return steps;
+}
 
 type Props = {
   user: UserProfile;
@@ -347,7 +448,11 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [demoEnergy, setDemoEnergy] = useState(100);
   const [demoDayClosed, setDemoDayClosed] = useState(false);
   const [demoSealed, setDemoSealed] = useState(false);
-  const [demoRewardHit, setDemoRewardHit] = useState(false);
+  const [homeStep, setHomeStep] = useState(0);
+  const [rewardIndex, setRewardIndex] = useState(0);
+  const [rewardPinned, setRewardPinned] = useState(false);
+  const showHomeScreen = useShowHomeScreenTip();
+  const steps = buildSteps(showHomeScreen);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const replay = params.get("replay") === "1";
@@ -359,8 +464,8 @@ export function OnboardingPage({ user, onUser }: Props) {
     if (lon === "" && user.lon != null) setLon(String(user.lon));
   }, [user.lon, lon]);
 
-  const last = step >= STEPS.length - 1;
-  const current = STEPS[step]!;
+  const last = step >= steps.length - 1;
+  const current = steps[step]!;
   const tall =
     current.setup ||
     current.identity === "butterfly" ||
@@ -369,7 +474,7 @@ export function OnboardingPage({ user, onUser }: Props) {
 
   function go(delta: 1 | -1) {
     setDirection(delta === 1 ? "next" : "prev");
-    setStep((s) => Math.min(Math.max(s + delta, 0), STEPS.length - 1));
+    setStep((s) => Math.min(Math.max(s + delta, 0), steps.length - 1));
   }
 
   useEffect(() => {
@@ -387,14 +492,23 @@ export function OnboardingPage({ user, onUser }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, last]);
+  }, [step, last, steps.length]);
 
   useEffect(() => {
     if (current.demo === "energy") setDemoEnergy(100);
     if (current.demo === "day") setDemoDayClosed(false);
     if (current.demo === "privacy") setDemoSealed(false);
-    if (current.demo === "reward") setDemoRewardHit(false);
+    if (current.demo === "reward") {
+      setRewardIndex(0);
+      setRewardPinned(false);
+    }
+    if (current.demo === "homescreen") setHomeStep(0);
   }, [step, current.demo]);
+
+  // If the home-screen tip appears after mount, keep the user on a valid index.
+  useEffect(() => {
+    setStep((s) => Math.min(s, Math.max(0, steps.length - 1)));
+  }, [steps.length]);
 
   function setPaletteSlot(slot: keyof ButterflyPalette, value: string) {
     if (slot === "rainbow") return;
@@ -460,7 +574,7 @@ export function OnboardingPage({ user, onUser }: Props) {
       <div className="ob-progress" aria-hidden="true">
         <div
           className="ob-progress-fill"
-          style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+          style={{ width: `${((step + 1) / steps.length) * 100}%` }}
         />
       </div>
 
@@ -492,7 +606,16 @@ export function OnboardingPage({ user, onUser }: Props) {
             <PrivacyControls sealed={demoSealed} onChange={setDemoSealed} />
           )}
           {current.demo === "reward" && (
-            <RewardControls hit={demoRewardHit} onHit={() => setDemoRewardHit(true)} />
+            <RewardControls
+              index={rewardIndex}
+              onPick={(i) => {
+                setRewardPinned(true);
+                setRewardIndex(i);
+              }}
+            />
+          )}
+          {current.demo === "homescreen" && (
+            <HomeScreenControls step={homeStep} onStep={setHomeStep} />
           )}
           {current.identity === "symbol" && (
             <div className="ob-setup ob-identity">
@@ -668,11 +791,19 @@ export function OnboardingPage({ user, onUser }: Props) {
           ) : current.demo === "privacy" ? (
             <PrivacyVisual sealed={demoSealed} />
           ) : current.demo === "reward" ? (
-            <RewardVisual hit={demoRewardHit} />
+            <RewardShowcase
+              index={rewardIndex}
+              pinned={rewardPinned}
+              onIndex={setRewardIndex}
+            />
           ) : current.demo === "weather" ? (
             <WeatherVisual />
           ) : current.demo === "built" ? (
             <FistHeartCycle />
+          ) : current.demo === "share" ? (
+            <ShareGlyph />
+          ) : current.demo === "homescreen" ? (
+            <HomeScreenVisual step={homeStep} />
           ) : current.identity === "symbol" ? (
             <SymbolShowcase identity={identity} />
           ) : current.identity === "butterfly" ? (
@@ -686,13 +817,16 @@ export function OnboardingPage({ user, onUser }: Props) {
       </article>
 
       <div className="ob-chrome">
+        <p className="ob-step-meter" aria-live="polite">
+          Step {step + 1} of {steps.length}
+        </p>
         <div className="ob-dots" role="group" aria-label="Onboarding progress">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <button
               key={s.thesis}
               type="button"
               aria-current={i === step ? "step" : undefined}
-              aria-label={`Step ${i + 1} of ${STEPS.length}`}
+              aria-label={`Step ${i + 1} of ${steps.length}`}
               className={`ob-dot${i === step ? " active" : ""}`}
               onClick={() => {
                 setDirection(i > step ? "next" : "prev");
@@ -752,19 +886,19 @@ function EnergyControls({
       <div className="ob-demo-actions">
         <button
           type="button"
-          className="ob-demo-chip"
+          className="ob-demo-chip ob-demo-chip-deposit"
           onClick={() => onChange(Math.min(100, balance + ENERGY_STEP))}
           disabled={balance >= 100}
         >
-          Add energy
+          + Add energy
         </button>
         <button
           type="button"
-          className="ob-demo-chip"
+          className="ob-demo-chip ob-demo-chip-withdraw"
           onClick={() => onChange(Math.max(0, balance - ENERGY_STEP))}
           disabled={balance <= 0}
         >
-          Use energy
+          − Use energy
         </button>
       </div>
     </div>
@@ -898,28 +1032,151 @@ function PrivacyVisual({ sealed }: { sealed: boolean }) {
   );
 }
 
-function RewardControls({ hit, onHit }: { hit: boolean; onHit: () => void }) {
+const REWARD_SAMPLES = [
+  {
+    id: "small",
+    label: "Quiet spark",
+    blurb: "Most finishes stay this soft.",
+    kind: "burst" as const,
+    tier: "small" as const,
+    quip: null,
+  },
+  {
+    id: "medium",
+    label: "Soft burst",
+    blurb: "A little more motion, still calm.",
+    kind: "burst" as const,
+    tier: "medium" as const,
+    quip: null,
+  },
+  {
+    id: "rare",
+    label: "Rare quip",
+    blurb: "Once in a while, a kind line appears.",
+    kind: "burst" as const,
+    tier: "rare" as const,
+    quip: "Nice work.",
+  },
+  {
+    id: "fire",
+    label: "Fire praise",
+    blurb: "Footer encouragement with a warm accent.",
+    kind: "praise" as const,
+    effect: "fire" as const,
+  },
+  {
+    id: "rainbow",
+    label: "Rainbow praise",
+    blurb: "The rarer footer accent, for momentum.",
+    kind: "praise" as const,
+    effect: "rainbow" as const,
+  },
+];
+
+function RewardControls({
+  index,
+  onPick,
+}: {
+  index: number;
+  onPick: (n: number) => void;
+}) {
+  const sample = REWARD_SAMPLES[index] ?? REWARD_SAMPLES[0]!;
   return (
-    <div className="ob-demo" role="group" aria-label="Try a gentle finish reward">
-      <div className="ob-demo-actions">
-        <button type="button" className="ob-demo-chip" onClick={onHit} disabled={hit}>
-          {hit ? "Nice finish" : "Try a finish"}
-        </button>
+    <div className="ob-demo" role="group" aria-label="Sample gentle rewards">
+      <div className="ob-reward-picks" role="list">
+        {REWARD_SAMPLES.map((s, i) => (
+          <button
+            key={s.id}
+            type="button"
+            role="listitem"
+            className={`ob-demo-chip${i === index ? " selected" : ""}`}
+            aria-pressed={i === index}
+            onClick={() => onPick(i)}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
       <p className="muted ob-demo-note" aria-live="polite">
-        {hit
-          ? "A quiet spark for completing something. Real finishes stay intermittent on purpose."
-          : "Tap to see the kind of quiet reward a finish can bring."}
+        <strong>{sample.label}.</strong> {sample.blurb} Real finishes stay intermittent on purpose.
       </p>
     </div>
   );
 }
 
-function RewardVisual({ hit }: { hit: boolean }) {
+/**
+ * Cycles the real completion burst tiers and praise accents so the person can
+ * see the subtle vocabulary before they meet it on Today.
+ */
+function RewardShowcase({
+  index,
+  pinned,
+  onIndex,
+}: {
+  index: number;
+  pinned: boolean;
+  onIndex: (n: number) => void;
+}) {
+  const prefersReduced = usePrefersReducedMotion();
+  const [replay, setReplay] = useState(0);
+
+  useEffect(() => {
+    if (prefersReduced || pinned) return;
+    const id = window.setInterval(() => {
+      onIndex((index + 1) % REWARD_SAMPLES.length);
+    }, 2800);
+    return () => window.clearInterval(id);
+  }, [prefersReduced, pinned, index, onIndex]);
+
+  // Remount bursts so CSS animations replay on every sample change.
+  useEffect(() => {
+    setReplay((n) => n + 1);
+  }, [index]);
+
+  const sample = REWARD_SAMPLES[index] ?? REWARD_SAMPLES[0]!;
+  const showQuip = sample.kind === "burst" && Boolean(sample.quip) && !prefersReduced;
+  const showPraise = sample.kind === "praise";
+
   return (
-    <div className={`ob-reward-visual${hit ? " hit" : ""}`}>
-      <CheckGlyph />
-      <p className="ob-day-caption">{hit ? "Spark" : "Ready"}</p>
+    <div className="ob-reward-stage">
+      {/* Fixed-height line keeps the glyph from shifting when quips or praise appear. */}
+      <p
+        className={`ob-reward-line${showQuip || showPraise ? " has-copy" : ""}`}
+        aria-live="polite"
+      >
+        {showPraise ? (
+          <>
+            3 done.{" "}
+            <span className={`praise-accent praise-accent-${sample.effect}`}>
+              {sample.effect === "fire" ? "You're awesome!" : "Keep that momentum!"}
+            </span>
+            {sample.effect === "fire" && !prefersReduced && (
+              <span className="praise-flame" aria-hidden="true">
+                {" "}
+                🔥
+              </span>
+            )}
+          </>
+        ) : showQuip ? (
+          sample.quip
+        ) : (
+          "\u00a0"
+        )}
+      </p>
+      <div className="ob-reward-anchor">
+        <CheckGlyph />
+        {sample.kind === "burst" && (
+          <CompletionBurst
+            key={`${sample.id}-${replay}`}
+            tier={sample.tier}
+            side="deposit"
+            x={0}
+            y={0}
+            quip={null}
+          />
+        )}
+      </div>
+      <p className="ob-day-caption">{sample.label}</p>
     </div>
   );
 }
@@ -930,6 +1187,66 @@ function WeatherVisual() {
     <div className="ob-weather-visual">
       <SunGlyph />
       <p className="ob-day-caption">Live sky</p>
+    </div>
+  );
+}
+
+const HOME_STEPS = [
+  { title: "Share", detail: "In Safari, tap the Share button." },
+  { title: "Add to Home Screen", detail: "Scroll the sheet and choose Add to Home Screen." },
+  { title: "Open as Web App", detail: "Leave Open as Web App on, then tap Add." },
+] as const;
+
+function HomeScreenControls({
+  step,
+  onStep,
+}: {
+  step: number;
+  onStep: (n: number) => void;
+}) {
+  return (
+    <div className="ob-demo" role="group" aria-label="Add to Home Screen steps">
+      <ol className="ob-home-steps">
+        {HOME_STEPS.map((item, i) => (
+          <li key={item.title}>
+            <button
+              type="button"
+              className={`ob-home-step${i === step ? " active" : ""}${i < step ? " done" : ""}`}
+              aria-current={i === step ? "step" : undefined}
+              onClick={() => onStep(i)}
+            >
+              <span className="ob-home-step-num" aria-hidden="true">
+                {i + 1}
+              </span>
+              <span className="ob-home-step-copy">
+                <strong>{item.title}</strong>
+                <span className="muted">{item.detail}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      {step < HOME_STEPS.length - 1 ? (
+        <button
+          type="button"
+          className="ob-demo-chip"
+          onClick={() => onStep(Math.min(HOME_STEPS.length - 1, step + 1))}
+        >
+          Next tip
+        </button>
+      ) : (
+        <p className="muted ob-demo-note">Your icon opens full screen, like a calm little app.</p>
+      )}
+    </div>
+  );
+}
+
+function HomeScreenVisual({ step }: { step: number }) {
+  const label = HOME_STEPS[step]?.title ?? "Home Screen";
+  return (
+    <div className="ob-home-visual">
+      <HomeScreenGlyph />
+      <p className="ob-day-caption">{label}</p>
     </div>
   );
 }

@@ -2177,6 +2177,13 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 .dashboard {
   display: grid;
   gap: 1rem;
+  /* Grid items default to min-width:auto; without this a wide child
+     can force the whole dashboard past the viewport on mobile. */
+  min-width: 0;
+}
+
+.dashboard > * {
+  min-width: 0;
 }
 
 .dashboard h2 {
@@ -2334,7 +2341,40 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
   font-size: 0.85rem;
 }
 
+.dashboard-days,
+.dashboard-days > * {
+  min-width: 0;
+}
+
+.dashboard-details-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dashboard-day-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+.dashboard-day-list > li + li {
+  border-top: 1px solid var(--line);
+}
+
 .dashboard-day-row {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.85rem 0.35rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -2345,6 +2385,26 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 .dashboard-day-row:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: -3px;
+}
+
+.dashboard-day-when {
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.dashboard-day-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dashboard-day-meta em {
+  font-style: normal;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  margin-right: 0.25rem;
 }
 
 @media (max-width: 719px) {
@@ -2358,6 +2418,11 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
   .dashboard-range {
     min-width: 0;
     width: 100%;
+  }
+
+  /* Full-width secondary toggle reads as a banner on narrow screens. */
+  .dashboard-details-toggle {
+    justify-self: start;
   }
 
   .capacity-values {
@@ -3504,10 +3569,14 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   overflow: visible;
 }
 
-/* The setup / identity / demo slides still opt into the tall class for
-   align-items:start so forms and pickers sit under the thesis cleanly. */
-.ob-card.ob-card-tall {
-  align-items: start;
+/* Tall slides still top-align the text column (forms, demos) while the
+   aside stays vertically centered — same desktop placement as Rhythm. */
+.ob-card.ob-card-tall .ob-content {
+  align-self: start;
+}
+
+.ob-card.ob-card-tall .ob-aside {
+  align-self: center;
 }
 
 .ob-card-next {
@@ -3579,6 +3648,13 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 }
 
 .ob-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  width: 11.5rem;
+  min-height: 11.5rem;
   animation: ob-rise 0.6s cubic-bezier(0.32, 0.72, 0, 1) 300ms both;
 }
 
@@ -3650,16 +3726,20 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   .ob-card {
     grid-template-columns: 1fr;
     gap: 1rem;
-    /* Natural height on phones: the page scrolls instead of an inner scrollbox,
-       and the floor keeps the dots/button from jumping much between slides. */
+    /* Natural height on phones: the page scrolls instead of an inner scrollbox.
+       Keep the floor modest so chrome (meter + button) stays near the content. */
     height: auto;
-    min-height: min(44dvh, 420px);
+    min-height: min(36dvh, 320px);
     overflow: visible;
     align-content: center;
   }
 
   .ob-aside {
     order: -1;
+    justify-self: center;
+    width: auto;
+    min-height: 0;
+    margin-inline: auto;
   }
 
   .ob-glyph {
@@ -3717,24 +3797,21 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 
 .ob-dots {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 0.2rem;
   margin: 1.25rem 0;
   max-width: 100%;
 }
 
-/* 11 steps need a tighter mobile row: 32px × 11 = 352, fits ~358px content. */
-@media (max-width: 640px) {
-  .ob-dots {
-    gap: 0;
-    margin: 0.75rem 0;
-  }
-
-  .ob-dot {
-    width: 32px;
-    height: 40px;
-  }
+.ob-step-meter {
+  display: none;
+  margin: 0.85rem 0 0.5rem;
+  font-family: var(--display);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .ob-dot {
@@ -3766,6 +3843,22 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   opacity: 1;
   width: 22px;
   background: var(--accent);
+}
+
+/* Phones: many steps overflow a single row; rely on the top progress bar plus
+   a calm step meter instead of a wrapping/overflowing dot strip. */
+@media (max-width: 640px) {
+  .ob-dots {
+    display: none;
+  }
+
+  .ob-step-meter {
+    display: block;
+  }
+
+  .ob-chrome {
+    margin-top: 0.5rem;
+  }
 }
 
 .ob-actions {
@@ -4079,7 +4172,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   .ob-aside,
   .ob-setup,
   .ob-demo,
-  .ob-reward-visual.hit .ob-glyph,
+  .ob-reward-line.has-copy,
   .ob-dot::after,
   .ob-progress-fill,
   .wordmark,
@@ -5262,6 +5355,37 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   outline-offset: 2px;
 }
 
+.ob-demo-chip.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+.ob-demo-chip-deposit {
+  color: var(--deposit);
+  border-color: color-mix(in srgb, var(--deposit) 42%, var(--line));
+  background: color-mix(in srgb, var(--deposit) 12%, var(--surface));
+}
+
+.ob-demo-chip-deposit:hover:not(:disabled) {
+  border-color: var(--deposit);
+}
+
+.ob-demo-chip-withdraw {
+  color: var(--withdraw);
+  border-color: color-mix(in srgb, var(--withdraw) 42%, var(--line));
+  background: color-mix(in srgb, var(--withdraw) 12%, var(--surface));
+}
+
+.ob-demo-chip-withdraw:hover:not(:disabled) {
+  border-color: var(--withdraw);
+}
+
+.ob-reward-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .ob-demo-note {
   margin: 0.55rem 0 0;
   font-size: 0.88rem;
@@ -5375,7 +5499,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   margin-top: 0.75rem;
 }
 
-.ob-reward-visual,
+.ob-reward-stage,
 .ob-weather-visual {
   display: flex;
   flex-direction: column;
@@ -5384,19 +5508,135 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   color: var(--accent);
 }
 
-.ob-reward-visual.hit .ob-glyph {
-  animation: ob-reward-pop 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+/* Fixed rows so burst/praise swaps never reflow the glyph. */
+.ob-reward-stage {
+  display: grid;
+  grid-template-rows: 2.75rem 5.5rem 1.4rem;
+  align-items: center;
+  justify-items: center;
+  gap: 0.45rem;
+  width: 100%;
 }
 
-@keyframes ob-reward-pop {
+.ob-reward-line {
+  margin: 0;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--ink);
+  max-width: 15rem;
+}
+
+.ob-reward-line.has-copy {
+  animation: ob-reward-praise-in 0.45s ease-out both;
+}
+
+/* Stage-local bursts: CompletionBurst is fixed on Today; here it sits on the check. */
+.ob-reward-anchor {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  overflow: visible;
+}
+
+.ob-reward-anchor .ob-glyph {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.ob-reward-stage .completion-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+}
+
+.ob-reward-stage .ob-day-caption {
+  margin: 0;
+  min-height: 1.4rem;
+  line-height: 1.4rem;
+}
+
+@keyframes ob-reward-praise-in {
   from {
-    opacity: 0.4;
-    transform: scale(0.85);
+    opacity: 0;
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
+}
+
+.ob-home-steps {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ob-home-step {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.ob-home-step.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.ob-home-step.done {
+  opacity: 0.72;
+}
+
+.ob-home-step-num {
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ob-home-step-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.ob-home-step-copy strong {
+  font-weight: 600;
+}
+
+.ob-home-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent);
 }
 
 .ob-fist-heart {
@@ -5440,7 +5680,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ob-reward-visual.hit .ob-glyph {
+  .ob-reward-line.has-copy {
     animation: none;
   }
 

@@ -1,7 +1,7 @@
 {
-  "name": "My Energy Journal",
-  "short_name": "My Energy Journal",
-  "description": "Track your daily energy balance.",
+  "name": "Your Energy Matters",
+  "short_name": "Your Energy Matters",
+  "description": "An energy accounting journal for neurodivergent minds.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fff6c8",

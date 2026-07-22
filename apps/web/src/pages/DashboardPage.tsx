@@ -277,73 +277,62 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               deletion.
             </p>
           </div>
-          <button type="button" className="btn secondary" onClick={() => setDetailsOpen((open) => !open)}>
+          <button
+            type="button"
+            className="btn secondary dashboard-details-toggle"
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
             {detailsOpen ? "Hide details" : "Show details"}
           </button>
         </div>
         {detailsOpen && (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                {["Started", "Left", "Attwood", "Feel", "Weather", "Holiday"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      textAlign: "left",
-                      borderBottom: "1px solid var(--line)",
-                      padding: "0.5rem",
-                    }}
+          <ul className="dashboard-day-list">
+            {previousDays.map((p) => {
+              const weather =
+                p.weather?.tempMax != null
+                  ? `${formatTemp(p.weather.tempMax, tempUnit)}${p.weather.precip != null ? `, ${p.weather.precip}mm` : ""}`
+                  : null;
+              const holiday = p.isHoliday ? p.weather?.holidayName || "Holiday" : null;
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="dashboard-day-row"
+                    aria-label={`Open day ${dayLabel(p)}`}
+                    onClick={() => navigate(`/?day=${p.id}`)}
                   >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {previousDays.map((p) => (
-                <tr
-                  key={p.id}
-                  className="dashboard-day-row"
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`Open day ${dayLabel(p)}`}
-                  onClick={() => navigate(`/?day=${p.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      navigate(`/?day=${p.id}`);
-                    }
-                  }}
-                >
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {dayLabel(p)}
-                  </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {p.closingBalance}
-                  </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {p.attwoodNet}
-                  </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {p.feelRating ?? "-"}
-                  </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {p.weather?.tempMax != null
-                      ? `${formatTemp(p.weather.tempMax, tempUnit)}${p.weather.precip != null ? `, ${p.weather.precip}mm` : ""}`
-                      : "-"}
-                  </td>
-                  <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--line)" }}>
-                    {p.isHoliday ? p.weather?.holidayName || "Yes" : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!previousDays.length && (
-            <p className="muted">Closed energy days will appear here.</p>
-          )}
-        </div>
+                    <span className="dashboard-day-when">{dayLabel(p)}</span>
+                    <span className="dashboard-day-meta">
+                      <span>
+                        <em>Left</em> {p.closingBalance}
+                      </span>
+                      <span>
+                        <em>Attwood</em> {p.attwoodNet}
+                      </span>
+                      <span>
+                        <em>Feel</em> {p.feelRating ?? "—"}
+                      </span>
+                      {weather && (
+                        <span>
+                          <em>Weather</em> {weather}
+                        </span>
+                      )}
+                      {holiday && (
+                        <span>
+                          <em>Holiday</em> {holiday}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+            {!previousDays.length && (
+              <li>
+                <p className="muted">Closed energy days will appear here.</p>
+              </li>
+            )}
+          </ul>
         )}
       </section>
     </div>
