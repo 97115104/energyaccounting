@@ -419,19 +419,37 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               ))}
             </ul>
           )}
-          <div className="field you-motion">
-            <label htmlFor="you-motion">Wing motion</label>
-            <select
-              id="you-motion"
-              value={identity.motion}
-              onChange={(e) =>
-                saveIdentity({ motion: e.target.value as IdentityConfig["motion"] })
-              }
+          <div className="you-motion">
+            <p id="you-motion-label" className="you-motion-label">
+              Wing motion
+            </p>
+            <div
+              className="you-motion-seg"
+              role="radiogroup"
+              aria-labelledby="you-motion-label"
             >
-              <option value="auto">Follows my day</option>
-              <option value="calm">Calm, half speed</option>
-              <option value="still">Still</option>
-            </select>
+              {(
+                [
+                  { value: "auto" as const, label: "Follow day" },
+                  { value: "calm" as const, label: "Calm" },
+                  { value: "still" as const, label: "Still" },
+                ] as const
+              ).map((opt) => {
+                const selected = identity.motion === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    className={`you-motion-opt${selected ? " is-selected" : ""}`}
+                    onClick={() => saveIdentity({ motion: opt.value })}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
             {prefersReduced && identity.motion !== "still" && (
               <p className="muted you-motion-note">
                 Your system asks for reduced motion, so the wings hold still here.
