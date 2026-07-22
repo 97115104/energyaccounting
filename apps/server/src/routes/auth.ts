@@ -495,6 +495,67 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
     },
   )
   .post(
+    "/email",
+    async ({ body, request, set }) => {
+      const auth = await sessionFromCookie(tokenFromRequest(request));
+      if (!auth || auth.pendingTotp) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const email = body.email.trim().toLowerCase();
+      if (!email || !email.includes("@")) {
+        set.status = 400;
+        return { error: "Enter a valid email address." };
+      }
+      const ok = await Bun.password.verify(body.password, auth.user.passwordHash);
+      if (!ok) {
+        set.status = 401;
+        return { error: "Password incorrect." };
+      }
+      if (auth.user.totpEnabled) {
+        if (!auth.user.totpSecret || !body.code || !verifyTotp(auth.user.totpSecret, body.code)) {
+          set.status = 400;
+          return { error: "Authenticator code invalid." };
+        }
+      }
+      if (email === auth.user.email) {
+        return { user: publicUser(auth.user) };
+      }
+      const taken = await db.query.userTable.findFirst({
+        where: eq(userTable.email, email),
+      });
+      if (taken) {
+        set.status = 409;
+        return { error: "An account with that email already exists." };
+      }
+      try {
+        await db.update(userTable).set({ email }).where(eq(userTable.id, auth.user.id));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("UNIQUE")) {
+          set.status = 409;
+          return { error: "An account with that email already exists." };
+        }
+        throw e;
+      }
+      const updated = await db.query.userTable.findFirst({
+        where: eq(userTable.id, auth.user.id),
+      });
+      if (!updated) {
+        set.status = 500;
+        return { error: "Email update failed." };
+      }
+      return { user: publicUser(updated) };
+    },
+    {
+      body: t.Object({
+        email: t.String(),
+        password: t.String(),
+        code: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
     "/delete-account",
     async ({ body, request, set }) => {
       const auth = await sessionFromCookie(tokenFromRequest(request));

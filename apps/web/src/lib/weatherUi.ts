@@ -1,11 +1,29 @@
 /** Weather mapping, sunrise/sunset math, and temperature formatting. */
 
+import WEATHER_QUIPS from "../content/weather-quips.json";
 import { hourInTimezone, isNightInTimezone } from "./timezone";
 
 // Re-exported to keep weatherUi's public API unchanged after the move.
 export { isNightInTimezone };
 
 export type WeatherKind = "sun" | "rain" | "cloud" | "snow" | "fog" | "thunder" | "unknown";
+
+type WeatherQuipPools = {
+  thunder: string[];
+  rain: string[];
+  snow: string[];
+  fog: string[];
+  cloud: string[];
+  sunHotHighUv: string[];
+  sunHot: string[];
+  sunHighUv: string[];
+  sunChilly: string[];
+  sunWarm: string[];
+  sunClear: string[];
+  fallback: string[];
+};
+
+const QUIPS = WEATHER_QUIPS as WeatherQuipPools;
 
 export function weatherKindFromCode(code: unknown): WeatherKind {
   if (typeof code !== "number") return "unknown";
@@ -222,7 +240,9 @@ function pickQuip(pool: string[], seed: string): string {
 
 /**
  * Short, lightly funny line about today's weather for the Today header.
- * Plain human voice — no energy-accounting jargon. Temps are Celsius.
+ * Copy lives in content/weather-quips.json so pools can grow without
+ * touching picker logic. Plain human voice — no energy-accounting jargon.
+ * Temps are Celsius.
  */
 export function weatherQuip(opts: {
   kind: WeatherKind;
@@ -237,115 +257,18 @@ export function weatherQuip(opts: {
   const highUv = uvMax != null && uvMax >= 7;
   const spicyUv = uvMax != null && uvMax >= 5;
 
-  if (kind === "thunder") {
-    return pickQuip(
-      [
-        "The sky is having a tantrum. Headphones recommended.",
-        "Thunder's oversharing again. You don't have to.",
-        "Boom weather. Indoors is the main character today.",
-      ],
-      date,
-    );
-  }
-  if (kind === "rain") {
-    return pickQuip(
-      [
-        "It's raining. Canceling outside is free and legal.",
-        "Wet socks are not a personality. Stay in.",
-        "Rain check on the rain. Soft socks instead.",
-      ],
-      date,
-    );
-  }
-  if (kind === "snow") {
-    return pickQuip(
-      [
-        "Snow day energy, even if your calendar disagrees.",
-        "It's snowing. Ambition can wait in the hallway.",
-        "Fluffy outside. Low-effort inside.",
-      ],
-      date,
-    );
-  }
-  if (kind === "fog") {
-    return pickQuip(
-      [
-        "Foggy. Your brain has permission to match.",
-        "Can't see far. Don't plan far either.",
-        "The world hit soft focus. Join it.",
-      ],
-      date,
-    );
-  }
-  if (kind === "cloud") {
-    return pickQuip(
-      [
-        "Cloudy. Nature's blue-light filter, free of charge.",
-        "Gray skies, less squinting. We'll take it.",
-        "Overcast. The sun called in sick.",
-      ],
-      date,
-    );
-  }
+  if (kind === "thunder") return pickQuip(QUIPS.thunder, date);
+  if (kind === "rain") return pickQuip(QUIPS.rain, date);
+  if (kind === "snow") return pickQuip(QUIPS.snow, date);
+  if (kind === "fog") return pickQuip(QUIPS.fog, date);
+  if (kind === "cloud") return pickQuip(QUIPS.cloud, date);
   if (kind === "sun" || kind === "unknown") {
-    if (hot && highUv) {
-      return pickQuip(
-        [
-          "Don't forget sunscreen, even though it sucks.",
-          "The sun is being rude. Shade and water, please.",
-          "Hot UV chaos. You are not a plant. Cover up.",
-        ],
-        date,
-      );
-    }
-    if (hot) {
-      return pickQuip(
-        [
-          "It's hot. Melting is optional; shade is not.",
-          "Scorcher. Move like molasses on purpose.",
-          "Heat wave. Your only job is not cooking yourself.",
-        ],
-        date,
-      );
-    }
-    if (highUv || (warm && spicyUv)) {
-      return pickQuip(
-        [
-          "UV's up. Sunscreen, even if it's annoying.",
-          "Bright and spicy. A hat is low-effort armor.",
-          "The sun is doing too much. Soften it.",
-        ],
-        date,
-      );
-    }
-    if (chilly) {
-      return pickQuip(
-        [
-          "Chilly. Warm drink > heroic outdoor quests.",
-          "Crisp air. One brave minute outside is plenty.",
-          "Cool out. Sweater weather, soft ambitions.",
-        ],
-        date,
-      );
-    }
-    if (warm) {
-      return pickQuip(
-        [
-          "Warm and almost inviting. Don't get bullied by it.",
-          "Nice out. A short stretch beats a whole saga.",
-          "Pleasant skies. Still no need to overdo it.",
-        ],
-        date,
-      );
-    }
-    return pickQuip(
-      [
-        "Clear skies. Steady is still a flex.",
-        "Weather's behaving. You can too, slowly.",
-        "Open sky. Take only what feels doable.",
-      ],
-      date,
-    );
+    if (hot && highUv) return pickQuip(QUIPS.sunHotHighUv, date);
+    if (hot) return pickQuip(QUIPS.sunHot, date);
+    if (highUv || (warm && spicyUv)) return pickQuip(QUIPS.sunHighUv, date);
+    if (chilly) return pickQuip(QUIPS.sunChilly, date);
+    if (warm) return pickQuip(QUIPS.sunWarm, date);
+    return pickQuip(QUIPS.sunClear, date);
   }
-  return "Weather's hanging around. Tap for the gossip.";
+  return pickQuip(QUIPS.fallback, date);
 }

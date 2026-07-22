@@ -126,3 +126,79 @@ describe("POST /api/auth/register invite gate", () => {
     expect(raceUsers.length).toBe(1);
   });
 });
+
+describe("POST /api/auth/email", () => {
+  const PASSWORD = "correct horse battery";
+
+  async function makeSession(prefix: string): Promise<{ userId: string; email: string; cookie: string }> {
+    const { SESSION_COOKIE, hashToken, newId } = await import("../lib/session.ts");
+    const { sessionTable } = await import("../db/schema.ts");
+    const userId = newId();
+    const email = `${prefix}-${userId.slice(0, 8)}@example.com`;
+    await db.insert(userTable).values({
+      id: userId,
+      email,
+      passwordHash: await Bun.password.hash(PASSWORD, {
+        algorithm: "argon2id",
+        memoryCost: 19456,
+        timeCost: 2,
+      }),
+      kekSalt: "salt",
+      wrappedDek: "wrapped",
+      timezone: "UTC",
+      createdAt: new Date(),
+    });
+    const token = randomBytes(32).toString("hex");
+    await db.insert(sessionTable).values({
+      id: newId(),
+      userId,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + 60_000),
+      pendingTotp: false,
+    });
+    return { userId, email, cookie: `${SESSION_COOKIE}=${token}` };
+  }
+
+  function emailReq(cookie: string, body: unknown): Request {
+    return new Request("http://localhost/api/auth/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  test("changes email when password is correct", async () => {
+    const { email, cookie } = await makeSession("email-ok");
+    const next = `renamed-${email}`;
+    const res = await authRoutes.handle(
+      emailReq(cookie, { email: next, password: PASSWORD }),
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { user: { email: string } };
+    expect(json.user.email).toBe(next.toLowerCase());
+    const row = await db.query.userTable.findFirst({
+      where: eq(userTable.email, next.toLowerCase()),
+    });
+    expect(row).toBeDefined();
+  });
+
+  test("rejects wrong password", async () => {
+    const { email, cookie } = await makeSession("email-bad-pw");
+    const res = await authRoutes.handle(
+      emailReq(cookie, { email: `new-${email}`, password: "nope" }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("rejects duplicate email", async () => {
+    const a = await makeSession("email-dup-a");
+    const b = await makeSession("email-dup-b");
+    const res = await authRoutes.handle(
+      emailReq(a.cookie, { email: b.email, password: PASSWORD }),
+    );
+    expect(res.status).toBe(409);
+  });
+});

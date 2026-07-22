@@ -896,7 +896,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Trend hint while planning; recovery only at close (never during audit,
   // so tomorrow's day row is not created before today locks).
   const dayDate = day?.date ?? isoDate();
-  const spansMidnight = !!day && !isHistoryView && day.date < isoDate() && day.phase !== "closed";
   const weatherQuipLine = useMemo(
     () =>
       parsedWeather
@@ -1702,12 +1701,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
         }
       >
       <div className="panel">
-        <p className="ob-eyebrow">Energy day · started {dayDate}</p>
-        {spansMidnight && (
-          <p className="muted day-span-note">
-            This is still your active energy day; close it when your day is actually done.
-          </p>
-        )}
+        <p className="ob-eyebrow">
+          Energy day · started {dayDate}
+          {day?.isHoliday ? " · Holiday" : ""}
+        </p>
         {isHistoryView && closed && (
           <div style={{ marginBottom: "0.75rem" }}>
             <p className="muted">
@@ -1745,10 +1742,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
           </div>
         )}
-        <p className="muted" style={{ marginTop: "0.75rem" }}>
-          Signed in as {user.email}
-          {day.isHoliday ? " · Holiday" : ""}
-        </p>
         <div className="weather-row">
           <p className="weather-quip">{weatherQuipLine}</p>
           <button

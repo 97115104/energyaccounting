@@ -8,6 +8,7 @@ import greetings from "../content/greetings.json";
 import movement from "../content/movement-families.json";
 import novel from "../content/novel-activities.json";
 import play from "../content/play-prompts.json";
+import weatherQuips from "../content/weather-quips.json";
 import { MOVEMENT_FAMILIES } from "./activityCatalog";
 import { suggestActivities } from "./activitySuggest";
 import { suggestPlayDeposits } from "./playCategories";
@@ -40,6 +41,29 @@ describe("content packs", () => {
   it("play prompts declare physical tags", () => {
     expect(play.some((p) => p.physical)).toBe(true);
     expect(play.some((p) => !p.physical)).toBe(true);
+  });
+
+  it("weather quips cover each condition with unique non-empty lines", () => {
+    const keys = [
+      "thunder",
+      "rain",
+      "snow",
+      "fog",
+      "cloud",
+      "sunHotHighUv",
+      "sunHot",
+      "sunHighUv",
+      "sunChilly",
+      "sunWarm",
+      "sunClear",
+      "fallback",
+    ] as const;
+    for (const key of keys) {
+      const pool = weatherQuips[key];
+      expect(pool.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(pool).size).toBe(pool.length);
+      for (const line of pool) expect(line.trim().length).toBeGreaterThan(0);
+    }
   });
 
   it("novel activities have unique ids and known conditions", () => {

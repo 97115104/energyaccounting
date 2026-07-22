@@ -20,14 +20,21 @@ describe("weatherQuip", () => {
 
   test("different dates can rotate the rain pool", () => {
     const lines = new Set(
-      ["2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25"].map((date) =>
-        weatherQuip({ kind: "rain", uvMax: 1, tempMax: 16, date }),
+      ["2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28"].map(
+        (date) => weatherQuip({ kind: "rain", uvMax: 1, tempMax: 16, date }),
       ),
     );
     expect(lines.size).toBeGreaterThan(1);
   });
-});
 
+  test("hot high-UV pool has enough variety across dates", () => {
+    const dates = Array.from({ length: 24 }, (_, i) => `2026-07-${String(i + 1).padStart(2, "0")}`);
+    const lines = new Set(
+      dates.map((date) => weatherQuip({ kind: "sun", uvMax: 8, tempMax: 33, date })),
+    );
+    expect(lines.size).toBeGreaterThan(3);
+  });
+});
 describe("skyPeriod / sunTimes", () => {
   test("Tokyo morning (06:00 JST) is day, not night", () => {
     // 2026-07-20 21:00 UTC equals 2026-07-21 06:00 JST, while the UTC calendar day remains the 20th.

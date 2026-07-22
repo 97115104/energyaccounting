@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
-import { DictatableField } from "../components/DictatableField";
 import { ModalCloseButton } from "../components/ModalCloseButton";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
@@ -48,7 +47,16 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [deleteCode, setDeleteCode] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [email, setEmail] = useState(user.email);
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
   const deletingRef = useRef(false);
+
+  useEffect(() => {
+    setEmail(user.email);
+  }, [user.email]);
 
   useEffect(() => {
     deletingRef.current = deleting;
@@ -93,6 +101,39 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       previous?.focus?.({ preventScroll: true });
     };
   }, [deleteOpen]);
+
+  function cancelEmailEdit() {
+    setEditingEmail(false);
+    setEmail(user.email);
+    setEmailPassword("");
+    setEmailCode("");
+  }
+
+  async function saveEmail() {
+    setError(null);
+    setMsg(null);
+    setSavingEmail(true);
+    try {
+      const res = await api<{ user: UserProfile }>("/api/auth/email", {
+        method: "POST",
+        body: JSON.stringify({
+          email: email.trim(),
+          password: emailPassword,
+          ...(user.totpEnabled ? { code: emailCode } : {}),
+        }),
+      });
+      onUser(res.user);
+      setEmail(res.user.email);
+      setEmailPassword("");
+      setEmailCode("");
+      setEditingEmail(false);
+      setMsg("Email updated.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Email update failed");
+    } finally {
+      setSavingEmail(false);
+    }
+  }
 
   async function saveProfile() {
     setError(null);
@@ -207,14 +248,91 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
     <div>
       <div className="panel">
         <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Profile</h2>
-        <DictatableField
-          label="Name or alias (greetings)"
-          value={displayName}
-          maxLength={80}
-          autoComplete="nickname"
-          onChange={setDisplayName}
-          dictateLabel="your name"
-        />
+        <div className="field">
+          <label htmlFor="display-name">Name or alias (greetings)</label>
+          <input
+            id="display-name"
+            type="text"
+            maxLength={80}
+            autoComplete="nickname"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+        </div>
+        <div className="field" style={{ marginBottom: editingEmail ? undefined : "1rem" }}>
+          <label htmlFor="account-email">Email</label>
+          {editingEmail ? (
+            <input
+              id="account-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          ) : (
+            <p id="account-email" className="muted" style={{ margin: "0.35rem 0 0" }}>
+              {user.email}
+            </p>
+          )}
+        </div>
+        {editingEmail ? (
+          <>
+            <div className="field">
+              <label htmlFor="email-password">Current password</label>
+              <input
+                id="email-password"
+                type="password"
+                autoComplete="current-password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+              />
+            </div>
+            {user.totpEnabled && (
+              <div className="field">
+                <label htmlFor="email-code">Authenticator code</label>
+                <input
+                  id="email-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={emailCode}
+                  onChange={(e) => setEmailCode(e.target.value)}
+                />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="btn accent"
+                disabled={
+                  savingEmail ||
+                  !emailPassword ||
+                  email.trim().toLowerCase() === user.email.toLowerCase() ||
+                  (user.totpEnabled && !emailCode.trim())
+                }
+                onClick={() => void saveEmail()}
+              >
+                {savingEmail ? "Updating…" : "Save email"}
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={savingEmail}
+                onClick={cancelEmailEdit}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn secondary"
+            style={{ marginBottom: "1rem" }}
+            onClick={() => setEditingEmail(true)}
+          >
+            Change email
+          </button>
+        )}
         <div className="field">
           <label htmlFor="tz">Timezone</label>
           <input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
