@@ -2451,6 +2451,26 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
   margin-bottom: 1rem;
 }
 
+.settings-location {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.settings-location-why {
+  margin: 0 0 0.4rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.settings-location-city {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
 /* Primary action spans the card, App-Store-sheet style. */
 .auth-card .btn.accent {
   width: 100%;

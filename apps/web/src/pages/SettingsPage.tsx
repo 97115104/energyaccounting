@@ -5,6 +5,7 @@ import { ModalCloseButton } from "../components/ModalCloseButton";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
+import { reverseGeocodeCity } from "../lib/reverseGeocode";
 import { deviceTimezone } from "../lib/timezone";
 import { defaultTemperatureUnit } from "../lib/weatherUi";
 
@@ -17,8 +18,12 @@ type Props = {
 
 export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
-  const [lat, setLat] = useState(String(user.lat ?? ""));
-  const [lon, setLon] = useState(String(user.lon ?? ""));
+  const [lat, setLat] = useState<number | null>(user.lat ?? null);
+  const [lon, setLon] = useState<number | null>(user.lon ?? null);
+  const [cityLabel, setCityLabel] = useState<string | null>(null);
+  const [cityStatus, setCityStatus] = useState<"idle" | "locating" | "resolving" | "denied">(
+    "idle",
+  );
   const [country, setCountry] = useState(user.country ?? "US");
   // Defaults to the region-appropriate unit until the user picks one explicitly.
   const [tempUnit, setTempUnit] = useState<"C" | "F">(
@@ -57,6 +62,75 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   useEffect(() => {
     setEmail(user.email);
   }, [user.email]);
+
+  useEffect(() => {
+    setLat(user.lat ?? null);
+    setLon(user.lon ?? null);
+  }, [user.lat, user.lon]);
+
+  useEffect(() => {
+    if (lat == null || lon == null) {
+      setCityLabel(null);
+      return;
+    }
+    const ac = new AbortController();
+    setCityStatus("resolving");
+    void reverseGeocodeCity(lat, lon, ac.signal)
+      .then((label) => {
+        if (ac.signal.aborted) return;
+        setCityLabel(label);
+        setCityStatus("idle");
+      })
+      .catch(() => {
+        if (ac.signal.aborted) return;
+        setCityLabel(null);
+        setCityStatus("idle");
+      });
+    return () => ac.abort();
+  }, [lat, lon]);
+
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setError("This browser cannot share location.");
+      return;
+    }
+    setError(null);
+    setMsg(null);
+    setCityStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const nextLat = pos.coords.latitude;
+        const nextLon = pos.coords.longitude;
+        setLat(nextLat);
+        setLon(nextLon);
+        setCityStatus("resolving");
+        void api("/api/auth/profile", {
+          method: "PATCH",
+          body: JSON.stringify({
+            lat: nextLat,
+            lon: nextLon,
+            locationPrompted: true,
+          }),
+        })
+          .then(() => {
+            onUser({
+              ...user,
+              lat: nextLat,
+              lon: nextLon,
+              locationPrompted: true,
+            });
+            setMsg("Location updated.");
+          })
+          .catch((e) => {
+            setError(e instanceof Error ? e.message : "Could not save location.");
+          });
+      },
+      () => {
+        setCityStatus("denied");
+      },
+      { maximumAge: 0, timeout: 12_000 },
+    );
+  }
 
   useEffect(() => {
     deletingRef.current = deleting;
@@ -142,25 +216,27 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
         method: "PATCH",
         body: JSON.stringify({
           displayName: displayName.trim() || null,
-          lat: lat === "" ? null : Number(lat),
-          lon: lon === "" ? null : Number(lon),
+          lat,
+          lon,
           country,
           temperatureUnit: tempUnit,
           greetingStyle,
           includePhysicalActivities,
           timezone,
+          locationPrompted: true,
         }),
       });
       onUser({
         ...user,
         displayName: displayName.trim() || null,
-        lat: lat === "" ? null : Number(lat),
-        lon: lon === "" ? null : Number(lon),
+        lat,
+        lon,
         country,
         temperatureUnit: tempUnit,
         greetingStyle,
         includePhysicalActivities,
         timezone,
+        locationPrompted: true,
       });
       setMsg("Profile saved.");
     } catch (e) {
@@ -336,13 +412,38 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
           <label htmlFor="tz">Timezone</label>
           <input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
         </div>
-        <div className="field">
-          <label htmlFor="lat">Latitude (weather)</label>
-          <input id="lat" inputMode="decimal" value={lat} onChange={(e) => setLat(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="lon">Longitude (weather)</label>
-          <input id="lon" inputMode="decimal" value={lon} onChange={(e) => setLon(e.target.value)} />
+        <div className="field settings-location">
+          <p className="field-legend">Location</p>
+          <p className="muted settings-location-why">
+            Location powers your live sky and weather-aware suggestions.
+          </p>
+          {lat != null && lon != null ? (
+            <p className="settings-location-city" aria-live="polite">
+              {cityStatus === "resolving" && !cityLabel
+                ? "Finding your city…"
+                : cityLabel ?? "Location on"}
+            </p>
+          ) : (
+            <p className="muted settings-location-city">No location yet</p>
+          )}
+          {cityStatus === "denied" && (
+            <p className="muted" style={{ marginTop: "0.35rem" }}>
+              Permission stayed off. You can try again from this button.
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn secondary"
+            style={{ marginTop: "0.55rem" }}
+            disabled={cityStatus === "locating"}
+            onClick={requestLocation}
+          >
+            {cityStatus === "locating"
+              ? "Asking…"
+              : lat != null && lon != null
+                ? "Update location"
+                : "Use my location"}
+          </button>
         </div>
         <div className="field">
           <label htmlFor="country">Country (holidays)</label>
