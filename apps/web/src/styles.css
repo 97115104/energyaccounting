@@ -28,9 +28,9 @@ html[data-theme="day"] {
   --radius: 12px;
 }
 
-/* Continuous sky colors are written to --bg0/--bg1/--sky-glow/--sun-* from
-   App via skyPalette(); dawn/dusk are no longer discrete themes. Night still
-   owns the full UI chrome remap below. */
+/* Continuous sky + chrome colors are written from App via skyPalette();
+   dawn/dusk are no longer discrete themes. Night still owns the full UI
+   chrome remap below (same endpoint as the last dusk lerp). */
 html[data-theme="night"] {
   --bg0: #12182e;
   --bg1: #1a1240;
@@ -100,7 +100,7 @@ body {
     radial-gradient(ellipse 60% 40% at 100% 0%, var(--sky-glow) 0%, transparent 50%),
     linear-gradient(165deg, var(--bg0), var(--bg1));
   background-attachment: fixed;
-  transition: background 1.2s ease, color 0.8s ease;
+  transition: background 1.2s ease, color 1.2s ease;
 }
 
 h1,
@@ -769,12 +769,13 @@ html[data-weather="thunder"] .sky-layer {
 }
 
 .panel {
-  /* Mix a little sky into the cream so panels track the day arc instead of
-     reading as hard white cards on a shifting background. */
+  /* Mix a little sky into the panel so containers track the day arc instead of
+     reading as hard cards on a shifting background. No hairline outline. */
   background: color-mix(in srgb, var(--panel) 78%, var(--bg0) 22%);
-  border: 1px solid var(--line);
+  border: none;
   box-shadow: var(--shadow);
   padding: 1.25rem;
+  transition: background 1.2s ease, color 1.2s ease, box-shadow 1.2s ease;
 }
 
 .panel + .panel {
@@ -1786,7 +1787,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 
 .dashboard-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
@@ -2636,17 +2637,37 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   margin-top: 0;
 }
 
-.guide-card-meta .linkish {
+.guide-card-meta .linkish,
+.guide-card-meta .guide-why-btn {
   min-height: 36px;
   padding: 0.35rem 0;
 }
 
-/* The "Why this?" disclosure: personal signals first, research second. */
+/* "Why this?" floats like HelpTip — do not grow the guide panel. */
+.guide-card-meta .help-tip {
+  margin-left: 0;
+}
+
+.guide-card-meta .help-tip-panel {
+  left: 0;
+  right: auto;
+  transform: none;
+  bottom: calc(100% + 0.35rem);
+  width: min(280px, 78vw);
+  text-align: left;
+}
+
+.guide-card,
+.day-flow-guide {
+  overflow: visible;
+}
+
+/* The "Why this?" tip body: personal signals first, research second. */
 .guide-why {
-  margin-top: 0.35rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--line);
-  font-size: 0.85rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
 }
 
 .guide-why ul {

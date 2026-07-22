@@ -155,8 +155,8 @@ export function App() {
     })();
   }, []);
 
-  // Sky colors track the real sun continuously; night chrome still flips
-  // via data-theme when skyPeriod says night (20:00 floor / post-dusk).
+  // Sky + panel chrome track the real sun continuously; night theme still
+  // flips via data-theme when skyPeriod says night (20:00 floor / post-dusk).
   useEffect(() => {
     const tz = liveTimezone(user?.timezone);
     const root = document.documentElement;
@@ -175,6 +175,11 @@ export function App() {
         root.style.setProperty("--sky-glow", palette.skyGlow);
         root.style.setProperty("--sun-face", palette.sunFace);
         root.style.setProperty("--sun-halo", palette.sunHalo);
+        root.style.setProperty("--panel", palette.panel);
+        root.style.setProperty("--ink", palette.ink);
+        root.style.setProperty("--muted", palette.muted);
+        root.style.setProperty("--line", palette.line);
+        root.style.setProperty("--accent", palette.accent);
       }
       const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
       if (favicon) {

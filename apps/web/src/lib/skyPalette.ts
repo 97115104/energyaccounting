@@ -1,6 +1,6 @@
 /**
- * Continuous sky colors along the real sun arc (or a 6:00–20:00 fallback).
- * Discrete night chrome still comes from data-theme; this only owns sky tokens.
+ * Continuous sky + UI chrome along the real sun arc (or a 6:00–20:00 fallback).
+ * On night, App clears inline vars so data-theme="night" owns the final palette.
  */
 
 import { minutesSinceMidnightInTimezone } from "./timezone";
@@ -18,24 +18,34 @@ export type SkyColors = {
   skyGlow: string;
   sunFace: string;
   sunHalo: string;
+  panel: string;
+  ink: string;
+  muted: string;
+  line: string;
+  accent: string;
 };
 
 export type SkyPalette = SkyColors & { period: SkyPeriod };
 
 const DAY_MS = 86_400_000;
 
-/** Matches styles.css night sky tokens. */
+/** Matches styles.css night tokens (sky + chrome). */
 const NIGHT: SkyColors = {
   bg0: "#12182e",
   bg1: "#1a1240",
   skyGlow: "rgba(120, 80, 200, 0.35)",
   sunFace: "#f0e8ff",
   sunHalo: "rgba(200, 180, 255, 0.5)",
+  panel: "#1c2240",
+  ink: "#e8e4f8",
+  muted: "#a8a0c8",
+  line: "rgba(200, 184, 255, 0.28)",
+  accent: "#c48cff",
 };
 
 /**
  * Daylight stops stay close to the noon yellow so the sky shifts read as
- * atmosphere, not a theme change — panels (#fffdf3) shouldn't suddenly pop.
+ * atmosphere; chrome travels with the sky so panels ease into night.
  */
 const PREDAWN: SkyColors = {
   bg0: "#ffe8c8",
@@ -43,6 +53,11 @@ const PREDAWN: SkyColors = {
   skyGlow: "rgba(255, 190, 120, 0.28)",
   sunFace: "#ffc060",
   sunHalo: "rgba(255, 170, 90, 0.32)",
+  panel: "#f8e8d8",
+  ink: "#3a2e18",
+  muted: "#6a5a38",
+  line: "rgba(42, 34, 8, 0.2)",
+  accent: "#d07828",
 };
 
 const DAWN: SkyColors = {
@@ -51,6 +66,11 @@ const DAWN: SkyColors = {
   skyGlow: "rgba(255, 200, 120, 0.32)",
   sunFace: "#ffc850",
   sunHalo: "rgba(255, 180, 90, 0.35)",
+  panel: "#fff6ea",
+  ink: "#2e260c",
+  muted: "#5c4e24",
+  line: "rgba(42, 34, 8, 0.2)",
+  accent: "#e07a1a",
 };
 
 const DAY: SkyColors = {
@@ -59,6 +79,11 @@ const DAY: SkyColors = {
   skyGlow: "rgba(255, 220, 80, 0.35)",
   sunFace: "#ffcf3d",
   sunHalo: "rgba(255, 200, 60, 0.35)",
+  panel: "#fffdf3",
+  ink: "#2a2208",
+  muted: "#5c4e20",
+  line: "rgba(42, 34, 8, 0.22)",
+  accent: "#e07a1a",
 };
 
 /** Late afternoon: a whisper warmer/deeper than noon. */
@@ -68,6 +93,11 @@ const LATE: SkyColors = {
   skyGlow: "rgba(255, 200, 70, 0.36)",
   sunFace: "#ffc838",
   sunHalo: "rgba(255, 185, 55, 0.36)",
+  panel: "#fff8e8",
+  ink: "#2a2208",
+  muted: "#5c4e20",
+  line: "rgba(42, 34, 8, 0.22)",
+  accent: "#e07a1a",
 };
 
 /** Pre-sunset: soft gold, still in the day family. */
@@ -77,31 +107,60 @@ const GOLDEN: SkyColors = {
   skyGlow: "rgba(255, 185, 90, 0.34)",
   sunFace: "#ffbe45",
   sunHalo: "rgba(255, 170, 70, 0.36)",
+  panel: "#fff0dc",
+  ink: "#322818",
+  muted: "#645438",
+  line: "rgba(50, 40, 20, 0.22)",
+  accent: "#d87830",
 };
 
-/** Sunset: muted peach — no hard rose/magenta jump. */
+/** Sunset: muted peach — panels + ink soften together. */
 const DUSK: SkyColors = {
   bg0: "#ffe0bc",
   bg1: "#e8b090",
   skyGlow: "rgba(255, 170, 120, 0.32)",
   sunFace: "#ffb050",
   sunHalo: "rgba(255, 150, 90, 0.34)",
+  panel: "#f0dcc8",
+  ink: "#4a3a40",
+  muted: "#7a6870",
+  line: "rgba(80, 60, 70, 0.24)",
+  accent: "#c07050",
 };
 
-/** End of dusk: faint mauve tint before the night snap. */
+/**
+ * End of dusk: mauve panel + ink easing toward night lavender so the
+ * data-theme="night" handoff matches (no cream→navy snap).
+ */
 const DUSK_DEEP: SkyColors = {
   bg0: "#f0d4c8",
   bg1: "#d0a8b0",
   skyGlow: "rgba(200, 140, 160, 0.28)",
   sunFace: "#f0a868",
   sunHalo: "rgba(230, 140, 120, 0.3)",
+  panel: "#6a5878",
+  ink: "#e0d8f0",
+  muted: "#b0a8c8",
+  line: "rgba(180, 160, 220, 0.26)",
+  accent: "#c080a0",
 };
 
-const SKY_VAR_KEYS = ["--bg0", "--bg1", "--sky-glow", "--sun-face", "--sun-halo"] as const;
+const SKY_VAR_KEYS = [
+  "--bg0",
+  "--bg1",
+  "--sky-glow",
+  "--sun-face",
+  "--sun-halo",
+  "--panel",
+  "--ink",
+  "--muted",
+  "--line",
+  "--accent",
+] as const;
 
 export type SkyCssVar = (typeof SKY_VAR_KEYS)[number];
 
-/** Inline sky vars App writes; cleared on night so CSS night theme owns them. */
+/** Inline sky/chrome vars App writes; cleared on night so CSS night theme owns them. */
 export const SKY_CSS_VARS: readonly SkyCssVar[] = SKY_VAR_KEYS;
 
 type Rgba = { r: number; g: number; b: number; a: number };
@@ -164,6 +223,11 @@ function lerpSky(a: SkyColors, b: SkyColors, t: number): SkyColors {
     skyGlow: lerpColor(a.skyGlow, b.skyGlow, u),
     sunFace: lerpColor(a.sunFace, b.sunFace, u),
     sunHalo: lerpColor(a.sunHalo, b.sunHalo, u),
+    panel: lerpColor(a.panel, b.panel, u),
+    ink: lerpColor(a.ink, b.ink, u),
+    muted: lerpColor(a.muted, b.muted, u),
+    line: lerpColor(a.line, b.line, u),
+    accent: lerpColor(a.accent, b.accent, u),
   };
 }
 
@@ -187,7 +251,7 @@ function sampleAnchors(anchors: Anchor[], t: number): SkyColors {
 
 /**
  * Daylight arc from rise→set. Shoulders scale down on short days so anchors
- * stay time-ordered; colors stay day-chrome-safe (no full night navy).
+ * stay time-ordered; chrome eases with the sky into night.
  */
 function daylightAnchors(rise: number, set: number): Anchor[] {
   const span = Math.max(set - rise, 1);
@@ -252,8 +316,8 @@ function fallbackAnchors(): Anchor[] {
 }
 
 /**
- * Interpolated sky tokens for the current instant.
- * `period` mirrors skyPeriod (favicons, UV daylight checks, night chrome).
+ * Interpolated sky + chrome tokens for the current instant.
+ * `period` mirrors skyPeriod (favicons, UV daylight checks, night theme).
  */
 export function skyPalette(
   lat: number | null | undefined,
@@ -282,7 +346,7 @@ export function skyPalette(
   return { period, ...sampleAnchors(fallbackAnchors(), localMs) };
 }
 
-/** Brightness proxy for tests: higher = lighter sky. */
+/** Brightness proxy for tests: higher = lighter surface. */
 export function skyLuminance(hexOrRgba: string): number {
   const { r, g, b } = parseColor(hexOrRgba);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;

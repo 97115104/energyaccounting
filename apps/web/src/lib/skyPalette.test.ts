@@ -92,6 +92,49 @@ describe("skyPalette", () => {
     expect(noCoords.period).toBe("night");
     expect(withCoords.bg0).toBe("#12182e");
     expect(noCoords.bg0).toBe("#12182e");
+    expect(withCoords.panel).toBe("#1c2240");
+    expect(withCoords.ink).toBe("#e8e4f8");
+  });
+
+  test("noon panels stay cream; dusk panels darken toward night", () => {
+    const lat = 37.77;
+    const lon = -122.42;
+    const day = new Date("2026-01-15T12:00:00Z");
+    const times = sunTimesForUtcDay(lat, lon, day);
+    expect(times.kind).toBe("times");
+    if (times.kind !== "times") return;
+
+    const noonMs =
+      times.sunrise.getTime() + (times.sunset.getTime() - times.sunrise.getTime()) / 2;
+    const atNoon = skyPalette(lat, lon, "America/Los_Angeles", new Date(noonMs));
+    const atSet = skyPalette(lat, lon, "America/Los_Angeles", times.sunset);
+    const deep = skyPalette(
+      lat,
+      lon,
+      "America/Los_Angeles",
+      new Date(times.sunset.getTime() + 35 * 60_000),
+    );
+
+    expect(atNoon.panel.toLowerCase()).toBe("#fffdf3");
+    expect(skyLuminance(atNoon.panel)).toBeGreaterThan(skyLuminance(atSet.panel));
+    expect(skyLuminance(atSet.panel)).toBeGreaterThan(skyLuminance(deep.panel));
+    // Dusk-deep is closer to night navy than to noon cream.
+    expect(skyLuminance(deep.panel)).toBeLessThan(120);
+    expect(skyLuminance(deep.ink)).toBeGreaterThan(skyLuminance(atNoon.ink));
+  });
+
+  test("dawn predawn panel is not night navy; ink stays readable", () => {
+    const lat = -33.87;
+    const lon = 151.21;
+    const day = new Date("2026-07-20T12:00:00Z");
+    const times = sunTimesForUtcDay(lat, lon, day);
+    expect(times.kind).toBe("times");
+    if (times.kind !== "times") return;
+    const predawn = new Date(times.sunrise.getTime() - 40 * 60_000);
+    const pal = skyPalette(lat, lon, "Australia/Sydney", predawn);
+    expect(pal.period).toBe("dawn");
+    expect(pal.panel).not.toBe("#1c2240");
+    expect(skyLuminance(pal.panel)).toBeGreaterThan(skyLuminance(pal.ink) + 80);
   });
 
   test("polar day stays on the bright day palette", () => {
@@ -99,6 +142,7 @@ describe("skyPalette", () => {
     const pal = skyPalette(69.65, 18.96, "Europe/Oslo", midsummer);
     expect(pal.period).toBe("day");
     expect(pal.bg0).toBe("#fff6c8");
+    expect(pal.panel).toBe("#fffdf3");
   });
 });
 

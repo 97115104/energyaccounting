@@ -2580,7 +2580,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
 /**
  * One guide recommendation: action-first summary with a "Why this?"
- * disclosure that separates personal signals from research grounding.
+ * tip that separates personal signals from research grounding.
  */
 function GuideCard(props: {
   item: GuideItem;
@@ -2591,9 +2591,7 @@ function GuideCard(props: {
   onAction: (item: GuideItem, useAlt?: boolean) => void;
   onDismiss: (id: string) => void;
 }) {
-  const [whyOpen, setWhyOpen] = useState(false);
   const { item } = props;
-  const whyId = `guide-why-${item.id.replace(/[^a-z0-9-]/gi, "-")}${props.inSheet ? "-sheet" : ""}`;
   const dismissAria = props.dismissLabel ?? "Dismiss";
 
   const sourceLink =
@@ -2681,29 +2679,24 @@ function GuideCard(props: {
         </div>
       )}
       <div className="guide-card-meta">
-        <button
-          type="button"
-          className="linkish"
-          aria-expanded={whyOpen}
-          aria-controls={whyId}
-          onClick={() => setWhyOpen((o) => !o)}
+        <HelpTip
+          label="this suggestion"
+          buttonContent="Why this?"
+          buttonClassName="linkish guide-why-btn"
         >
-          Why this?
-        </button>
+          <div className="guide-why">
+            <ul>
+              {item.because.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+            {item.research && (
+              <p className="guide-research">Research basis: {item.research}</p>
+            )}
+          </div>
+        </HelpTip>
         {sourceLink}
       </div>
-      {whyOpen && (
-        <div id={whyId} className="guide-why">
-          <ul>
-            {item.because.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
-          {item.research && (
-            <p className="guide-research">Research basis: {item.research}</p>
-          )}
-        </div>
-      )}
       {/* Visually top-right; last in DOM so title/body get first focus/read order. */}
       <button
         type="button"
