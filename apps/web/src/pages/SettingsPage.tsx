@@ -66,7 +66,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             ),
           ).filter((element) => !element.hasAttribute("disabled"))
         : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !deletingRef.current) {
         setDeleteOpen(false);
@@ -79,17 +79,17 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     document.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [deleteOpen]);
 

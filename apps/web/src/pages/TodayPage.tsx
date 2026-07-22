@@ -47,6 +47,7 @@ import {
 } from "../lib/personalIntelligence";
 import { loadPersonalData } from "../lib/personalData";
 import { recentDisabledReason } from "../lib/planShortcuts";
+import { withPreservedScroll } from "../lib/preserveScroll";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
 import { parseDayWeather } from "../lib/weatherInsight";
@@ -152,24 +153,6 @@ async function fetchRecentStats(): Promise<StatPoint[]> {
   const fromIso = from.toISOString().slice(0, 10);
   const res = await api<{ series: StatPoint[] }>(`/api/stats?from=${fromIso}&to=${to}`);
   return res.series;
-}
-
-/** Hold the viewport still across in-place day refreshes (complete, reorder, soft load). */
-async function withPreservedScroll(run: () => Promise<void>): Promise<void> {
-  const x = window.scrollX;
-  const y = window.scrollY;
-  const restore = () => {
-    if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
-  };
-  try {
-    await run();
-  } finally {
-    restore();
-    requestAnimationFrame(() => {
-      restore();
-      requestAnimationFrame(restore);
-    });
-  }
 }
 
 /** One trend line for the card/modal, Apple-Trends style: a recent average
@@ -393,6 +376,16 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const load = useCallback(async (forcedDayId?: string, opts?: { soft?: boolean }) => {
     const generation = ++loadGenerationRef.current;
+    // Soft loads must not move the viewport when metrics/guide reflow after paint.
+    const savedScroll = opts?.soft
+      ? { x: window.scrollX, y: window.scrollY }
+      : null;
+    const restoreScroll = () => {
+      if (!savedScroll) return;
+      if (window.scrollX !== savedScroll.x || window.scrollY !== savedScroll.y) {
+        window.scrollTo(savedScroll.x, savedScroll.y);
+      }
+    };
     // A soft load refreshes data in place without blanking the page or the
     // error banner, e.g. after a repeat conflict.
     if (!opts?.soft) {
@@ -402,6 +395,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setError(null);
       setLoading(true);
     }
+    try {
     const dek = getSessionDek();
     if (!dek) {
       setLoading(false);
@@ -500,6 +494,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setSuggestions(decrypted);
     setRecent(decryptedRecent);
     setLoading(false);
+    } finally {
+      if (savedScroll) {
+        restoreScroll();
+        requestAnimationFrame(() => {
+          restoreScroll();
+          requestAnimationFrame(restoreScroll);
+        });
+      }
+    }
   }, [historyDayId, setSearchParams]);
 
   useEffect(() => {

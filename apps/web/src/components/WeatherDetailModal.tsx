@@ -61,7 +61,7 @@ export function WeatherDetailModal({
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const modal = modalRef.current;
-    const focusFirst = () => modal?.querySelector<HTMLElement>("button, a[href]")?.focus();
+    const focusFirst = () => modal?.querySelector<HTMLElement>("button, a[href]")?.focus({ preventScroll: true });
     focusFirst();
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -79,20 +79,20 @@ export function WeatherDetailModal({
       );
       if (focusable.length === 0) {
         event.preventDefault();
-        modal.focus();
+        modal.focus({ preventScroll: true });
         return;
       }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!modal.contains(document.activeElement)) {
         event.preventDefault();
-        (event.shiftKey ? last : first).focus();
+        (event.shiftKey ? last : first).focus({ preventScroll: true });
       } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     };
     // Catch programmatic focus and re-entry from browser chrome, not only Tab
@@ -106,7 +106,7 @@ export function WeatherDetailModal({
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
-      previousFocus?.focus();
+      previousFocus?.focus({ preventScroll: true });
     };
   }, []);
 

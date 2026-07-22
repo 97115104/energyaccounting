@@ -32,7 +32,7 @@ export function ButterflyStateModal({ state, onClose }: Props) {
 
     const focusId = window.requestAnimationFrame(() => {
       const list = focusables();
-      (list[list.length - 1] ?? modal)?.focus();
+      (list[list.length - 1] ?? modal)?.focus({ preventScroll: true });
     });
 
     function onKey(e: KeyboardEvent) {
@@ -48,10 +48,10 @@ export function ButterflyStateModal({ state, onClose }: Props) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
 
@@ -59,7 +59,7 @@ export function ButterflyStateModal({ state, onClose }: Props) {
     return () => {
       window.cancelAnimationFrame(focusId);
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [onClose]);
 

@@ -90,7 +90,7 @@ export function AuthPage({
       document
         .getElementById("privacy-modal")
         ?.querySelector<HTMLElement>("button")
-        ?.focus(),
+        ?.focus({ preventScroll: true }),
     );
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setPrivacyOpen(false);
@@ -99,7 +99,7 @@ export function AuthPage({
     return () => {
       window.cancelAnimationFrame(focusId);
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [privacyOpen]);
 
