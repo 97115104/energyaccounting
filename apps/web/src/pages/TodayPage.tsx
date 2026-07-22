@@ -58,6 +58,7 @@ import {
   skyPeriod,
   weatherKindFromCode,
   weatherLabel,
+  weatherQuip,
 } from "../lib/weatherUi";
 
 type Line = {
@@ -311,6 +312,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const deletingDayRef = useRef(false);
   // In-app confirmation for deleting a previous day (styled like other dialogs).
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Confirm before the irreversible close-day transition from the stepper.
+  const [confirmingClose, setConfirmingClose] = useState(false);
   // End-of-day insights modal, populated when the day closes.
   const [closeCelebration, setCloseCelebration] = useState<{
     closingBalance: number;
@@ -589,6 +592,46 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [confirmingDelete]);
 
+  // Keep keyboard focus inside the close-day confirmation.
+  useEffect(() => {
+    if (!confirmingClose) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("close-day-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((element) => !element.hasAttribute("disabled"))
+        : [];
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !phaseBusyRef.current) {
+        setConfirmingClose(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [confirmingClose]);
+
   // Escape closes the celebration modal; Tab stays inside it.
   useEffect(() => {
     if (!closeCelebration) return;
@@ -831,6 +874,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // so tomorrow's day row is not created before today locks).
   const dayDate = day?.date ?? isoDate();
   const spansMidnight = !!day && !isHistoryView && day.date < isoDate() && day.phase !== "closed";
+  const weatherQuipLine = useMemo(
+    () =>
+      parsedWeather
+        ? weatherQuip({
+            kind: weatherKind,
+            uvMax,
+            tempMax: parsedWeather.tempMax,
+            date: dayDate,
+          })
+        : "Set a location to unlock today's weather commentary.",
+    [parsedWeather, weatherKind, uvMax, dayDate],
+  );
 
   const hint = useMemo(
     () => (dayPhase === "plan" && day ? planningHint(statSeries, day.date) : null),
@@ -1263,7 +1318,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
         method: "PATCH",
         body: JSON.stringify({ phase }),
       });
-      await load();
+      // Soft refresh keeps the page mounted so scroll position and the
+      // stepper stay put while the new phase paints with its transition.
+      setDay((prev) => (prev ? { ...prev, phase } : prev));
+      await load(undefined, { soft: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update the day phase.");
     } finally {
@@ -1594,7 +1652,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
     <div className="today-root">
       <div
         aria-hidden={
-          closeCelebration || confirmingDelete || detailLineId || guideOpen || (draftSide && !readOnly)
+          closeCelebration ||
+          confirmingDelete ||
+          confirmingClose ||
+          detailLineId ||
+          guideOpen ||
+          (draftSide && !readOnly)
             ? true
             : undefined
         }
@@ -1647,35 +1710,38 @@ export function TodayPage({ user }: { user: UserProfile }) {
           Signed in as {user.email}
           {day.isHoliday ? " · Holiday" : ""}
         </p>
-        <button
-          type="button"
-          className="weather-chip"
-          data-kind={weatherKind}
-          aria-haspopup={parsedWeather ? "dialog" : undefined}
-          disabled={!parsedWeather}
-          onClick={() => setWeatherOpen(true)}
-        >
-          <span className="weather-glyph" aria-hidden="true" />
-          <div>
-            <strong>{weatherLabel(weatherKind)}</strong>
-            {parsedWeather ? (
-              <span>
-                {" "}
-                {parsedWeather.tempMin != null && parsedWeather.tempMax != null
-                  ? formatTempRange(parsedWeather.tempMin, parsedWeather.tempMax, tempUnit)
-                  : parsedWeather.tempMax != null
-                    ? formatTemp(parsedWeather.tempMax, tempUnit)
-                    : parsedWeather.tempMin != null
-                      ? formatTemp(parsedWeather.tempMin, tempUnit)
-                      : "Details available"}
-                {parsedWeather.precip != null ? ` · ${parsedWeather.precip} mm` : ""}
-              </span>
-            ) : (
-              <span> Set location in settings for live weather.</span>
-            )}
-            {uvMax != null && <span>{` · UV ${Math.round(uvMax)}`}</span>}
-          </div>
-        </button>
+        <div className="weather-row">
+          <p className="weather-quip">{weatherQuipLine}</p>
+          <button
+            type="button"
+            className="weather-chip"
+            data-kind={weatherKind}
+            aria-haspopup={parsedWeather ? "dialog" : undefined}
+            disabled={!parsedWeather}
+            onClick={() => setWeatherOpen(true)}
+          >
+            <span className="weather-glyph" aria-hidden="true" />
+            <div>
+              <strong>{weatherLabel(weatherKind)}</strong>
+              {parsedWeather ? (
+                <span>
+                  {" "}
+                  {parsedWeather.tempMin != null && parsedWeather.tempMax != null
+                    ? formatTempRange(parsedWeather.tempMin, parsedWeather.tempMax, tempUnit)
+                    : parsedWeather.tempMax != null
+                      ? formatTemp(parsedWeather.tempMax, tempUnit)
+                      : parsedWeather.tempMin != null
+                        ? formatTemp(parsedWeather.tempMin, tempUnit)
+                        : "Details available"}
+                  {parsedWeather.precip != null ? ` · ${parsedWeather.precip} mm` : ""}
+                </span>
+              ) : (
+                <span> Set location in settings.</span>
+              )}
+              {uvMax != null && <span>{` · UV ${Math.round(uvMax)}`}</span>}
+            </div>
+          </button>
+        </div>
         <div className="stats" style={{ marginTop: "1rem" }}>
           <div className="stat">
             <div className="label">
@@ -1762,67 +1828,108 @@ export function TodayPage({ user }: { user: UserProfile }) {
         {error && <p className="error">{error}</p>}
       </div>
 
-      <div className="panel day-rhythm-panel">
-        <div className="day-rhythm" role="group" aria-label="Daily rhythm">
-          <div className="day-rhythm-status">
-            <span className="day-rhythm-label">
-              {closed
-                ? "Day closed"
-                : day.phase === "audit"
-                  ? "Evening audit"
-                  : "Morning plan"}
-            </span>
+      <div className={`day-flow${guide.primary && !closed ? " has-guide" : ""}`}>
+        <div className="day-flow-rhythm">
+          <div className="panel day-rhythm-panel">
             <HelpTip label="the daily rhythm">
               Your day moves through three phases: planning, auditing real costs and how it felt,
               then closing. Previous days open read-only on the Dashboard; choose Edit
               this day to amend one, or confirm before deleting it. Your next day starts fresh at 100
               when you choose to start it.
             </HelpTip>
-          </div>
-          {!closed && (
-            <div className="day-rhythm-actions">
-              {day.phase === "audit" && (
+            <div className="day-rhythm-copy">
+              <div className="day-rhythm-status">
+                <span className="day-rhythm-label">
+                  {closed
+                    ? "Day closed"
+                    : day.phase === "audit"
+                      ? "Evening audit"
+                      : "Morning plan"}
+                </span>
+              </div>
+              {!closed && (
+                <p className="phase-step-hint muted" key={day.phase}>
+                  {day.phase === "plan"
+                    ? "When you’re ready, tap Audit to record how things actually felt."
+                    : "When you’re ready, tap Close to finish the day and lock in today’s energy."}
+                </p>
+              )}
+            </div>
+            <ol className="phase-stepper" aria-label="Day phases">
+              {(
+                [
+                  { id: "plan" as const, label: "Plan" },
+                  { id: "audit" as const, label: "Audit" },
+                  { id: "closed" as const, label: "Close" },
+                ]
+              ).map((step, index, steps) => {
+                const currentIndex = closed ? 2 : day.phase === "audit" ? 1 : 0;
+                const state =
+                  index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
+                const clickable = !closed && !phaseBusy && state !== "current";
+                return (
+                  <li
+                    key={step.id}
+                    className={`phase-step phase-step-${state}${clickable ? " phase-step-clickable" : ""}`}
+                    aria-current={state === "current" ? "step" : undefined}
+                  >
+                    <button
+                      type="button"
+                      className="phase-step-btn"
+                      disabled={!clickable}
+                      aria-label={
+                        step.id === "plan"
+                          ? "Morning plan"
+                          : step.id === "audit"
+                            ? "Evening audit"
+                            : "Close day"
+                      }
+                      onClick={() => {
+                        if (step.id === "closed") {
+                          setConfirmingClose(true);
+                          return;
+                        }
+                        void setPhase(step.id);
+                      }}
+                    >
+                      <span className="phase-step-dot" aria-hidden="true">
+                        {state === "done" ? "✓" : index + 1}
+                      </span>
+                      <span className="phase-step-name">{step.label}</span>
+                    </button>
+                    {index < steps.length - 1 && (
+                      <span className="phase-step-rail" aria-hidden="true" />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+            {repeatActionVisible(day, isHistoryView) && (
+              <div className="repeat-plan">
                 <button
                   type="button"
-                  className="day-rhythm-back"
-                  disabled={phaseBusy}
-                  onClick={() => void setPhase("plan")}
+                  className="btn secondary repeat-plan-btn"
+                  disabled={repeating}
+                  aria-busy={repeating || undefined}
+                  onClick={() => void repeatPreviousPlan()}
                 >
-                  Back to plan
+                  {repeating ? "Copying your plan…" : "Use previous plan"}
                 </button>
-              )}
-              <button
-                type="button"
-                className="btn accent"
-                disabled={phaseBusy}
-                aria-busy={phaseBusy || undefined}
-                onClick={() => void setPhase(day.phase === "plan" ? "audit" : "closed")}
-              >
-                {phaseBusy
-                  ? day.phase === "plan"
-                    ? "Continuing…"
-                    : "Closing…"
-                  : day.phase === "plan"
-                    ? "Continue to audit"
-                    : "Close day"}
-              </button>
-            </div>
-          )}
+                <p className="muted repeat-plan-note">
+                  Copies the plan from your last closed day. You can still edit or add more.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
-        {repeatActionVisible(day, isHistoryView) && (
-          <div className="repeat-plan">
-            <button
-              type="button"
-              className="btn secondary repeat-plan-btn"
-              disabled={repeating}
-              aria-busy={repeating || undefined}
-              onClick={() => void repeatPreviousPlan()}
-            >
-              {repeating ? "Copying your plan…" : "Use previous plan"}
-            </button>
-            <p className="muted repeat-plan-note">
-              Copies the plan from your last closed day. You can still edit or add more.
-            </p>
+        {guide.primary && !closed && (
+          <div className="panel day-flow-guide">
+            <GuideCard
+              item={guide.primary}
+              closed={readOnly}
+              onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
+              onDismiss={dismissGuideItem}
+            />
           </div>
         )}
       </div>
@@ -1880,16 +1987,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
           />
-          {guide.primary && !closed && (
-            <div className="day-board-guide">
-              <GuideCard
-                item={guide.primary}
-                closed={readOnly}
-                onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
-                onDismiss={dismissGuideItem}
-              />
-            </div>
-          )}
         </div>
         <DragOverlay>
           {activeLine ? (
@@ -2340,6 +2437,54 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
       )}
 
+      {confirmingClose && day && !closed && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !phaseBusy) setConfirmingClose(false);
+          }}
+        >
+          <div
+            id="close-day-modal"
+            className="panel insight-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="close-day-title"
+            aria-describedby="close-day-body"
+          >
+            <h2 id="close-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Close this day?
+            </h2>
+            <p id="close-day-body" className="muted">
+              Closing records today’s energy remaining and moves the day to Previous days. You can
+              still amend it later from the Dashboard, but the day will not reopen.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={phaseBusy}
+                onClick={() => setConfirmingClose(false)}
+              >
+                Keep going
+              </button>
+              <button
+                type="button"
+                className="btn accent"
+                disabled={phaseBusy}
+                aria-busy={phaseBusy || undefined}
+                onClick={() => {
+                  setConfirmingClose(false);
+                  void setPhase("closed");
+                }}
+              >
+                {phaseBusy ? "Closing…" : "Close day"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {weatherOpen && parsedWeather && (
         <WeatherDetailModal
           weather={parsedWeather}
@@ -2468,32 +2613,36 @@ function GuideCard(props: {
         <strong>{item.title}</strong>
       </div>
       <p className="guide-card-body">{item.body}</p>
-      <div className="guide-card-actions">
-        {item.action && (
-          <button
-            type="button"
-            className="btn accent"
-            disabled={props.closed}
-            onClick={() => props.onAction(item)}
-          >
-            {props.actionLabel ??
-              (item.action.requiresStart
-                ? `Start new day · Add energy: ${item.action.label} · ${item.action.cost}`
-                : `Add energy: ${item.action.label} · ${item.action.cost}`)}
-          </button>
-        )}
-        {item.altAction && (
-          /* Same styling as the primary action: the lower-impact dose is an
-             equal choice, not a fallback. */
-          <button
-            type="button"
-            className="btn accent"
-            disabled={props.closed}
-            onClick={() => props.onAction(item, true)}
-          >
-            {`Add energy: ${item.altAction.label} · ${item.altAction.cost}`}
-          </button>
-        )}
+      {(item.action || item.altAction) && (
+        <div className="guide-card-actions">
+          {item.action && (
+            <button
+              type="button"
+              className="btn accent"
+              disabled={props.closed}
+              onClick={() => props.onAction(item)}
+            >
+              {props.actionLabel ??
+                (item.action.requiresStart
+                  ? `Start new day · Add energy: ${item.action.label} · ${item.action.cost}`
+                  : `Add energy: ${item.action.label} · ${item.action.cost}`)}
+            </button>
+          )}
+          {item.altAction && (
+            /* Same styling as the primary action: the lower-impact dose is an
+               equal choice, not a fallback. */
+            <button
+              type="button"
+              className="btn accent"
+              disabled={props.closed}
+              onClick={() => props.onAction(item, true)}
+            >
+              {`Add energy: ${item.altAction.label} · ${item.altAction.cost}`}
+            </button>
+          )}
+        </div>
+      )}
+      <div className="guide-card-meta">
         <button
           type="button"
           className="linkish"

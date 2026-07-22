@@ -1,5 +1,32 @@
 import { describe, expect, test } from "bun:test";
-import { skyPeriod, sunTimesForUtcDay } from "./weatherUi.ts";
+import { skyPeriod, sunTimesForUtcDay, weatherQuip } from "./weatherUi.ts";
+
+describe("weatherQuip", () => {
+  test("hot high-UV clear days get a heat-and-UV line", () => {
+    const line = weatherQuip({
+      kind: "sun",
+      uvMax: 8,
+      tempMax: 33,
+      date: "2026-07-21",
+    });
+    expect(line.toLowerCase()).toMatch(/sunscreen|shade|uv|hot|sun|cover|water/);
+  });
+
+  test("same inputs are stable for a given date", () => {
+    const a = weatherQuip({ kind: "rain", uvMax: 2, tempMax: 18, date: "2026-07-21" });
+    const b = weatherQuip({ kind: "rain", uvMax: 2, tempMax: 18, date: "2026-07-21" });
+    expect(a).toBe(b);
+  });
+
+  test("different dates can rotate the rain pool", () => {
+    const lines = new Set(
+      ["2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25"].map((date) =>
+        weatherQuip({ kind: "rain", uvMax: 1, tempMax: 16, date }),
+      ),
+    );
+    expect(lines.size).toBeGreaterThan(1);
+  });
+});
 
 describe("skyPeriod / sunTimes", () => {
   test("Tokyo morning (06:00 JST) is day, not night", () => {

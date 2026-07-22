@@ -44,6 +44,11 @@ import {
   type IdentityConfig,
 } from "../lib/identity";
 import { buildSharePayload, downloadPng, downloadSvg } from "../lib/identityShare";
+import {
+  forgetShareToken,
+  readShareToken,
+  rememberShareToken,
+} from "../lib/shareTokenCache";
 import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import {
   DEFAULT_SHARE_SECTIONS,
@@ -94,6 +99,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   const [newLink, setNewLink] = useState<string | null>(null);
   const [newLinkIsPermanent, setNewLinkIsPermanent] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -330,9 +336,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         body: JSON.stringify({ payload: JSON.stringify(payload), ttl }),
       });
       setShares((s) => [...s, res.share]);
+      rememberShareToken(res.share.id, res.token);
       setNewLink(`${window.location.origin}/share/${res.token}`);
       setNewLinkIsPermanent(ttl === "permanent");
       setCopied(false);
+      setCopiedShareId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the share link.");
     }
@@ -341,10 +349,22 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
   async function revokeShare(id: string) {
     try {
       await api(`/api/you/shares/${id}`, { method: "DELETE" });
+      forgetShareToken(id);
       setShares((s) => s.map((row) => (row.id === id ? { ...row, revoked: true } : row)));
+      if (copiedShareId === id) setCopiedShareId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not revoke the link.");
     }
+  }
+
+  function copyShareLink(shareId: string) {
+    const token = readShareToken(shareId);
+    if (!token) return;
+    const url = `${window.location.origin}/share/${token}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopiedShareId(shareId);
+      setCopied(false);
+    });
   }
 
   function heroSvg(): SVGSVGElement | null {
@@ -786,11 +806,11 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
               {copied ? "Copied" : "Copy"}
             </button>
             <p className="muted">
-              This full link appears once. Anyone who has it can view the snapshot{" "}
+              Anyone with this link can view the snapshot{" "}
               {newLinkIsPermanent
                 ? "until you revoke it or delete your account"
                 : "until it expires or you revoke it"}
-              .
+              . You can copy it again from Your links on this device.
             </p>
           </div>
         )}
@@ -798,26 +818,44 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           <>
             <h4>Your links</h4>
             <ul className="you-share-list">
-              {shares.map((s) => (
-                <li key={s.id} className="you-share-row">
-                  <span>
-                    Created {new Date(s.createdAt).toLocaleDateString()} ·{" "}
-                    {s.expiresAt
-                      ? `expires ${new Date(s.expiresAt).toLocaleDateString()}`
-                      : "permanent until revoked"}
-                    {s.revoked ? " · revoked" : ""}
-                  </span>
-                  {!s.revoked && (
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => void revokeShare(s.id)}
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </li>
-              ))}
+              {shares.map((s) => {
+                const cachedToken = !s.revoked ? readShareToken(s.id) : null;
+                return (
+                  <li key={s.id} className="you-share-row">
+                    <span>
+                      Created {new Date(s.createdAt).toLocaleDateString()} ·{" "}
+                      {s.expiresAt
+                        ? `expires ${new Date(s.expiresAt).toLocaleDateString()}`
+                        : "permanent until revoked"}
+                      {s.revoked ? " · revoked" : ""}
+                    </span>
+                    {!s.revoked && (
+                      <span className="you-share-row-actions">
+                        {cachedToken ? (
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => copyShareLink(s.id)}
+                          >
+                            {copiedShareId === s.id ? "Copied" : "Copy link"}
+                          </button>
+                        ) : (
+                          <span className="muted you-share-row-note">
+                            Link only on the device that created it
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => void revokeShare(s.id)}
+                        >
+                          Revoke
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}

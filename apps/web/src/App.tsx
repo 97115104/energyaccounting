@@ -18,6 +18,7 @@ import { liveTimezone } from "./lib/timezone";
 import { skyPeriod } from "./lib/weatherUi";
 import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
 import { NeuroMe } from "./components/IdentityMark";
+import { ButterflyStateButton } from "./components/ButterflyStateButton";
 import { ButterflyStateModal } from "./components/ButterflyStateModal";
 import { useButterflyDay, usePrefersReducedMotion } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
@@ -334,18 +335,11 @@ export function App() {
                   >
                     {greeting?.text}
                   </h1>
-                  {(loc.pathname === "/" || loc.pathname.startsWith("/you")) && (
-                    <button
-                      type="button"
-                      className="greeting-state muted"
-                      aria-haspopup="dialog"
-                      aria-expanded={stateExplainOpen}
-                      title="What this means"
-                      onClick={() => setStateExplainOpen(true)}
-                    >
-                      {butterflyState.label}
-                    </button>
-                  )}
+                  <ButterflyStateButton
+                    state={butterflyState}
+                    expanded={stateExplainOpen}
+                    onOpen={() => setStateExplainOpen(true)}
+                  />
                   {greeting?.factSource && (
                     <a
                       className="greeting-source"

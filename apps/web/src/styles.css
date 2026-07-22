@@ -634,7 +634,7 @@ html[data-weather="thunder"] .sky-layer {
   min-width: 0;
 }
 
-/* Ledger board: matched columns, guide always under as a full-width suggestion. */
+/* Ledger board: matched Use / Add energy columns. */
 .day-board {
   display: grid;
   grid-template-columns: 1fr;
@@ -655,21 +655,9 @@ html[data-weather="thunder"] .sky-layer {
   height: 100%;
 }
 
-.day-board-guide {
-  min-width: 0;
-}
-
-.day-board-guide .guide-card {
-  margin-top: 0;
-}
-
 @media (min-width: 720px) {
   .day-board {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .day-board-guide {
-    grid-column: 1 / -1;
   }
 }
 
@@ -1195,8 +1183,10 @@ html[data-theme="night"] .task-actual-input {
 }
 
 .stat {
+  position: relative;
   border: 1px solid var(--line);
   padding: 0.75rem;
+  padding-right: 1.85rem;
   background: #fff;
   color: #14241f;
 }
@@ -1211,6 +1201,14 @@ html[data-theme="night"] .stat {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  padding-right: 0.25rem;
+}
+
+.stat .help-tip {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  margin-left: 0;
 }
 
 .stat .value {
@@ -1328,29 +1326,60 @@ html[data-theme="night"] .stat {
   font-size: 0.8rem;
 }
 
+.weather-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem 1.1rem;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  /* Match .stat so weather and metrics read as one family. */
+  background: #fff;
+  color: #14241f;
+}
+
+html[data-theme="night"] .weather-row {
+  background: #0e1428;
+  color: var(--ink);
+}
+
+.weather-quip {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* Facts chip: quiet nest, no second background competing with the row. */
 .weather-chip {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  margin-top: 0.85rem;
-  border: 1px solid var(--line);
-  padding: 0.65rem 0.85rem;
-  background: #fff;
-  color: #14241f;
+  gap: 0.55rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: calc(var(--radius) * 0.85) !important;
+  padding: 0.35rem 0.5rem;
+  background: transparent;
+  color: inherit;
   text-align: left;
   appearance: none;
   cursor: pointer;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: background 0.15s ease;
 }
 
 .weather-chip:not(:disabled):hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 10%, transparent);
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .weather-chip:disabled {
@@ -1359,8 +1388,12 @@ html[data-theme="night"] .stat {
 }
 
 html[data-theme="night"] .weather-chip {
-  background: #0e1428;
-  color: var(--ink);
+  background: transparent;
+  color: inherit;
+}
+
+html[data-theme="night"] .weather-chip:not(:disabled):hover {
+  background: color-mix(in srgb, #fff 8%, transparent);
 }
 
 .weather-glyph {
@@ -1698,18 +1731,125 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   flex: 1 1 auto;
 }
 
-/* Progressive day phases: quiet status + one next-step action. */
-.day-rhythm-panel {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+/* Rhythm + guide: equal auto-fit lanes so layout rules match every width. */
+.day-flow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: stretch;
 }
 
-.day-rhythm {
+.day-flow.has-guide {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+/* Solo rhythm: label + hint on the left, stepper on the right when wide. */
+.day-flow:not(.has-guide) .day-rhythm-panel {
+  gap: 1rem;
+  min-height: 8.5rem;
+  padding: 1.15rem 1.35rem 1.25rem;
+  padding-right: 2.5rem;
+}
+
+.day-rhythm-copy {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.day-flow:not(.has-guide) .day-rhythm-label {
+  font-size: 1.05rem;
+}
+
+.day-flow:not(.has-guide) .phase-stepper {
+  width: 100%;
+}
+
+.day-flow:not(.has-guide) .phase-step-dot {
+  width: 1.85rem;
+  height: 1.85rem;
+  font-size: 0.8rem;
+}
+
+.day-flow:not(.has-guide) .phase-step-name {
+  font-size: 0.88rem;
+}
+
+.day-flow:not(.has-guide) .phase-step-rail {
+  top: 1rem;
+}
+
+.day-flow:not(.has-guide) .phase-step-hint {
+  font-size: 0.92rem;
+}
+
+@media (min-width: 720px) {
+  .day-flow:not(.has-guide) .day-rhythm-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "copy stepper"
+      "repeat repeat";
+    column-gap: 2rem;
+    row-gap: 0.85rem;
+    align-items: center;
+  }
+
+  .day-flow:not(.has-guide) .day-rhythm-copy {
+    grid-area: copy;
+    justify-self: start;
+    max-width: 22rem;
+  }
+
+  .day-flow:not(.has-guide) .phase-stepper {
+    grid-area: stepper;
+    align-self: center;
+    justify-self: end;
+    width: min(100%, 22rem);
+  }
+
+  .day-flow:not(.has-guide) .repeat-plan {
+    grid-area: repeat;
+  }
+}
+
+.day-flow > .panel,
+.day-flow-rhythm > .panel {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.day-flow-rhythm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Status + stepper: where you are in the day. */
+.day-rhythm-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 100%;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  padding-right: 2.1rem;
+  box-sizing: border-box;
+}
+
+.day-rhythm-panel > .help-tip {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  margin-left: 0;
+  z-index: 2;
 }
 
 .day-rhythm-status {
@@ -1717,6 +1857,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
+  padding-right: 0.25rem;
 }
 
 .day-rhythm-label {
@@ -1725,16 +1866,195 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   color: var(--muted);
 }
 
-.day-rhythm-actions {
+.phase-stepper {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.65rem;
-  margin-left: auto;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* Slightly denser than the global 44px primary, still easy to tap. */
-.day-rhythm-actions .btn.accent,
+.phase-step {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.phase-step-btn {
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.15rem 0.25rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.phase-step-clickable .phase-step-btn {
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.phase-step-clickable .phase-step-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.phase-step-clickable .phase-step-btn:active {
+  transform: scale(0.97);
+}
+
+.phase-step-clickable .phase-step-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.phase-step-btn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.phase-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.35s ease,
+    transform 0.35s ease;
+}
+
+.phase-step-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  transition: color 0.3s ease;
+}
+
+.phase-step-rail {
+  position: absolute;
+  top: 0.85rem;
+  left: calc(50% + 0.9rem);
+  right: calc(-50% + 0.9rem);
+  height: 2px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Progress fill grows along the rail when a step completes. */
+.phase-step-rail::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 0;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: width 0.45s ease;
+}
+
+.phase-step-done .phase-step-rail::after,
+.phase-step-current .phase-step-rail::after {
+  width: 100%;
+}
+
+.phase-step-done .phase-step-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.phase-step-done .phase-step-name,
+.phase-step-current .phase-step-name {
+  color: var(--ink);
+}
+
+.phase-step-current .phase-step-dot {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: phase-arrive 0.45s ease;
+}
+
+@keyframes phase-arrive {
+  0% {
+    transform: scale(0.82);
+  }
+  55% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-step-dot,
+  .phase-step-name,
+  .phase-step-rail::after,
+  .phase-step-hint {
+    transition: none;
+  }
+
+  .phase-step-current .phase-step-dot {
+    animation: none;
+  }
+}
+
+.phase-step-clickable.phase-step-upcoming .phase-step-dot {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.phase-step-clickable.phase-step-upcoming .phase-step-name {
+  color: var(--accent);
+}
+
+.phase-step-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  animation: phase-hint-in 0.35s ease;
+}
+
+@keyframes phase-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .guide-card-actions .btn.accent {
   min-height: 36px;
   min-width: 36px;
@@ -1742,47 +2062,33 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   font-size: 0.92rem;
 }
 
-.day-rhythm-back {
-  appearance: none;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0.5rem 0.35rem;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 500;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 0.18em;
-  transition: color 0.15s ease, text-decoration-color 0.15s ease;
-}
-
-.day-rhythm-back:hover:not(:disabled),
-.day-rhythm-back:focus-visible {
-  color: var(--ink);
-  text-decoration-color: color-mix(in srgb, var(--ink) 45%, transparent);
-}
-
-.day-rhythm-back:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.day-rhythm .help-tip-panel {
-  left: 0;
+.day-rhythm-status .help-tip-panel,
+.day-rhythm-panel > .help-tip .help-tip-panel {
+  left: auto;
+  right: 0;
   transform: none;
 }
 
-@media (max-width: 519px) {
-  .day-rhythm-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
-  }
+.day-flow-guide {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+  padding: 0.85rem 1rem;
+  box-sizing: border-box;
+}
+
+.day-flow-guide .guide-card {
+  margin-top: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  padding-right: 2.2rem;
+}
+
+.day-rhythm-panel .repeat-plan {
+  margin-top: 0.15rem;
 }
 
 /* Tips FAB: frosted-glass circular button, understated Apple-style. */
@@ -1970,18 +2276,34 @@ html[data-theme="night"] .guide-card {
 
 .guide-card-actions {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.guide-card-actions .guide-card-source {
-  margin-top: 0;
-  margin-left: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
 }
 
 .guide-card-actions .btn {
+  width: 100%;
   text-align: left;
+}
+
+/* Always under the action buttons, every breakpoint. */
+.guide-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.guide-card-meta .guide-card-source {
+  margin-top: 0;
+}
+
+.guide-card-meta .linkish {
+  min-height: 36px;
+  padding: 0.35rem 0;
 }
 
 /* The "Why this?" disclosure: personal signals first, research second. */
@@ -2022,11 +2344,6 @@ html[data-theme="night"] .guide-card {
   position: relative;
   display: inline-block;
   margin-left: 0.3rem;
-}
-
-.guide-card-actions .linkish {
-  min-height: 44px;
-  padding: 0.65rem 0.5rem;
 }
 
 .help-tip-btn {
@@ -2072,9 +2389,13 @@ html[data-theme="night"] .guide-card {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
-/* Stats sit near the viewport's left edge; keep panels on screen. */
+/* Stats sit near the viewport's left edge; keep panels on screen.
+   Corner ? tips open downward-left so they stay in view. */
 .stat .help-tip-panel {
-  left: 0;
+  left: auto;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  bottom: auto;
   transform: none;
 }
 
@@ -3663,6 +3984,17 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   gap: 0.75rem;
   flex-wrap: wrap;
   font-size: 0.9rem;
+}
+
+.you-share-row-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.9rem;
+}
+
+.you-share-row-note {
+  font-size: 0.82rem;
 }
 
 /* ---------------------------- Share (public) ---------------------------- */
