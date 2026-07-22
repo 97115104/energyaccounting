@@ -16,7 +16,12 @@ import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { liveTimezone } from "./lib/timezone";
 import { SKY_CSS_VARS, skyPalette } from "./lib/skyPalette";
-import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
+import { cacheIdentity, forgetCachedIdentity, readCachedIdentity, readCachedName } from "./lib/identityCache";
+import {
+  applyBrandFavicon,
+  applyIdentityIcons,
+  identityForIcons,
+} from "./lib/identityFavicon";
 import { FactLinkedText } from "./components/FactLinkedText";
 import { NeuroMe } from "./components/IdentityMark";
 import { ButterflyStateButton } from "./components/ButterflyStateButton";
@@ -183,15 +188,23 @@ export function App() {
         root.style.setProperty("--line", palette.line);
         root.style.setProperty("--accent", palette.accent);
       }
-      const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
-      if (favicon) {
-        favicon.href = theme === "night" ? "/favicon-moon.svg" : "/favicon-sun.svg";
+      const faviconBg =
+        getComputedStyle(root).getPropertyValue("--bg0").trim() ||
+        (theme === "night" ? "#12182e" : "#fff6c8");
+      // Prefer the person's mark (live or cached for sign-in). Brand sun/moon
+      // only when no identity is available yet.
+      const markIdentity = user
+        ? identityForIcons(user.identity, user.id)
+        : readCachedIdentity();
+      if (markIdentity) {
+        applyIdentityIcons(markIdentity, faviconBg);
+      } else {
+        applyBrandFavicon(theme);
       }
       // Keep browser chrome (and iOS overscroll area) on the theme's sky color.
       const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
       if (themeColor) {
-        const bg0 = getComputedStyle(root).getPropertyValue("--bg0").trim();
-        if (bg0) themeColor.content = bg0;
+        if (faviconBg) themeColor.content = faviconBg;
       }
     };
     apply();
@@ -207,7 +220,7 @@ export function App() {
       if (intervalId) window.clearInterval(intervalId);
       clearSkyVars();
     };
-  }, [user?.timezone, user?.lat, user?.lon]);
+  }, [user?.timezone, user?.lat, user?.lon, user?.id, user?.identity]);
 
   // Keep the last identity and display name cached so the sign-in screen can
   // greet the person before any session or key exists. Both are render-only.
