@@ -1,21 +1,3 @@
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  closestCenter,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -302,10 +284,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
   const [justFreed, setJustFreed] = useState<number | undefined>();
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [dndBusy, setDndBusy] = useState(false);
-  // Swallow the click that browsers fire immediately after a drag ends.
-  const suppressOpenRef = useRef(false);
   // Explicit edit mode for a closed day opened from history: amendments
   // correct the record without reopening the day's lifecycle.
   const [amending, setAmending] = useState(false);
@@ -375,10 +353,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // The ref is the synchronous lock; the state drives the busy rendering.
   const [addingRecentId, setAddingRecentId] = useState<string | null>(null);
   const addingRecentRef = useRef(false);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
-  );
 
   const load = useCallback(async (forcedDayId?: string, opts?: { soft?: boolean }) => {
     const generation = ++loadGenerationRef.current;
@@ -1028,7 +1002,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const detailLine = day?.lines.find((line) => line.id === detailLineId) ?? null;
 
   function openTaskDetails(line: Line) {
-    if (dndBusy || activeDragId || suppressOpenRef.current) return;
     stopLiveSpeech();
     setDetailLineId(line.id);
     setDetailLabel(line.label ?? "");
@@ -1480,90 +1453,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setListening(target);
   }
 
-  function onDragStart(e: DragStartEvent) {
-    setActiveDragId(String(e.active.id));
-  }
-
-  async function onDragEnd(e: DragEndEvent) {
-    setActiveDragId(null);
-    // The browser often synthesizes a click after pointer-up from a drag.
-    suppressOpenRef.current = true;
-    window.setTimeout(() => {
-      suppressOpenRef.current = false;
-    }, 200);
-    if (!day || (day.phase === "closed" && !amending) || dndBusy) return;
-    setDndBusy(true);
-    try {
-      const activeId = String(e.active.id);
-      const overId = e.over ? String(e.over.id) : null;
-      if (!overId) return;
-
-      const line = day.lines.find((l) => l.id === activeId);
-      if (!line) return;
-
-      let targetSide: "deposit" | "withdrawal" = line.side;
-      if (overId === "col-deposit") targetSide = "deposit";
-      else if (overId === "col-withdrawal") targetSide = "withdrawal";
-      else {
-        const overLine = day.lines.find((l) => l.id === overId);
-        if (overLine) targetSide = overLine.side;
-      }
-
-      const sourceList = (
-        targetSide === line.side
-          ? day.lines.filter((l) => l.side === line.side)
-          : day.lines.filter((l) => l.side === targetSide)
-      ).sort((a, b) => a.sort - b.sort);
-
-      let newIndex = sourceList.findIndex((l) => l.id === overId);
-      if (overId === "col-deposit" || overId === "col-withdrawal") {
-        newIndex = sourceList.length;
-      }
-      if (newIndex < 0) newIndex = sourceList.length;
-
-      if (targetSide === line.side) {
-        const oldIndex = sourceList.findIndex((l) => l.id === activeId);
-        if (oldIndex < 0) return;
-        const reordered = arrayMove(
-          sourceList,
-          oldIndex,
-          Math.min(newIndex, sourceList.length - 1),
-        );
-        await Promise.all(
-          reordered.map((l, i) =>
-            api(`/api/days/${day.id}/lines/${l.id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ sort: i, side: l.side }),
-            }),
-          ),
-        );
-      } else {
-        const without = sourceList.filter((l) => l.id !== activeId);
-        const insertAt = Math.min(newIndex, without.length);
-        const next = [
-          ...without.slice(0, insertAt),
-          { ...line, side: targetSide },
-          ...without.slice(insertAt),
-        ];
-        await api(`/api/days/${day.id}/lines/${activeId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ side: targetSide, sort: insertAt }),
-        });
-        await Promise.all(
-          next.map((l, i) =>
-            api(`/api/days/${day.id}/lines/${l.id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ sort: i, side: targetSide }),
-            }),
-          ),
-        );
-      }
-      await withPreservedScroll(() => load(undefined, { soft: true }));
-    } finally {
-      setDndBusy(false);
-    }
-  }
-
   const closeCelebrationModal =
     closeCelebration && (
       <div
@@ -1684,7 +1573,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const closed = day?.phase === "closed";
   const readOnly = !!day && day.phase === "closed" && !amending;
-  const activeLine = activeDragId ? day.lines.find((l) => l.id === activeDragId) : null;
 
   return (
     <div className="today-root">
@@ -1950,13 +1838,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         )}
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={onDragStart}
-        onDragEnd={(e) => void onDragEnd(e)}
-      >
-        <div className="col-tabs" role="group" aria-label="Choose day column">
+      <div className="col-tabs" role="group" aria-label="Choose day column">
           <button
             type="button"
             className={`col-tab${mobileCol === "withdrawal" ? " active" : ""}`}
@@ -1978,7 +1860,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
           <Column
             title="Use energy"
             side="withdrawal"
-            droppableId="col-withdrawal"
             className={`withdraw-col${mobileCol !== "withdrawal" ? " mobile-hidden" : ""}`}
             lines={withdrawals}
             closed={readOnly}
@@ -1997,7 +1878,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
           <Column
             title="Add energy"
             side="deposit"
-            droppableId="col-deposit"
             className={`deposit-col${mobileCol !== "deposit" ? " mobile-hidden" : ""}`}
             lines={deposits}
             closed={readOnly}
@@ -2015,14 +1895,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
           />
         </div>
         <SiteFooter />
-        <DragOverlay>
-          {activeLine ? (
-            <div className="task-row drag-overlay">
-              <div>{activeLine.label}</div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
 
       {(day.phase === "audit" || closed) && (
         <div className="panel" style={{ marginTop: "1rem" }}>
@@ -2781,7 +2653,6 @@ function guideSourceLabel(url: string): string {
 function Column(props: {
   title: string;
   side: "deposit" | "withdrawal";
-  droppableId: string;
   className: string;
   lines: Line[];
   closed: boolean;
@@ -2797,15 +2668,12 @@ function Column(props: {
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: props.droppableId });
+  const columnId = `col-${props.side}`;
   // Empty columns surface prior-ledger picks so the day can fill without a
   // separate "repeat plan" control.
   const showRecent = !props.lines.length && !props.closed && props.recent.length > 0;
   return (
-    <div
-      ref={setNodeRef}
-      className={`panel column-panel ${props.className}${isOver ? " drop-over" : ""}`}
-    >
+    <div className={`panel column-panel ${props.className}`}>
       <div className="col-head">
         <h2>{props.title}</h2>
         <button
@@ -2822,29 +2690,27 @@ function Column(props: {
           +
         </button>
       </div>
-      <SortableContext items={props.lines.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-        {props.lines.map((l) => (
-          <SortableTask
-            key={l.id}
-            line={l}
-            closed={props.closed}
-            audit={props.audit}
-            onActual={props.onActual}
-            onComplete={props.onComplete}
-            onRemove={props.onRemove}
-            onOpen={props.onOpen}
-          />
-        ))}
-      </SortableContext>
+      {props.lines.map((l) => (
+        <TaskRow
+          key={l.id}
+          line={l}
+          closed={props.closed}
+          audit={props.audit}
+          onActual={props.onActual}
+          onComplete={props.onComplete}
+          onRemove={props.onRemove}
+          onOpen={props.onOpen}
+        />
+      ))}
       {showRecent ? (
         <div className="column-recent">
-          <h3 className="recent-heading column-recent-heading" id={`${props.droppableId}-recent`}>
+          <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
             <span className="column-recent-sparkle" aria-hidden="true">
               ✦
             </span>
             Suggested from past days
           </h3>
-          <ul className="recent-list" aria-labelledby={`${props.droppableId}-recent`}>
+          <ul className="recent-list" aria-labelledby={`${columnId}-recent`}>
             {props.recent.map((s) => {
               const reason = recentDisabledReason(
                 s.typicalCost,
@@ -2852,7 +2718,7 @@ function Column(props: {
                 props.phase,
                 props.side,
               );
-              const reasonId = reason ? `${props.droppableId}-reason-${s.id}` : undefined;
+              const reasonId = reason ? `${columnId}-reason-${s.id}` : undefined;
               const busy = props.addingRecentId === s.id;
               return (
                 <li key={s.id}>
@@ -2908,7 +2774,7 @@ function Column(props: {
   );
 }
 
-function SortableTask(props: {
+function TaskRow(props: {
   line: Line;
   closed: boolean;
   audit: boolean;
@@ -2917,32 +2783,10 @@ function SortableTask(props: {
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: props.line.id,
-    disabled: props.closed,
-  });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
   return (
     <div
-      ref={setNodeRef}
-      style={style}
       className={`task-row day-task${props.line.completed ? " completed" : ""}`}
-      {...attributes}
-      {...listeners}
-      // Mouse activation can focus the sortable node; undo any scroll jump.
-      onMouseDown={() => {
-        const x = window.scrollX;
-        const y = window.scrollY;
-        requestAnimationFrame(() => {
-          if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
-        });
-      }}
       role="group"
-      aria-roledescription="sortable task"
     >
       <button
         type="button"
@@ -2950,7 +2794,6 @@ function SortableTask(props: {
         aria-label={props.line.completed ? "Mark incomplete" : "Mark complete"}
         aria-pressed={props.line.completed}
         disabled={props.closed}
-        onPointerDown={(e) => e.stopPropagation()}
         onClick={() => props.onComplete(props.line)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2961,10 +2804,7 @@ function SortableTask(props: {
       <button
         type="button"
         className="task-main task-detail-trigger"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => {
-          if (!isDragging) props.onOpen(props.line);
-        }}
+        onClick={() => props.onOpen(props.line)}
       >
         <div className={props.line.completed ? "task-done-label" : undefined}>{props.line.label}</div>
         <div className="task-meta">
@@ -2976,7 +2816,7 @@ function SortableTask(props: {
         </div>
       </button>
       {!props.closed && (
-        <div className="task-actions" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="task-actions">
           {props.audit && (
             <input
               type="number"
