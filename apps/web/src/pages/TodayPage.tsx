@@ -46,7 +46,7 @@ import {
   type IntelligenceDay,
 } from "../lib/personalIntelligence";
 import { loadPersonalData } from "../lib/personalData";
-import { recentDisabledReason, repeatActionVisible } from "../lib/planShortcuts";
+import { recentDisabledReason } from "../lib/planShortcuts";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
 import { parseDayWeather } from "../lib/weatherInsight";
@@ -122,8 +122,6 @@ type DayPayload = {
   isHoliday: boolean;
   attwood: { depositTotal: number; withdrawalTotal: number; attwoodNet: number };
   lines: Line[];
-  /** True when a prior closed ledger with tasks exists to copy from. */
-  repeatAvailable: boolean;
 };
 
 // Details are capped so one note cannot balloon the encrypted payload; the
@@ -271,10 +269,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   // Per-side recent activities shown inside the add dialog (server-ranked by ledger recency).
   const [recent, setRecent] = useState<RecentActivity[]>([]);
-  // Guards against double taps while the previous plan copies over. The ref
-  // is the synchronous lock; the state only drives the button rendering.
-  const [repeating, setRepeating] = useState(false);
-  const repeatingRef = useRef(false);
   // Guards Continue / Back / Close against double-submit while the phase PATCH awaits.
   const [phaseBusy, setPhaseBusy] = useState(false);
   const phaseBusyRef = useRef(false);
@@ -1083,26 +1077,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return true;
   }
 
-  /** Copy the most recently closed ledger's plan into this empty day, all or nothing. */
-  async function repeatPreviousPlan() {
-    if (!day || repeatingRef.current) return;
-    repeatingRef.current = true;
-    setRepeating(true);
-    setError(null);
-    try {
-      await api(`/api/days/${day.id}/repeat-previous`, { method: "POST" });
-      await load(undefined, { soft: true });
-    } catch (e) {
-      // A conflict usually means the plan already landed (double submit or
-      // another tab); refresh so the ledger shows reality, then report.
-      await load(undefined, { soft: true }).catch(() => {});
-      setError(e instanceof Error ? e.message : "Could not copy your previous plan.");
-    } finally {
-      repeatingRef.current = false;
-      setRepeating(false);
-    }
-  }
-
   async function startNewDay(): Promise<string | null> {
     setStarting(true);
     setError(null);
@@ -1904,22 +1878,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 );
               })}
             </ol>
-            {repeatActionVisible(day, isHistoryView) && (
-              <div className="repeat-plan">
-                <button
-                  type="button"
-                  className="btn secondary repeat-plan-btn"
-                  disabled={repeating}
-                  aria-busy={repeating || undefined}
-                  onClick={() => void repeatPreviousPlan()}
-                >
-                  {repeating ? "Copying your plan…" : "Use previous plan"}
-                </button>
-                <p className="muted repeat-plan-note">
-                  Copies the plan from your last closed day. You can still edit or add more.
-                </p>
-              </div>
-            )}
           </div>
         </div>
         {guide.primary && !closed && (

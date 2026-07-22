@@ -69,6 +69,16 @@ html[data-theme="night"] {
   border-radius: var(--radius) !important;
 }
 
+/* Structural shells must stay square: the global radius otherwise turns the
+   whole page into a yellow rounded card in mobile device frames. */
+html,
+body,
+#root,
+.app-shell,
+.sky-layer {
+  border-radius: 0 !important;
+}
+
 /* html needs a definite height: percentage min-heights resolve to auto against
    an auto-height parent, which left short pages (login) with the body gradient
    ending mid-screen and the flat html color showing beneath. */
@@ -79,6 +89,7 @@ html {
 body,
 #root {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 /* Overscroll (rubber-band) reveals the html canvas behind the fixed body
@@ -391,10 +402,7 @@ html[data-weather="thunder"] .sky-layer {
   text-align: left;
 }
 
-/* Signed-out shell: stack brand + card and center the group vertically, so the
-   sign-in view sits mid-screen on any viewport instead of hugging the top. */
-/* Signed out, the root becomes the centering context so the frame floats in
-   the middle of the viewport instead of hanging from the top. */
+/* Signed-out shell: brand + card centered as a group on every viewport. */
 #root:has(> .app-shell-auth) {
   min-height: 100vh;
   min-height: 100dvh;
@@ -409,14 +417,13 @@ html[data-weather="thunder"] .sky-layer {
   flex-direction: column;
   justify-content: center;
   padding: 2rem 1.5rem;
-  /* A light frame around the signed-out view: narrower than the app shell,
-     sized by its content, and centered by the #root grid above. */
-  width: min(720px, calc(100vw - 2rem));
-  margin: 1.5rem auto;
+  width: min(525px, calc(100vw - 2rem));
+  margin: 0 auto;
   min-height: 0;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  border-radius: calc(var(--radius) * 1.5);
-  background: color-mix(in srgb, var(--panel) 18%, transparent);
+  box-sizing: border-box;
+  border-radius: 0 !important;
+  background: transparent;
+  border: none;
 }
 
 .top-bar-centered .tagline {
@@ -424,17 +431,16 @@ html[data-weather="thunder"] .sky-layer {
   margin-right: 0;
 }
 
-/* Returning welcome: handwritten and left-aligned so it reads like a note,
-   not a billboard. Sized up because Caveat runs small for its em box. */
+/* Auth welcome: Lexend like greetings, sized for a form header not a billboard. */
 .top-bar-centered .brand-welcome {
-  font-family: "Caveat", "Snell Roundhand", "Bradley Hand", cursive;
-  font-size: clamp(2.4rem, 6vw, 3.2rem);
-  font-weight: 700;
+  font-family: var(--display);
+  font-size: clamp(1.2rem, 3.2vw, 1.75rem);
+  font-weight: 500;
   text-align: left;
-  line-height: 1.1;
-  /* Warmed toward the accent and softened so it reads like a friendly note. */
-  color: color-mix(in srgb, var(--accent) 65%, var(--ink));
-  opacity: 0.82;
+  line-height: 1.2;
+  color: var(--ink);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* A per-visit fun fact whispered under the welcome headline. */
@@ -444,6 +450,37 @@ html[data-weather="thunder"] .sky-layer {
   font-size: 0.85rem;
   color: var(--muted);
   opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+  .app-shell-auth {
+    width: calc(100% - 1.5rem);
+    max-width: 100%;
+    padding: 1rem 0.75rem;
+  }
+
+  .top-bar-centered .top-bar-brand {
+    width: 100%;
+  }
+
+  .top-bar-centered .brand-welcome {
+    font-size: clamp(1.1rem, 4.8vw, 1.35rem);
+  }
+
+  .top-bar-centered .welcome-fact {
+    font-size: 0.8rem;
+  }
+
+  .app-shell-auth .auth-card {
+    width: 100%;
+    margin: 0.85rem 0 0;
+    padding: 1.15rem 1.1rem;
+  }
+
+  .app-shell-auth .auth-card h2 {
+    font-size: 1.35rem;
+    margin-bottom: 0.85rem;
+  }
 }
 
 .top-bar-actions {
@@ -1018,16 +1055,6 @@ html[data-theme="night"] .task-row.completed {
 
 .task-status:disabled {
   cursor: default;
-}
-
-/* One quiet action to reuse the last closed plan; the caption explains it. */
-.repeat-plan {
-  margin-top: 1rem;
-}
-
-.repeat-plan-note {
-  margin: 0.4rem 0 0;
-  font-size: 0.85rem;
 }
 
 /* Recent activities inside the add sheet: native-feeling tappable rows. */
@@ -1706,7 +1733,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 
 .auth-card h2 {
   font-family: var(--display);
-  font-size: 1.9rem;
+  font-size: clamp(1.35rem, 3vw, 1.7rem);
   margin: 0 0 1.25rem;
 }
 
@@ -1768,17 +1795,21 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 }
 
 .day-flow:not(.has-guide) .phase-step-dot {
-  width: 1.85rem;
-  height: 1.85rem;
-  font-size: 0.8rem;
+  width: clamp(2rem, 5.5vw, 2.5rem);
+  height: clamp(2rem, 5.5vw, 2.5rem);
+  font-size: clamp(0.82rem, 2.2vw, 0.95rem);
 }
 
 .day-flow:not(.has-guide) .phase-step-name {
-  font-size: 0.88rem;
+  font-size: clamp(0.9rem, 2.4vw, 1.05rem);
 }
 
 .day-flow:not(.has-guide) .phase-step-rail {
-  top: 1rem;
+  top: calc(
+    clamp(0.35rem, 1.5vw, 0.55rem) + clamp(2rem, 5.5vw, 2.5rem) / 2
+  );
+  left: calc(50% + clamp(2rem, 5.5vw, 2.5rem) / 2 + 0.2rem);
+  right: calc(-50% + clamp(2rem, 5.5vw, 2.5rem) / 2 + 0.2rem);
 }
 
 .day-flow:not(.has-guide) .phase-step-hint {
@@ -1789,9 +1820,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   .day-flow:not(.has-guide) .day-rhythm-panel {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "copy stepper"
-      "repeat repeat";
+    grid-template-areas: "copy stepper";
     column-gap: 2rem;
     row-gap: 0.85rem;
     align-items: center;
@@ -1808,10 +1837,6 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
     align-self: center;
     justify-self: end;
     width: min(100%, 22rem);
-  }
-
-  .day-flow:not(.has-guide) .repeat-plan {
-    grid-area: repeat;
   }
 }
 
@@ -1881,7 +1906,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   flex: 1 1 0;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: clamp(0.35rem, 1.2vw, 0.5rem);
   min-width: 0;
   text-align: center;
 }
@@ -1893,11 +1918,11 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: clamp(0.35rem, 1.2vw, 0.5rem);
   width: 100%;
-  min-height: 44px;
+  min-height: clamp(3rem, 10vw, 3.75rem);
   margin: 0;
-  padding: 0.15rem 0.25rem;
+  padding: clamp(0.35rem, 1.5vw, 0.55rem) clamp(0.25rem, 1.2vw, 0.45rem);
   border: none;
   background: transparent;
   color: inherit;
@@ -1933,13 +1958,13 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: clamp(1.85rem, 5vw, 2.35rem);
+  height: clamp(1.85rem, 5vw, 2.35rem);
   border-radius: 50%;
   border: 1.5px solid color-mix(in srgb, var(--ink) 22%, transparent);
   background: var(--panel);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: clamp(0.78rem, 2.1vw, 0.9rem);
   font-weight: 700;
   line-height: 1;
   transition:
@@ -1951,7 +1976,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 }
 
 .phase-step-name {
-  font-size: 0.78rem;
+  font-size: clamp(0.88rem, 2.3vw, 1.05rem);
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.01em;
@@ -1960,9 +1985,11 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
 
 .phase-step-rail {
   position: absolute;
-  top: 0.85rem;
-  left: calc(50% + 0.9rem);
-  right: calc(-50% + 0.9rem);
+  top: calc(
+    clamp(0.35rem, 1.5vw, 0.55rem) + clamp(1.85rem, 5vw, 2.35rem) / 2
+  );
+  left: calc(50% + clamp(1.85rem, 5vw, 2.35rem) / 2 + 0.2rem);
+  right: calc(-50% + clamp(1.85rem, 5vw, 2.35rem) / 2 + 0.2rem);
   height: 2px;
   background: color-mix(in srgb, var(--ink) 14%, transparent);
   pointer-events: none;
@@ -2085,10 +2112,6 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   background: transparent;
   padding: 0;
   padding-right: 2.2rem;
-}
-
-.day-rhythm-panel .repeat-plan {
-  margin-top: 0.15rem;
 }
 
 /* Tips FAB: frosted-glass circular button, understated Apple-style. */
@@ -2502,8 +2525,7 @@ html[data-theme="night"] .tip-card {
   margin-bottom: 0.75rem;
 }
 
-/* Signed out, the footer leaves the framed container and settles quietly at
-   the bottom of the viewport. */
+/* Signed out, the footer settles quietly at the bottom of the viewport. */
 .app-shell-auth .site-footer {
   position: fixed;
   left: 0;

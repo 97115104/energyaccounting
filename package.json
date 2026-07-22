@@ -11,8 +11,5 @@
     "icons": "bun scripts/generate-icons.ts",
     "generate-more-invite-codes": "bun scripts/generate-more-invite-codes.ts"
   },
-  "workspaces": ["apps/*", "packages/*"],
-  "dependencies": {
-    "@fontsource/caveat": "^5.3.0"
-  }
+  "workspaces": ["apps/*", "packages/*"]
 }

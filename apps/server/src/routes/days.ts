@@ -137,7 +137,7 @@ function strictlyEarlierThan(day: typeof dayTable.$inferSelect) {
   );
 }
 
-/** Bound history scans so repeat/recent work stays a small ordered window. */
+/** Bound history scans so recent work stays a small ordered window. */
 const PRIOR_LEDGER_WINDOW = 30;
 
 async function priorClosedLedgers(day: typeof dayTable.$inferSelect) {
@@ -153,18 +153,6 @@ async function priorClosedLedgers(day: typeof dayTable.$inferSelect) {
     )
     .orderBy(desc(dayTable.startedAt), desc(dayTable.id))
     .limit(PRIOR_LEDGER_WINDOW);
-}
-
-/**
- * Repeat source: the most recently closed prior ledger that actually has
- * tasks. Empty closed ledgers are skipped rather than blocking repeat.
- */
-async function previousPlanSource(day: typeof dayTable.$inferSelect) {
-  for (const candidate of await priorClosedLedgers(day)) {
-    const lines = await linesForDay(candidate.id);
-    if (lines.length > 0) return { day: candidate, lines };
-  }
-  return null;
 }
 
 async function linesForDay(dayId: string, executor: WriteDb = db) {
@@ -353,20 +341,6 @@ function serializeDay(
   };
 }
 
-/**
- * Serialize plus repeat availability, so every path that can render the
- * editable day (active, ID fetch, start, repeat) reports the same metadata.
- * The history scan only runs for an empty planning day.
- */
-async function serializeDayWithRepeat(
-  day: typeof dayTable.$inferSelect,
-  lines: (typeof taskLineTable.$inferSelect)[],
-) {
-  const canRepeat =
-    day.phase === "plan" && lines.length === 0 && (await previousPlanSource(day)) !== null;
-  return { ...serializeDay(day, lines), repeatAvailable: canRepeat };
-}
-
 export const dayRoutes = new Elysia({ prefix: "/api" })
   .get("/days/active", async ({ request, set }) => {
     const user = await requireFullUser(request);
@@ -388,7 +362,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       day.openingBalance = DAILY_ENERGY;
     }
     const lines = await linesForDay(day.id);
-    return { day: await serializeDayWithRepeat(day, lines) };
+    return { day: serializeDay(day, lines) };
   })
   .post(
     "/days/start",
@@ -415,7 +389,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       try {
         const day = await createDay(user, date);
         set.status = 201;
-        return await serializeDayWithRepeat(day, []);
+        return serializeDay(day, []);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         if (message.includes("day_one_active_per_user") || message.includes("UNIQUE constraint")) {
@@ -480,7 +454,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 404;
       return { error: "Day not found." };
     }
-    return await serializeDayWithRepeat(day, await linesForDay(day.id));
+    return await serializeDay(day, await linesForDay(day.id));
   })
   .get("/export/days", async ({ request, set }) => {
     const user = await requireFullUser(request);
@@ -920,76 +894,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       .set({ phase: "closed", openingBalance: opening, closingBalance: closing })
       .where(eq(dayTable.id, day.id));
     return { closingBalance: closing, openingBalance: opening, attwood: attwoodTotals(tasks) };
-  })
-  .post("/days/:dayId/repeat-previous", async ({ params, request, set }) => {
-    const user = await requireFullUser(request);
-    if (!user) {
-      set.status = 401;
-      return { error: "Unauthorized" };
-    }
-    const day = await ownedDay(user.id, params.dayId);
-    if (!day) {
-      set.status = 404;
-      return { error: "Day not found." };
-    }
-    if (day.phase !== "plan") {
-      set.status = 400;
-      return { error: "The previous plan can only be repeated while planning." };
-    }
-    const existing = await linesForDay(day.id);
-    if (existing.length > 0) {
-      set.status = 409;
-      return { error: "This day already has tasks; repeat works on an empty plan." };
-    }
-    const source = await previousPlanSource(day);
-    if (!source) {
-      set.status = 400;
-      return { error: "No previous plan to repeat yet." };
-    }
-    // All-or-nothing: the whole previous plan must fit today's capacity.
-    const plannedTotal = source.lines.reduce((sum, l) => sum + clampCost(l.plannedCost), 0);
-    const avail = availableCapacity(day.openingBalance, []);
-    if (plannedTotal > avail) {
-      set.status = 400;
-      return {
-        error: `The previous plan uses ${plannedTotal} points, and only ${avail} remain available to allocate.`,
-      };
-    }
-    try {
-      await db.transaction(async (tx) => {
-        // Re-check emptiness inside the transaction so a double submit
-        // cannot interleave and copy the plan twice.
-        const current = await linesForDay(day.id, tx);
-        if (current.length > 0) throw new Error("repeat-target-not-empty");
-        // Copy lines without catalog upserts: one repeat tap remembers the
-        // plan but must not bump useCount/ranking like N manual adds.
-        for (const [i, line] of source.lines.entries()) {
-          await tx.insert(taskLineTable).values({
-            id: newId(),
-            dayId: day.id,
-            side: line.side,
-            sort: i,
-            labelCiphertext: line.labelCiphertext,
-            labelIv: line.labelIv,
-            labelHash: line.labelHash,
-            plannedCost: clampCost(line.plannedCost),
-            actualCost: null,
-            completed: false,
-            difficulty: null,
-            detailsCiphertext: null,
-            detailsIv: null,
-          });
-        }
-      });
-    } catch (e) {
-      if (e instanceof Error && e.message.includes("repeat-target-not-empty")) {
-        set.status = 409;
-        return { error: "This day already has tasks; repeat works on an empty plan." };
-      }
-      throw e;
-    }
-    const lines = await linesForDay(day.id);
-    return { day: await serializeDayWithRepeat(day, lines) };
   })
   .get("/suggestions/:dayId", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
