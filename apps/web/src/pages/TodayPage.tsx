@@ -274,6 +274,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // is the synchronous lock; the state only drives the button rendering.
   const [repeating, setRepeating] = useState(false);
   const repeatingRef = useRef(false);
+  // Guards Continue / Back / Close against double-submit while the phase PATCH awaits.
+  const [phaseBusy, setPhaseBusy] = useState(false);
+  const phaseBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
   // Which surface the microphone is feeding, or null when idle.
@@ -1181,79 +1184,92 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function setPhase(phase: "plan" | "audit" | "closed") {
-    if (!day) return;
-    if (phase === "closed") {
-      await saveJournal();
-      const res = await api<{ closingBalance: number }>(`/api/days/${day.id}/close`, {
-        method: "POST",
-      });
-      const recoveryId = `recovery:${day.id}`;
-      const closedRecovery =
-        !dismissedGuideIds.has(recoveryId)
-          ? recoveryPlan({
-              dayId: day.id,
-              date: day.date,
-              nextStartDate: isoDate(),
-              feelRating: day.feelRating,
-              openingBalance: day.openingBalance,
-              closingBalance: res.closingBalance,
-              plannedTotal: day.lines.reduce((sum, l) => sum + l.plannedCost, 0),
-              actualTotal: day.lines.reduce(
-                (sum, l) => sum + (l.actualCost ?? l.plannedCost),
-                0,
-              ),
-              incompleteWithdrawals: day.lines.filter(
-                (l) => l.side === "withdrawal" && !l.completed,
-              ).length,
-              series: statSeries,
-              candidates: suggestions,
-              includePhysicalActivities: user.includePhysicalActivities !== false,
-            })
-          : null;
-      try {
-        const series = await fetchRecentStats();
-        setDay((prev) =>
-          prev
-            ? {
-                ...prev,
-                phase: "closed",
-                closingBalance: res.closingBalance,
-                projectedClosing: res.closingBalance,
-              }
-            : prev,
-        );
-        setNoActive(true);
-        setCloseCelebration({
-          closingBalance: res.closingBalance,
-          insights: closeDayInsights(series, day.id),
-          recovery: closedRecovery,
+    if (!day || phaseBusyRef.current) return;
+    phaseBusyRef.current = true;
+    setPhaseBusy(true);
+    setError(null);
+    const leavingAudit = day.phase === "audit" && phase !== "audit";
+    try {
+      // Leaving audit unmounts the journal; stop dictation and persist first.
+      if (leavingAudit) stopLiveSpeech();
+      if (leavingAudit || phase === "closed") await saveJournal();
+
+      if (phase === "closed") {
+        const res = await api<{ closingBalance: number }>(`/api/days/${day.id}/close`, {
+          method: "POST",
         });
-      } catch {
-        setDay((prev) =>
-          prev
-            ? {
-                ...prev,
-                phase: "closed",
+        const recoveryId = `recovery:${day.id}`;
+        const closedRecovery =
+          !dismissedGuideIds.has(recoveryId)
+            ? recoveryPlan({
+                dayId: day.id,
+                date: day.date,
+                nextStartDate: isoDate(),
+                feelRating: day.feelRating,
+                openingBalance: day.openingBalance,
                 closingBalance: res.closingBalance,
-                projectedClosing: res.closingBalance,
-              }
-            : prev,
-        );
-        setNoActive(true);
-        setCloseCelebration({
-          closingBalance: res.closingBalance,
-          insights: [],
-          recovery: closedRecovery,
-        });
+                plannedTotal: day.lines.reduce((sum, l) => sum + l.plannedCost, 0),
+                actualTotal: day.lines.reduce(
+                  (sum, l) => sum + (l.actualCost ?? l.plannedCost),
+                  0,
+                ),
+                incompleteWithdrawals: day.lines.filter(
+                  (l) => l.side === "withdrawal" && !l.completed,
+                ).length,
+                series: statSeries,
+                candidates: suggestions,
+                includePhysicalActivities: user.includePhysicalActivities !== false,
+              })
+            : null;
+        try {
+          const series = await fetchRecentStats();
+          setDay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: "closed",
+                  closingBalance: res.closingBalance,
+                  projectedClosing: res.closingBalance,
+                }
+              : prev,
+          );
+          setNoActive(true);
+          setCloseCelebration({
+            closingBalance: res.closingBalance,
+            insights: closeDayInsights(series, day.id),
+            recovery: closedRecovery,
+          });
+        } catch {
+          setDay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: "closed",
+                  closingBalance: res.closingBalance,
+                  projectedClosing: res.closingBalance,
+                }
+              : prev,
+          );
+          setNoActive(true);
+          setCloseCelebration({
+            closingBalance: res.closingBalance,
+            insights: [],
+            recovery: closedRecovery,
+          });
+        }
+        return;
       }
-      return;
-    } else {
       await api(`/api/days/${day.id}`, {
         method: "PATCH",
         body: JSON.stringify({ phase }),
       });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the day phase.");
+    } finally {
+      phaseBusyRef.current = false;
+      setPhaseBusy(false);
     }
-    await load();
   }
 
   async function saveJournal() {
@@ -1743,40 +1759,55 @@ export function TodayPage({ user }: { user: UserProfile }) {
             )}
           </button>
         </div>
-        <div className="phase-bar" style={{ marginTop: "1rem" }}>
-          <button
-            type="button"
-            className={`btn secondary${day.phase === "plan" ? " phase-active" : ""}`}
-            aria-pressed={day.phase === "plan"}
-            disabled={closed}
-            onClick={() => void setPhase("plan")}
-          >
-            Morning plan
-          </button>
-          <button
-            type="button"
-            className={`btn secondary${day.phase === "audit" ? " phase-active" : ""}`}
-            aria-pressed={day.phase === "audit"}
-            disabled={closed}
-            onClick={() => void setPhase("audit")}
-          >
-            Evening audit
-          </button>
-          <button
-            type="button"
-            className="btn accent"
-            aria-pressed={closed}
-            disabled={closed}
-            onClick={() => void setPhase("closed")}
-          >
-            {closed ? "Day closed" : "Close day"}
-          </button>
-          <HelpTip label="the daily rhythm">
-            Your day moves through three phases: planning, auditing real costs and how it felt,
-            then closing. Previous days open read-only on the Dashboard; choose Edit
-            this day to amend one, or confirm before deleting it. Your next day starts fresh at 100
-            when you choose to start it.
-          </HelpTip>
+        {error && <p className="error">{error}</p>}
+      </div>
+
+      <div className="panel day-rhythm-panel">
+        <div className="day-rhythm" role="group" aria-label="Daily rhythm">
+          <div className="day-rhythm-status">
+            <span className="day-rhythm-label">
+              {closed
+                ? "Day closed"
+                : day.phase === "audit"
+                  ? "Evening audit"
+                  : "Morning plan"}
+            </span>
+            <HelpTip label="the daily rhythm">
+              Your day moves through three phases: planning, auditing real costs and how it felt,
+              then closing. Previous days open read-only on the Dashboard; choose Edit
+              this day to amend one, or confirm before deleting it. Your next day starts fresh at 100
+              when you choose to start it.
+            </HelpTip>
+          </div>
+          {!closed && (
+            <div className="day-rhythm-actions">
+              {day.phase === "audit" && (
+                <button
+                  type="button"
+                  className="day-rhythm-back"
+                  disabled={phaseBusy}
+                  onClick={() => void setPhase("plan")}
+                >
+                  Back to plan
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn accent"
+                disabled={phaseBusy}
+                aria-busy={phaseBusy || undefined}
+                onClick={() => void setPhase(day.phase === "plan" ? "audit" : "closed")}
+              >
+                {phaseBusy
+                  ? day.phase === "plan"
+                    ? "Continuing…"
+                    : "Closing…"
+                  : day.phase === "plan"
+                    ? "Continue to audit"
+                    : "Close day"}
+              </button>
+            </div>
+          )}
         </div>
         {repeatActionVisible(day, isHistoryView) && (
           <div className="repeat-plan">
@@ -1794,15 +1825,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </p>
           </div>
         )}
-        {guide.primary && !closed && (
-          <GuideCard
-            item={guide.primary}
-            closed={readOnly}
-            onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
-            onDismiss={dismissGuideItem}
-          />
-        )}
-        {error && <p className="error">{error}</p>}
       </div>
 
       <DndContext
@@ -1829,7 +1851,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             Add energy
           </button>
         </div>
-        <div className="grid-2 equal-cols" style={{ marginTop: "1rem" }}>
+        <div className="day-board">
           <Column
             title="Use energy"
             side="withdrawal"
@@ -1858,6 +1880,16 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
           />
+          {guide.primary && !closed && (
+            <div className="day-board-guide">
+              <GuideCard
+                item={guide.primary}
+                closed={readOnly}
+                onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
+                onDismiss={dismissGuideItem}
+              />
+            </div>
+          )}
         </div>
         <DragOverlay>
           {activeLine ? (
@@ -2481,17 +2513,7 @@ function GuideCard(props: {
             ))}
           </ul>
           {item.research && (
-            <p className="guide-research">
-              Research basis: {item.research}
-              {item.sourceUrl && (
-                <>
-                  {" "}
-                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">
-                    Evidence
-                  </a>
-                </>
-              )}
-            </p>
+            <p className="guide-research">Research basis: {item.research}</p>
           )}
         </div>
       )}
