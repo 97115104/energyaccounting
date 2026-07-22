@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeIdentity } from "./identity.ts";
-import { identityFaviconSvg } from "./identityFavicon.ts";
+import { identityFaviconSvg } from "./identityFaviconSvg.ts";
 
 describe("identityFaviconSvg", () => {
   test("renders each symbol as a namespaced SVG tile", () => {

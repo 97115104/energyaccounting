@@ -12,6 +12,7 @@
         "@eaj/shared": "workspace:*",
         "@elysiajs/cors": "^1.2.0",
         "@elysiajs/static": "^1.2.0",
+        "@resvg/resvg-js": "^2.6.2",
         "drizzle-orm": "^0.41.0",
         "elysia": "^1.2.25",
         "otpauth": "^9.3.6",

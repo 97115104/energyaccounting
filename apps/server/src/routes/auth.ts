@@ -21,6 +21,7 @@ import {
   totpUri,
   verifyTotp,
 } from "../lib/totp.ts";
+import { brandTouchIconBytes, renderIdentityTouchIcon } from "../lib/touchIcon.ts";
 
 function hashCode(code: string): string {
   return createHash("sha256").update(code.toLowerCase()).digest("hex");
@@ -299,6 +300,26 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
       wrappedDek: auth.user.wrappedDek,
       sessionExpiresAt: auth.expiresAt.toISOString(),
     };
+  })
+  // Home Screen icon: must be a same-origin URL (iOS ignores blob/data hrefs).
+  .get("/touch-icon", async ({ request, set }) => {
+    const auth = await sessionFromCookie(tokenFromRequest(request));
+    set.headers["Content-Type"] = "image/png";
+    set.headers["Cache-Control"] = "private, max-age=300";
+    if (auth && !auth.pendingTotp) {
+      try {
+        const raw = auth.user.identityJson
+          ? (JSON.parse(auth.user.identityJson) as unknown)
+          : null;
+        return renderIdentityTouchIcon(raw, auth.user.id);
+      } catch {
+        // Fall through to the brand tile if identity is corrupt.
+      }
+    }
+    const brand = await brandTouchIconBytes();
+    if (brand) return brand;
+    set.status = 404;
+    return new Uint8Array();
   })
   .post(
     "/totp/setup",

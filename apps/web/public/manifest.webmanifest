@@ -1,12 +1,18 @@
 {
-  "name": "Your Energy Matters",
-  "short_name": "Energy",
+  "name": "My Energy Journal",
+  "short_name": "My Energy Journal",
   "description": "Track your daily energy balance.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fff6c8",
   "theme_color": "#12182e",
   "icons": [
+    {
+      "src": "/api/auth/touch-icon",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
