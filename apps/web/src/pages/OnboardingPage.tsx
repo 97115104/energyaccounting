@@ -9,15 +9,26 @@ import { api } from "../lib/api";
 import { normalizeWing } from "../lib/butterflyGeometry";
 import { resolveButterflyState } from "../lib/butterflyState";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
-import { usePrefersReducedMotion } from "../lib/useButterflyDay";
 import {
   PALETTE_PRESETS,
   SYMBOLS,
   archetypeMeta,
   normalizeIdentity,
   paletteSwatchBackground,
+  type ButterflyPalette,
   type IdentityConfig,
 } from "../lib/identity";
+import { usePrefersReducedMotion } from "../lib/useButterflyDay";
+import { SLOT_LABEL } from "../lib/youProfile";
+
+function ExtLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="ob-inline-link">
+      {children}
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
 
 function SunGlyph() {
   return (
@@ -49,8 +60,6 @@ function DayGlyph() {
 }
 
 function DayDoneGlyph() {
-  // The journal from DayGlyph, but finished: a bold check where the remaining
-  // lines would be, so closing a day gets its own mark.
   return (
     <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
       <rect x="12" y="8" width="40" height="48" fill="none" stroke="currentColor" strokeWidth="3.5" />
@@ -127,22 +136,15 @@ function LockGlyph() {
 type Step = {
   eyebrow: string;
   thesis: string;
-  whisper: string;
+  whisper: ReactNode;
   glyph: ReactNode;
   source?: { label: string; url: string };
   setup?: boolean;
-  /** Interactive identity slides: pick a symbol, then shape the butterfly. */
   identity?: "symbol" | "butterfly";
-  /** Show the person's NeuroMe seal in the aside instead of the glyph. */
   neurome?: boolean;
-  /** Teaching demo mirrored in content controls + aside visual. */
-  demo?: "energy" | "day" | "privacy";
+  demo?: "energy" | "day" | "privacy" | "reward" | "weather" | "built";
 };
 
-/**
- * A mid-day sample state so the rhythm slide's NeuroMe seal shows a partly
- * filled vitality ring, which is what the header will actually look like.
- */
 const NEUROME_DEMO_STATE = resolveButterflyState({
   available: 68,
   opening: 100,
@@ -155,14 +157,23 @@ const NEUROME_DEMO_STATE = resolveButterflyState({
   phase: "audit",
 });
 
-// One idea per slide: the core loop, the privacy boundary, and identity.
-// Capacity mechanics and ranking detail live on Today via help disclosures.
+const SOURCE_REPO = "https://github.com/97115104/energyaccounting";
+
+// Eleven slides: loop, science (rewards + weather), privacy/values, identity, setup.
 const STEPS: Step[] = [
   {
     eyebrow: "Welcome",
     thesis: "Your energy matters.",
-    whisper:
-      "This is an energy accounting journal for neurodivergent brains, drawn from the method by Maja Toudal and Dr. Tony Attwood. You start each energy day when you are ready, and every day begins with a visible 100 points you can restore and spend. Try the buttons below to feel how that balance moves.",
+    whisper: (
+      <>
+        This journal helps you track energy the way neurodivergent brains often need to, following
+        the Energy Accounting method by{" "}
+        <ExtLink href="https://majatoudal.com/">Maja Toudal</ExtLink> and{" "}
+        <ExtLink href="https://www.tonyattwood.com.au/">Dr. Tony Attwood</ExtLink>. You start each
+        day when you are ready, and every day begins with 100 points you can restore and spend. Try
+        the buttons below to feel how that balance moves.
+      </>
+    ),
     glyph: <SunGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
     demo: "energy",
@@ -170,55 +181,143 @@ const STEPS: Step[] = [
   {
     eyebrow: "Your pace",
     thesis: "Your day is important.",
-    whisper:
-      "You decide when your energy day ends. An open day can stay with you across calendar dates, which makes room for irregular sleep, long focus stretches, shift work, and time blindness. When you are ready, you close the day and start the next one fresh at 100.",
+    whisper: (
+      <>
+        You decide when your energy day ends. An open day can stay with you across calendar dates,
+        which makes room for irregular sleep, long focus stretches, shift work, and time blindness.
+        When you are ready, you close the day and start the next one fresh at 100.
+      </>
+    ),
     glyph: <DayDoneGlyph />,
     demo: "day",
   },
   {
     eyebrow: "Rhythm",
     thesis: "Plan, audit, close.",
-    whisper:
-      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Your NeuroMe seal beside the greeting keeps that beat with you, and the ring around your mark shows today's remaining energy as you restore and spend it. Closed days live under Previous days on the Dashboard, where you can amend the record or delete it permanently.",
+    whisper: (
+      <>
+        Each day moves through three phases: planning, auditing how it actually felt, then closing.
+        Your NeuroMe seal beside the greeting keeps that beat with you, and the ring around your
+        mark shows today&apos;s remaining energy as you restore and spend it. Closed days live under
+        Previous days on the Dashboard, where you can amend the record or delete it permanently.
+      </>
+    ),
     glyph: <DayGlyph />,
     neurome: true,
   },
   {
+    eyebrow: "Careful rewards",
+    thesis: "Gentle rewards, on purpose.",
+    whisper: (
+      <>
+        Social apps often use{" "}
+        <ExtLink href="https://en.wikipedia.org/wiki/Reinforcement#Variable_ratio_schedules">
+          variable ratio reinforcement
+        </ExtLink>{" "}
+        to keep people scrolling. Here the same science shows up in a small, optional way when you
+        finish something, so a quiet spark or kind line can support momentum without trapping you.
+        You stay in control, and reduced motion settings still win.
+      </>
+    ),
+    glyph: <CheckGlyph />,
+    demo: "reward",
+  },
+  {
+    eyebrow: "Outside your window",
+    thesis: "The day outside matters.",
+    whisper: (
+      <>
+        The app paints a live sky from your place and reads the local weather so suggestions can
+        meet the day you are actually in. When daylight, dryness, and UV look friendly, outdoor ways
+        to add energy, including a walk or a stretch outside, can rise in the list, because{" "}
+        <ExtLink href="https://en.wikipedia.org/wiki/Green_exercise">green exercise</ExtLink>{" "}
+        research links moving in nature with better mood and attention. When conditions are rough,
+        the app leans indoor and gentler restores instead. Weather comes from{" "}
+        <ExtLink href="https://open-meteo.com/">Open-Meteo</ExtLink>. Location is optional on the
+        last slide; without it, the sky still follows time of day. Physical suggestions stay opt-in.
+      </>
+    ),
+    glyph: <SunGlyph />,
+    demo: "weather",
+  },
+  {
     eyebrow: "Privacy",
     thesis: "What you write stays yours.",
-    whisper:
-      "Activity labels, journals, and task details are encrypted in your browser before they leave the device. Numeric totals stay available so trends and the Energy Guide can rank suggestions on this device, and every suggestion arrives with an explanation and a dismiss control.",
+    whisper: (
+      <>
+        The words you type, including notes, activity names, and task details, are locked up in your
+        browser before they go anywhere. Energy numbers stay readable so the app can spot patterns
+        and suggest restores. Every suggestion says why it appeared, and you can dismiss it.
+      </>
+    ),
     glyph: <CheckGlyph />,
     demo: "privacy",
   },
   {
+    eyebrow: "Our promise",
+    thesis: "Built by us, for us.",
+    whisper: (
+      <>
+        This tool is built by neurodivergents for neurodivergents. It is free forever and{" "}
+        <ExtLink href={SOURCE_REPO}>open source</ExtLink> under MIT. You can host your own copy and
+        leave whenever you want.
+      </>
+    ),
+    glyph: <PersonGlyph />,
+    source: { label: "View the source", url: SOURCE_REPO },
+    demo: "built",
+  },
+  {
     eyebrow: "Getting to know you",
     thesis: "A private picture of you.",
-    whisper:
-      "On the You page, Your energy intelligence learns from the days you log: what tends to restore you, what costs energy, and what your typical day looks like. It is built on this device and stays private until you choose to share it. How to work with you turns that history into a short, editable note you can share in your own words.",
+    whisper: (
+      <>
+        As you log days, the You page builds a personal productivity intelligence from your own
+        history: what tends to restore you, what drains you, and what a typical day looks like.
+        Suggestions and drafts are computed on this device from that history. Your You notes leave
+        only as encrypted text you control, and stay private until you choose to share. How to work
+        with you turns the picture into a short note you can edit and show someone in your own words.
+      </>
+    ),
     glyph: <PersonGlyph />,
   },
   {
     eyebrow: "Symbolism matters",
     thesis: "Choose your mark.",
-    whisper:
-      "Neurodivergent people carry many symbols with pride. Pick the one that feels like yours, and it will appear on shares, exports, and your sign-in welcome. Inside the app your butterfly is always you, and you can change this any time on the You page.",
+    whisper: (
+      <>
+        Neurodivergent people carry many symbols with pride. Pick the one that feels like yours, and
+        it will appear on shares, exports, and your sign-in welcome. Inside the app your butterfly is
+        always you, and you can change this any time on the You page.
+      </>
+    ),
     glyph: <PersonGlyph />,
     identity: "symbol",
   },
   {
     eyebrow: "We are all butterflies",
     thesis: "Meet your butterfly.",
-    whisper:
-      "The butterfly is this app's symbol of becoming, with change that can feel like struggle from the inside. Pick a wing family to start from; there are eight, because neurodivergent people are as varied as butterflies. Its wings beat with your energy, and you can shape the edges, tails, and patterns any time on the You page.",
+    whisper: (
+      <>
+        Your butterfly is your living mark inside the app. Pick a wing family that feels like you;
+        there are eight to choose from, because neurodivergent people are as varied as butterflies.
+        Its wings move with your energy, and you can tune the colors below or refine edges, tails,
+        and patterns any time on the You page.
+      </>
+    ),
     glyph: <PersonGlyph />,
     identity: "butterfly",
   },
   {
     eyebrow: "Last step",
     thesis: "Make it yours.",
-    whisper:
-      "Everything here is optional and editable later in Settings. A name makes the greetings warmer, coordinates power the live sky and weather-aware suggestions, and the greeting style sets the headline's mood.",
+    whisper: (
+      <>
+        Everything here is optional and editable later in Settings. A name makes the greetings
+        warmer, and optional coordinates power the live sky and weather-aware suggestions from the
+        earlier slide. Greeting style chooses the welcome line at the top of Today.
+      </>
+    ),
     glyph: <PersonGlyph />,
     setup: true,
   },
@@ -245,16 +344,14 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [identity, setIdentity] = useState<IdentityConfig>(() =>
     normalizeIdentity(user.identity, user.id),
   );
-  // Demo state for teaching slides; aside visuals mirror these controls.
   const [demoEnergy, setDemoEnergy] = useState(100);
   const [demoDayClosed, setDemoDayClosed] = useState(false);
   const [demoSealed, setDemoSealed] = useState(false);
+  const [demoRewardHit, setDemoRewardHit] = useState(false);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const replay = params.get("replay") === "1";
 
-  // If App geolocates while the user is still on a slide, pick up those coords
-  // into empty fields so finish() doesn't clobber them with null.
   useEffect(() => {
     if (lat === "" && user.lat != null) setLat(String(user.lat));
   }, [user.lat, lat]);
@@ -275,8 +372,6 @@ export function OnboardingPage({ user, onUser }: Props) {
     setStep((s) => Math.min(Math.max(s + delta, 0), STEPS.length - 1));
   }
 
-  // Arrow keys page slides unless focus is in a field, picker, or teaching demo
-  // (those controls own Left/Right). Chrome Continue/Back still allow paging.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
@@ -294,19 +389,22 @@ export function OnboardingPage({ user, onUser }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [step, last]);
 
-  // Reset teaching demos when entering their slide so the thesis stays true
-  // (every day begins at 100; day starts open; sample note starts readable).
   useEffect(() => {
     if (current.demo === "energy") setDemoEnergy(100);
     if (current.demo === "day") setDemoDayClosed(false);
     if (current.demo === "privacy") setDemoSealed(false);
+    if (current.demo === "reward") setDemoRewardHit(false);
   }, [step, current.demo]);
+
+  function setPaletteSlot(slot: keyof ButterflyPalette, value: string) {
+    if (slot === "rainbow") return;
+    const { rainbow: _drop, ...rest } = identity.palette;
+    setIdentity({ ...identity, palette: { ...rest, [slot]: value } });
+  }
 
   async function finish() {
     setError(null);
     try {
-      // Build a partial PATCH: omit blank lat/lon so we never wipe coords that
-      // App already saved via geolocation while the user was reading slides.
       const body: Record<string, unknown> = {
         displayName: name.trim() || null,
         greetingStyle,
@@ -366,7 +464,6 @@ export function OnboardingPage({ user, onUser }: Props) {
         />
       </div>
 
-      {/* key remounts the slide so the enter animation replays each step */}
       <article
         className={`ob-card ob-card-${direction}${tall ? " ob-card-tall" : ""}`}
         key={step}
@@ -381,6 +478,7 @@ export function OnboardingPage({ user, onUser }: Props) {
           {current.source && (
             <a href={current.source.url} target="_blank" rel="noreferrer" className="ob-source">
               {current.source.label}
+              <span className="sr-only"> (opens in a new tab)</span>
               <span aria-hidden="true"> ↗</span>
             </a>
           )}
@@ -392,6 +490,9 @@ export function OnboardingPage({ user, onUser }: Props) {
           )}
           {current.demo === "privacy" && (
             <PrivacyControls sealed={demoSealed} onChange={setDemoSealed} />
+          )}
+          {current.demo === "reward" && (
+            <RewardControls hit={demoRewardHit} onHit={() => setDemoRewardHit(true)} />
           )}
           {current.identity === "symbol" && (
             <div className="ob-setup ob-identity">
@@ -441,14 +542,12 @@ export function OnboardingPage({ user, onUser }: Props) {
                   setIdentity({
                     ...identity,
                     archetype: family,
-                    // Keep the wing family in step with the chosen base, and
-                    // start from the family's suggested palette.
                     wing: normalizeWing(family, identity.wing),
                     palette: { ...archetypeMeta(family).palette },
                   })
                 }
               />
-              <div className="ob-palettes" role="group" aria-label="Wing colors">
+              <div className="ob-palettes" role="group" aria-label="Wing color presets">
                 {PALETTE_PRESETS.map((p) => (
                   <button
                     key={p.label}
@@ -466,6 +565,21 @@ export function OnboardingPage({ user, onUser }: Props) {
                     />
                     {p.label}
                   </button>
+                ))}
+              </div>
+              <div className="you-color-rows ob-color-rows">
+                {(["primary", "secondary", "accent"] as const).map((slot) => (
+                  <div key={slot} className="you-color-row">
+                    <label className="you-color-slot" htmlFor={`ob-color-${slot}`}>
+                      {SLOT_LABEL[slot]}
+                    </label>
+                    <input
+                      id={`ob-color-${slot}`}
+                      type="color"
+                      value={identity.palette[slot]}
+                      onChange={(e) => setPaletteSlot(slot, e.target.value)}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -502,6 +616,11 @@ export function OnboardingPage({ user, onUser }: Props) {
               </div>
               <div className="field">
                 <label htmlFor="ob-greeting-style">Greeting style</label>
+                <p className="muted ob-greeting-help">
+                  Greeting style is the sentence that greets you at the top of Today. Mix rotates
+                  styles; Classic stays calm; ND humor stays playful; Fun facts brings a curious
+                  tidbit.
+                </p>
                 <select
                   id="ob-greeting-style"
                   value={greetingStyle}
@@ -548,6 +667,12 @@ export function OnboardingPage({ user, onUser }: Props) {
             <DayBoundaryVisual closed={demoDayClosed} />
           ) : current.demo === "privacy" ? (
             <PrivacyVisual sealed={demoSealed} />
+          ) : current.demo === "reward" ? (
+            <RewardVisual hit={demoRewardHit} />
+          ) : current.demo === "weather" ? (
+            <WeatherVisual />
+          ) : current.demo === "built" ? (
+            <FistHeartCycle />
           ) : current.identity === "symbol" ? (
             <SymbolShowcase identity={identity} />
           ) : current.identity === "butterfly" ? (
@@ -773,19 +898,74 @@ function PrivacyVisual({ sealed }: { sealed: boolean }) {
   );
 }
 
-/**
- * Decorative slideshow for the "Your symbol" slide: cycles through every mark
- * with a gentle pop-and-float so the aside shows the whole range, not only the
- * butterfly. Snaps to the person's current pick and holds still under reduced
- * motion. Purely visual (the parent aside is aria-hidden).
- */
+function RewardControls({ hit, onHit }: { hit: boolean; onHit: () => void }) {
+  return (
+    <div className="ob-demo" role="group" aria-label="Try a gentle finish reward">
+      <div className="ob-demo-actions">
+        <button type="button" className="ob-demo-chip" onClick={onHit} disabled={hit}>
+          {hit ? "Nice finish" : "Try a finish"}
+        </button>
+      </div>
+      <p className="muted ob-demo-note" aria-live="polite">
+        {hit
+          ? "A quiet spark for completing something. Real finishes stay intermittent on purpose."
+          : "Tap to see the kind of quiet reward a finish can bring."}
+      </p>
+    </div>
+  );
+}
+
+function RewardVisual({ hit }: { hit: boolean }) {
+  return (
+    <div className={`ob-reward-visual${hit ? " hit" : ""}`}>
+      <CheckGlyph />
+      <p className="ob-day-caption">{hit ? "Spark" : "Ready"}</p>
+    </div>
+  );
+}
+
+function WeatherVisual() {
+  // Use the onboarding sun glyph, not WeatherGlyph chip chrome (glow/fill).
+  return (
+    <div className="ob-weather-visual">
+      <SunGlyph />
+      <p className="ob-day-caption">Live sky</p>
+    </div>
+  );
+}
+
+/** Decorative fist↔heart cycle for the built-by slide. */
+function FistHeartCycle() {
+  const prefersReduced = usePrefersReducedMotion();
+  const [heart, setHeart] = useState(false);
+
+  useEffect(() => {
+    if (prefersReduced) return;
+    const id = window.setInterval(() => setHeart((h) => !h), 2000);
+    return () => window.clearInterval(id);
+  }, [prefersReduced]);
+
+  if (prefersReduced) {
+    return (
+      <span className="ob-fist-heart static" aria-hidden="true">
+        ✊💖
+      </span>
+    );
+  }
+
+  return (
+    <span className="ob-fist-heart" aria-hidden="true">
+      <span className={heart ? "" : "active"}>✊</span>
+      <span className={heart ? "active" : ""}>💖</span>
+    </span>
+  );
+}
+
 function SymbolShowcase({ identity }: { identity: IdentityConfig }) {
   const prefersReduced = usePrefersReducedMotion();
   const [index, setIndex] = useState(() =>
     Math.max(0, SYMBOLS.findIndex((s) => s.id === identity.symbol)),
   );
-  // Hold still only after the person changes the radiogroup; idle cycling
-  // still shows the full range on first visit.
   const [pinned, setPinned] = useState(false);
   const lastSymbol = useRef(identity.symbol);
 

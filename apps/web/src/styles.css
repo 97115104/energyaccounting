@@ -3724,8 +3724,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   max-width: 100%;
 }
 
-/* 9 steps at 44px would overflow a 390px phone; 36px still clears the
-   ~32px minimum tap target while fitting one row. */
+/* 11 steps need a tighter mobile row: 32px × 11 = 352, fits ~358px content. */
 @media (max-width: 640px) {
   .ob-dots {
     gap: 0;
@@ -3733,7 +3732,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   }
 
   .ob-dot {
-    width: 36px;
+    width: 32px;
     height: 40px;
   }
 }
@@ -4080,6 +4079,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   .ob-aside,
   .ob-setup,
   .ob-demo,
+  .ob-reward-visual.hit .ob-glyph,
   .ob-dot::after,
   .ob-progress-fill,
   .wordmark,
@@ -5353,20 +5353,99 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   color: var(--accent);
   display: grid;
   place-items: center;
-  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.ob-privacy-visual.sealed {
-  transform: scale(1.04);
+.ob-inline-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ob-inline-link:hover {
+  color: var(--ink);
+}
+
+.ob-greeting-help {
+  margin: 0 0 0.55rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ob-color-rows {
+  margin-top: 0.75rem;
+}
+
+.ob-reward-visual,
+.ob-weather-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent);
+}
+
+.ob-reward-visual.hit .ob-glyph {
+  animation: ob-reward-pop 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes ob-reward-pop {
+  from {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ob-fist-heart {
+  position: relative;
+  display: grid;
+  place-items: center;
+  font-size: 5.5rem;
+  line-height: 1;
+  width: 1.4em;
+  height: 1.4em;
+}
+
+.ob-fist-heart.inline {
+  font-size: 1.25rem;
+  width: 1.5em;
+  height: 1.5em;
+  display: inline-grid;
+  vertical-align: -0.15em;
+}
+
+.ob-fist-heart > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.75);
+  transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ob-fist-heart > span.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ob-fist-heart.static {
+  width: auto;
+  height: auto;
+  font-size: 3.5rem;
+  letter-spacing: 0.08em;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ob-privacy-visual {
-    transition: none;
+  .ob-reward-visual.hit .ob-glyph {
+    animation: none;
   }
 
-  .ob-privacy-visual.sealed {
-    transform: none;
+  .ob-fist-heart > span {
+    transition: none;
   }
 }
 
