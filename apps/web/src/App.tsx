@@ -311,8 +311,10 @@ export function App() {
           {authed ? (
             <>
               <div className="greeting-row">
-                {/* Wordmark sits over the quote only; seal centers on the h1. */}
-                <p className="wordmark">Your Energy Matters</p>
+                {/* Wordmark spans the full header row, sitting over the seal. */}
+                <p className="wordmark">
+                  Your <span className="wordmark-energy">Energy</span> Matters
+                </p>
                 <div className="greeting-seal-col">
                   {identity && (
                     <Link
@@ -353,8 +355,8 @@ export function App() {
             </>
           ) : authMode === "register" ? (
             <>
-              <h1 className="brand brand-welcome">
-                <TypedText text="Your Energy Matters!" />
+              <h1 className="wordmark wordmark-auth">
+                Your <span className="wordmark-energy">Energy</span> Matters!
               </h1>
               <p className="tagline welcome-fact">
                 EAJ is for neurodivergent productivity and pride and energy tracking.

@@ -469,6 +469,11 @@ html[data-weather="thunder"] .sky-layer {
     font-size: clamp(1.25rem, 5.2vw, 1.55rem);
   }
 
+  .top-bar-centered .wordmark-auth {
+    font-size: clamp(1.2rem, 5vw, 1.5rem);
+    letter-spacing: 0.14em;
+  }
+
   .top-bar-centered .welcome-fact {
     font-size: 0.8rem;
   }
@@ -559,16 +564,48 @@ html[data-weather="thunder"] .sky-layer {
   }
 }
 
-/* Signed-in header: small wordmark above a time-of-day greeting headline. */
+/* Signed-in header: wordmark spans over the seal + quote; ENERGY fades green → red. */
 .wordmark {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
   font-family: var(--display);
-  font-size: 0.82rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.15rem);
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.45rem;
+  padding-bottom: 0;
   animation: greet-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.wordmark-energy {
+  background: linear-gradient(
+    90deg,
+    #3ecf6a 0%,
+    #7bcf4a 22%,
+    #e8b028 48%,
+    #f07840 72%,
+    #ff5a3d 100%
+  );
+  background: linear-gradient(
+    90deg in oklab,
+    #2fd66a 0%,
+    #e8a838 48%,
+    #ff4d3a 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Auth register: same lockup as the signed-in wordmark, sized for the auth header. */
+.top-bar-centered .wordmark-auth {
+  margin: 0;
+  font-size: clamp(1.35rem, 4.2vw, 1.85rem);
+  letter-spacing: 0.18em;
 }
 
 /* Shared quiet outbound cite (Energy Guide, etc.). */
@@ -939,10 +976,33 @@ html[data-theme="night"] .btn.secondary {
   color: var(--panel);
 }
 
+/* Column + buttons: flat like header icon-btn / tips-fab (no filled brick). */
 .btn.plus {
-  font-size: 1.4rem;
+  font-size: 1.55rem;
+  font-weight: 500;
   line-height: 1;
-  padding: 0.35rem 0.75rem;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  filter: none;
+  box-shadow: none;
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.btn.plus:hover:not(:disabled),
+.btn.plus:focus-visible:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+.btn.plus:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 .field {
@@ -1088,6 +1148,38 @@ html[data-theme="night"] .task-row.completed {
 .task-actions {
   display: flex;
   gap: 0.35rem;
+  align-items: center;
+}
+
+/* Flat remove control: red ×, no filled brick (matches header icon-btn). */
+.task-remove {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--withdraw);
+  font-size: 1.55rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.task-remove:hover,
+.task-remove:focus-visible {
+  background: color-mix(in srgb, var(--withdraw) 12%, transparent);
+  color: var(--withdraw);
+}
+
+.task-remove:active {
+  transform: scale(0.94);
 }
 
 .task-status {
@@ -3592,7 +3684,7 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
 }
 
 .greeting-row .wordmark {
-  grid-column: 2;
+  grid-column: 1 / -1;
   grid-row: 1;
 }
 

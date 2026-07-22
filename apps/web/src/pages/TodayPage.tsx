@@ -2957,7 +2957,7 @@ function SortableTask(props: {
           )}
           <button
             type="button"
-            className="btn secondary"
+            className="task-remove"
             aria-label="Remove"
             onClick={() => props.onRemove(props.line.id)}
           >
