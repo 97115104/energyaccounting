@@ -59,7 +59,7 @@ export const STATE_LABEL_POOLS: Record<ButterflyStateId, readonly string[]> = {
   steady: ["Steady", "Even keel", "In balance", "Holding steady"],
   lively: ["Lively", "Feeling lively", "Quick wings today", "Bright beat"],
   recovering: ["Recovering", "Soft landing", "Going gentle", "Take it slow"],
-  spent: ["Spent", "Tank's low", "Nearly empty", "Very little left"],
+  spent: ["Spent", "Tank's low", "Nearly empty", "Allotted for now"],
 };
 
 /** The plain name for each pose, always the first entry in the pool. */
@@ -85,7 +85,7 @@ const META: Record<ButterflyStateId, { summary: string; beatMs: number }> = {
     beatMs: 3200,
   },
   spent: {
-    summary: "Wings low and still. Very little energy remains for today.",
+    summary: "Wings low and still. Today's energy is mostly spoken for.",
     beatMs: 3600,
   },
 };
@@ -130,7 +130,17 @@ export function resolveButterflyState(input: ButterflyStateInput): ButterflyStat
   let id: ButterflyStateId;
   if (input.available <= opening * 0.15) {
     id = "spent";
-    because.push(`Only ${Math.round(input.available)} of ${Math.round(opening)} points remain.`);
+    // Available often hits zero because plans reserved the day, not because
+    // the person failed. Encourage that planning win and remind them to rest.
+    if (input.available <= 0) {
+      because.push(
+        "All your energy is allotted. Well done, but don't forget to take breaks!",
+      );
+    } else {
+      because.push(
+        `Almost fully allotted (${Math.round(input.available)} of ${Math.round(opening)} still open). Pace yourself and take breaks.`,
+      );
+    }
   } else if (
     input.withdrawalHeavy ||
     (input.feelRating != null && input.feelRating <= 4) ||

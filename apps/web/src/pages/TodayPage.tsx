@@ -15,6 +15,7 @@ import {
   rollCompletionDelight,
   type DelightTier,
 } from "../lib/completionDelight";
+import { completedFooterPraise } from "../lib/completedPraise";
 import {
   decryptText,
   encryptText,
@@ -38,7 +39,12 @@ import {
   type IntelligenceDay,
 } from "../lib/personalIntelligence";
 import { loadPersonalData } from "../lib/personalData";
-import { recentDisabledReason } from "../lib/planShortcuts";
+import {
+  addableRecent,
+  filterUnusedRecent,
+  recentDisabledReason,
+  shouldShowColumnRecent,
+} from "../lib/planShortcuts";
 import { withPreservedScroll } from "../lib/preserveScroll";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
@@ -59,6 +65,7 @@ type Line = {
   sort: number;
   labelCiphertext: string;
   labelIv: string;
+  labelHash?: string;
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
@@ -1129,10 +1136,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
     cost: number,
     hash?: string,
     dayId?: string,
+    opts?: { availableOverride?: number; reload?: boolean },
   ): Promise<boolean> {
     const dek = getSessionDek();
     const targetDayId = dayId ?? day?.id;
     if (!dek || !targetDayId) return false;
+    const available =
+      opts?.availableOverride ?? day?.availableCapacity ?? 0;
     // Closed-day amendments record what happened; capacity only limits live
     // withdrawal planning. Deposits restore energy and stay plannable.
     if (
@@ -1140,10 +1150,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
       day &&
       day.phase !== "closed" &&
       side === "withdrawal" &&
-      cost > day.availableCapacity
+      cost > available
     ) {
       setError(
-        `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
+        `That uses ${cost} points, and only ${available} remain available to allocate.`,
       );
       return false;
     }
@@ -1164,7 +1174,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setError(e instanceof Error ? e.message : "Could not add the item.");
       return false;
     }
-    await withPreservedScroll(() => load(undefined, { soft: true }));
+    if (opts?.reload !== false) {
+      await withPreservedScroll(() => load(undefined, { soft: true }));
+    }
     return true;
   }
 
@@ -1230,7 +1242,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   async function submitDraft() {
-    if (!draftSide || !draftLabel.trim()) return;
+    if (!draftSide || !draftLabel.trim() || addingRecentRef.current) return;
     const cost = Math.max(0, Math.min(100, Number(draftCost) || 20));
     await addLine(draftSide, draftLabel, cost);
     closeDraft();
@@ -1245,6 +1257,34 @@ export function TodayPage({ user }: { user: UserProfile }) {
     try {
       const ok = await addLine(s.side, s.label, s.typicalCost, s.labelHash);
       if (ok && draftSide) closeDraft();
+    } finally {
+      addingRecentRef.current = false;
+      setAddingRecentId(null);
+    }
+  }
+
+  /** Add every still-fitting suggestion for a column, in list order. */
+  async function addAllRecent(items: RecentActivity[]) {
+    if (!day || addingRecentRef.current || items.length === 0) return;
+    addingRecentRef.current = true;
+    try {
+      let capacity = day.availableCapacity;
+      let anyOk = false;
+      for (const s of items) {
+        if (!s.label) continue;
+        if (recentDisabledReason(s.typicalCost, capacity, day.phase, s.side)) continue;
+        setAddingRecentId(s.id);
+        const ok = await addLine(s.side, s.label, s.typicalCost, s.labelHash, undefined, {
+          availableOverride: capacity,
+          reload: false,
+        });
+        if (!ok) break;
+        anyOk = true;
+        if (s.side === "withdrawal") capacity -= s.typicalCost;
+      }
+      if (anyOk) {
+        await withPreservedScroll(() => load(undefined, { soft: true }));
+      }
     } finally {
       addingRecentRef.current = false;
       setAddingRecentId(null);
@@ -2072,6 +2112,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             addingRecentId={addingRecentId}
             onAdd={() => setDraftSide("withdrawal")}
             onAddRecent={(s) => void addRecent(s)}
+            onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
@@ -2092,6 +2133,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             addingRecentId={addingRecentId}
             onAdd={() => setDraftSide("deposit")}
             onAddRecent={(s) => void addRecent(s)}
+            onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
@@ -2280,7 +2322,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </h2>
             <p className="muted">Available to allocate · {day.availableCapacity}</p>
             {(() => {
-              const recentForSide = recent.filter((s) => s.side === draftSide && s.label);
+              const recentForSide = filterUnusedRecent(
+                recent.filter((s) => s.side === draftSide && s.label),
+                day.lines,
+              );
               if (recentForSide.length === 0) return null;
               return (
                 <div className="recent-block">
@@ -2884,6 +2929,7 @@ function Column(props: {
   completingIds: Set<string>;
   onAdd: () => void;
   onAddRecent: (s: RecentActivity) => void;
+  onAddAllRecent: (items: RecentActivity[]) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
@@ -2902,12 +2948,21 @@ function Column(props: {
   );
   const completedCount = completed.length;
 
-  // Empty columns surface prior-ledger picks so the day can fill without a
-  // separate "repeat plan" control. Key off incomplete so "all done + hidden"
-  // does not look like a blank day.
-  const showRecent =
-    !incomplete.length && !completedCount && !props.closed && props.recent.length > 0;
+  // Keep past-day picks visible under the live list while energy remains,
+  // even after one item is added or others are completed.
+  const unusedRecent = filterUnusedRecent(props.recent, props.lines);
+  const showRecent = shouldShowColumnRecent({
+    closed: props.closed,
+    phase: props.phase,
+    side: props.side,
+    availableCapacity: props.availableCapacity,
+    unusedCount: unusedRecent.length,
+  });
+  const batchAddable = showRecent
+    ? addableRecent(unusedRecent, props.availableCapacity, props.phase)
+    : [];
   const showEmptyCopy = !incomplete.length && !completedCount && !showRecent;
+  const addingBusy = !!props.addingRecentId;
 
   function toggleShowCompleted() {
     setShowCompleted((prev) => {
@@ -2917,8 +2972,7 @@ function Column(props: {
     });
   }
 
-  const doneLabel =
-    completedCount === 1 ? "1 done already · nice" : `${completedCount} done already · nice`;
+  const doneLabel = completedFooterPraise(completedCount);
 
   return (
     <div className={`panel column-panel ${props.className}`}>
@@ -2927,7 +2981,7 @@ function Column(props: {
         <button
           type="button"
           className="btn plus"
-          disabled={props.closed}
+          disabled={props.closed || addingBusy}
           aria-label={
             props.side === "deposit"
               ? "Add energy"
@@ -2989,15 +3043,38 @@ function Column(props: {
         </div>
       )}
       {showRecent ? (
-        <div className="column-recent">
-          <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
-            <span className="column-recent-sparkle" aria-hidden="true">
-              ✦
-            </span>
-            Suggested from past days
-          </h3>
-          <ul className="recent-list" aria-labelledby={`${columnId}-recent`}>
-            {props.recent.map((s) => {
+        <div
+          className={`column-recent${incomplete.length || completedCount ? " column-recent-follow" : ""}`}
+        >
+          <div className="column-recent-head">
+            <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
+              <span className="column-recent-sparkle" aria-hidden="true">
+                ✦
+              </span>
+              Suggested from past days
+            </h3>
+            <button
+              type="button"
+              className="column-recent-add-all"
+              title="Add every suggestion that still fits today's energy"
+              aria-label={
+                batchAddable.length
+                  ? `Add all ${batchAddable.length} suggestions`
+                  : "No suggestions fit right now"
+              }
+              aria-busy={addingBusy || undefined}
+              disabled={!batchAddable.length || addingBusy || props.closed}
+              onClick={() => props.onAddAllRecent(batchAddable)}
+            >
+              {addingBusy ? "Adding…" : "Add All"}
+            </button>
+          </div>
+          <ul
+            className="recent-list"
+            aria-labelledby={`${columnId}-recent`}
+            aria-busy={addingBusy || undefined}
+          >
+            {unusedRecent.map((s) => {
               const reason = recentDisabledReason(
                 s.typicalCost,
                 props.availableCapacity,

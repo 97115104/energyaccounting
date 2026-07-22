@@ -43,6 +43,17 @@ describe("resolveButterflyState", () => {
     );
     expect(s.id).toBe("spent");
     expect(STATE_LABEL_POOLS.spent).toContain(s.label);
+    expect(s.because.join(" ")).toMatch(/allotted|Pace yourself|fully allotted/i);
+  });
+
+  test("zero available encourages allotment rather than scarcity guilt", () => {
+    const s = resolveButterflyState(
+      input({ available: 0, incompleteWithdrawals: 3, withdrawalTotal: 80 }),
+    );
+    expect(s.id).toBe("spent");
+    expect(s.because[0]).toContain("allotted");
+    expect(s.because[0]!.toLowerCase()).toContain("breaks");
+    expect(s.because.join(" ")).not.toMatch(/Only 0 of/);
   });
 
   test("withdrawal-heavy day recovers", () => {
