@@ -2800,46 +2800,38 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   margin: 0.35rem 0 0;
 }
 
-/* Quiet colophon: small and translucent so it never competes with the day.
-   Signed in it sits left-aligned in the flow; signed out it is re-anchored
-   to the viewport bottom and centered by the auth override below. */
+/* Quiet colophon: mirrors the nav rule above, tucked under page content. */
 .site-footer {
-  margin-top: 3rem;
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.8rem;
-  text-align: left;
-  opacity: 0.55;
 }
 
 .site-footer p {
   margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-inline: 0.4rem;
+  opacity: 0.38;
 }
 
-.site-footer-sep {
-  margin: 0 0.6rem;
-  opacity: 0.55;
+/* On Today, sit directly under the energy columns. */
+.today-root .site-footer {
+  margin-top: 1rem;
 }
 
-/* Signed out, the attestation reads as a caption under the auth card rather
-   than a page footer: pulled up tight, centered, no full-width rule. */
+/* Signed out, the auth card sits above the fixed footer. */
 .app-shell-auth .auth-card {
   margin-bottom: 0.75rem;
 }
 
-/* Signed out, the footer settles quietly at the bottom of the viewport. */
-.app-shell-auth .site-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0.75rem;
-  margin: 0;
-  padding: 0 1rem;
-  text-align: center;
-}
-
 .site-footer a {
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Text-style buttons use an Apple-like link treatment with color and no underline. */

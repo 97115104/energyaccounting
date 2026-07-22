@@ -29,6 +29,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SharePage } from "./pages/SharePage";
 import { TodayPage } from "./pages/TodayPage";
 import { YouPage } from "./pages/YouPage";
+import { SiteFooter } from "./components/SiteFooter";
 
 export type UserProfile = {
   id: string;
@@ -552,28 +553,7 @@ export function App() {
         <Route path="/share/:token" element={<SharePage signedIn={authed} />} />
         <Route path="*" element={<Navigate to={authed ? "/" : "/auth"} replace />} />
       </Routes>
-      <footer className="site-footer">
-        <p>
-          <a
-            href="https://github.com/97115104/energyaccounting"
-            target="_blank"
-            rel="noreferrer"
-          >
-            free &amp; open source
-          </a>
-          <span className="site-footer-sep" aria-hidden="true">
-            |
-          </span>
-          <a href="https://attest.97115104.com/s/zn6mxj9z" target="_blank" rel="noreferrer">
-            attested
-          </a>{" "}
-          · collab · cursor (auto)
-          <span className="site-footer-sep" aria-hidden="true">
-            |
-          </span>
-          built for the neurodivergent community
-        </p>
-      </footer>
+      {!(authed && loc.pathname === "/") && <SiteFooter />}
       {authed && stateExplainOpen && (
         <ButterflyStateModal
           state={butterflyState}

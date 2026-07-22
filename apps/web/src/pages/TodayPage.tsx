@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
+import { SiteFooter } from "../components/SiteFooter";
 import { WeatherDetailModal } from "../components/WeatherDetailModal";
 import { api } from "../lib/api";
 import {
@@ -1988,6 +1989,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onOpen={openTaskDetails}
           />
         </div>
+        <SiteFooter />
         <DragOverlay>
           {activeLine ? (
             <div className="task-row drag-overlay">

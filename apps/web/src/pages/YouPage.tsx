@@ -379,6 +379,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
     sections.support ||
     sections.traits ||
     sections.colorMeanings;
+  const activeShareCount = shares.filter((s) => !s.revoked).length;
 
   function printProfile() {
     // Always printable: the butterfly and mark carry the page even with no
@@ -735,163 +736,189 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
         </p>
       </section>
 
-      {/* Sharing and exports. */}
+      {/* Sharing and exports: collapsed by default, same disclosure pattern as Your mark. */}
       <section className="panel you-section" aria-labelledby="you-share-title">
         <h3 id="you-share-title">Share your butterfly</h3>
         <p className="muted">
           Save your butterfly for avatars and posts, print a profile to hand to someone, or
-          publish a link you can revoke at any time. Your mark and display name always travel
-          with a share; the sections below start off and only join when you turn them on.
-        </p>
-        <div className="you-export-buttons">
-          <button
-            type="button"
-            className="btn secondary"
-            onClick={() => {
-              const svg = heroSvg();
-              if (svg) downloadSvg(svg, "my-butterfly.svg");
-            }}
-          >
-            Download SVG
-          </button>
-          <button
-            type="button"
-            className="btn secondary"
-            onClick={() => {
-              const svg = heroSvg();
-              if (!svg) return;
-              void downloadPng(svg, "my-butterfly.png").catch((e) =>
-                setError(e instanceof Error ? e.message : "PNG export failed."),
-              );
-            }}
-          >
-            Download PNG
-          </button>
-          <button type="button" className="btn secondary" onClick={printProfile}>
-            Print or save PDF
-          </button>
-        </div>
-        <p className="muted you-print-note">
-          The printed profile includes your butterfly, your mark, and the sections selected
-          below. Today&apos;s energy state is not included.
-          {!anySectionSelected && " No sections are selected yet, so only your butterfly prints."}
+          publish a link you can revoke at any time.
         </p>
 
-        <h4>Sections to include</h4>
-        <div className="you-share-sections">
-          {(
-            [
-              ["overview", "Energy intelligence overview"],
-              ["about", "About you"],
-              ["communication", "How to communicate with you"],
-              ["support", "What helps on a hard day"],
-              ["traits", "Accepted traits"],
-              ["colorMeanings", "Color meanings"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="you-share-check">
-              <input
-                type="checkbox"
-                checked={sections[key]}
-                disabled={key === "overview" && (personalIntel?.overview.length ?? 0) === 0}
-                onChange={(e) => setSections({ ...sections, [key]: e.target.checked })}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
+        <details className="you-mark-editor">
+          <summary className="you-mark-summary">
+            <span className="you-mark-preview">
+              <span className="you-mark-preview-copy">
+                <span className="you-mark-preview-name">Download, print, or share a link</span>
+                <span className="muted you-mark-preview-meta">
+                  {activeShareCount === 0
+                    ? "No active links"
+                    : `${activeShareCount} active link${activeShareCount === 1 ? "" : "s"}`}
+                </span>
+              </span>
+            </span>
+            <span className="you-mark-edit-hint">
+              <span className="you-mark-hint-closed">Show</span>
+              <span className="you-mark-hint-open">Done</span>
+            </span>
+          </summary>
 
-        <div className="you-share-create">
-          <div className="field">
-            <label htmlFor="you-share-ttl">Link lifetime</label>
-            <select
-              id="you-share-ttl"
-              value={ttl}
-              aria-describedby={ttl === "permanent" ? "you-share-permanent-note" : undefined}
-              onChange={(e) => setTtl(e.target.value as typeof ttl)}
-            >
-              <option value="day">1 day</option>
-              <option value="month">30 days</option>
-              <option value="quarter">90 days</option>
-              <option value="permanent">Permanent, until revoked</option>
-            </select>
-          </div>
-          {ttl === "permanent" && (
-            <p id="you-share-permanent-note" className="muted you-print-note">
-              A permanent link keeps the selected plaintext available until you revoke it or delete
-              your account.
-            </p>
-          )}
-          <button type="button" className="btn accent" onClick={() => void createShare()}>
-            Create share link
-          </button>
-        </div>
-        {newLink && (
-          <div className="you-new-link">
-            <code>{newLink}</code>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => {
-                void navigator.clipboard.writeText(newLink).then(() => setCopied(true));
-              }}
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
+          <div className="you-mark-editor-body">
             <p className="muted">
-              Anyone with this link can view the snapshot{" "}
-              {newLinkIsPermanent
-                ? "until you revoke it or delete your account"
-                : "until it expires or you revoke it"}
-              . You can copy it again from Your links on this device.
+              Your mark and display name always travel with a share; the sections below start
+              off and only join when you turn them on.
             </p>
-          </div>
-        )}
-        {shares.length > 0 && (
-          <>
-            <h4>Your links</h4>
-            <ul className="you-share-list">
-              {shares.map((s) => {
-                const cachedToken = !s.revoked ? readShareToken(s.id) : null;
-                return (
-                  <li key={s.id} className="you-share-row">
-                    <span>
-                      Created {new Date(s.createdAt).toLocaleDateString()} ·{" "}
-                      {s.expiresAt
-                        ? `expires ${new Date(s.expiresAt).toLocaleDateString()}`
-                        : "permanent until revoked"}
-                      {s.revoked ? " · revoked" : ""}
-                    </span>
-                    {!s.revoked && (
-                      <span className="you-share-row-actions">
-                        {cachedToken ? (
-                          <button
-                            type="button"
-                            className="linkish"
-                            onClick={() => copyShareLink(s.id)}
-                          >
-                            {copiedShareId === s.id ? "Copied" : "Copy link"}
-                          </button>
-                        ) : (
-                          <span className="muted you-share-row-note">
-                            Link only on the device that created it
+            <div className="you-export-buttons">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  const svg = heroSvg();
+                  if (svg) downloadSvg(svg, "my-butterfly.svg");
+                }}
+              >
+                Download SVG
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  const svg = heroSvg();
+                  if (!svg) return;
+                  void downloadPng(svg, "my-butterfly.png").catch((e) =>
+                    setError(e instanceof Error ? e.message : "PNG export failed."),
+                  );
+                }}
+              >
+                Download PNG
+              </button>
+              <button type="button" className="btn secondary" onClick={printProfile}>
+                Print or save PDF
+              </button>
+            </div>
+            <p className="muted you-print-note">
+              The printed profile includes your butterfly, your mark, and the sections selected
+              below. Today&apos;s energy state is not included.
+              {!anySectionSelected &&
+                " No sections are selected yet, so only your butterfly prints."}
+            </p>
+
+            <h4>Sections to include</h4>
+            <div className="you-share-sections">
+              {(
+                [
+                  ["overview", "Energy intelligence overview"],
+                  ["about", "About you"],
+                  ["communication", "How to communicate with you"],
+                  ["support", "What helps on a hard day"],
+                  ["traits", "Accepted traits"],
+                  ["colorMeanings", "Color meanings"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="you-share-check">
+                  <input
+                    type="checkbox"
+                    checked={sections[key]}
+                    disabled={key === "overview" && (personalIntel?.overview.length ?? 0) === 0}
+                    onChange={(e) => setSections({ ...sections, [key]: e.target.checked })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <div className="you-share-create">
+              <div className="field">
+                <label htmlFor="you-share-ttl">Link lifetime</label>
+                <select
+                  id="you-share-ttl"
+                  value={ttl}
+                  aria-describedby={ttl === "permanent" ? "you-share-permanent-note" : undefined}
+                  onChange={(e) => setTtl(e.target.value as typeof ttl)}
+                >
+                  <option value="day">1 day</option>
+                  <option value="month">30 days</option>
+                  <option value="quarter">90 days</option>
+                  <option value="permanent">Permanent, until revoked</option>
+                </select>
+              </div>
+              {ttl === "permanent" && (
+                <p id="you-share-permanent-note" className="muted you-print-note">
+                  A permanent link keeps the selected plaintext available until you revoke it or
+                  delete your account.
+                </p>
+              )}
+              <button type="button" className="btn accent" onClick={() => void createShare()}>
+                Create share link
+              </button>
+            </div>
+            {newLink && (
+              <div className="you-new-link">
+                <code>{newLink}</code>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(newLink).then(() => setCopied(true));
+                  }}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+                <p className="muted">
+                  Anyone with this link can view the snapshot{" "}
+                  {newLinkIsPermanent
+                    ? "until you revoke it or delete your account"
+                    : "until it expires or you revoke it"}
+                  . You can copy it again from Your links on this device.
+                </p>
+              </div>
+            )}
+            {shares.length > 0 && (
+              <>
+                <h4>Your links</h4>
+                <ul className="you-share-list">
+                  {shares.map((s) => {
+                    const cachedToken = !s.revoked ? readShareToken(s.id) : null;
+                    return (
+                      <li key={s.id} className="you-share-row">
+                        <span>
+                          Created {new Date(s.createdAt).toLocaleDateString()} ·{" "}
+                          {s.expiresAt
+                            ? `expires ${new Date(s.expiresAt).toLocaleDateString()}`
+                            : "permanent until revoked"}
+                          {s.revoked ? " · revoked" : ""}
+                        </span>
+                        {!s.revoked && (
+                          <span className="you-share-row-actions">
+                            {cachedToken ? (
+                              <button
+                                type="button"
+                                className="linkish"
+                                onClick={() => copyShareLink(s.id)}
+                              >
+                                {copiedShareId === s.id ? "Copied" : "Copy link"}
+                              </button>
+                            ) : (
+                              <span className="muted you-share-row-note">
+                                Link only on the device that created it
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="linkish"
+                              onClick={() => void revokeShare(s.id)}
+                            >
+                              Revoke
+                            </button>
                           </span>
                         )}
-                        <button
-                          type="button"
-                          className="linkish"
-                          onClick={() => void revokeShare(s.id)}
-                        >
-                          Revoke
-                        </button>
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </div>
+        </details>
       </section>
 
       {/* Print-only profile: the PDF is this document via the browser's print dialog. */}
