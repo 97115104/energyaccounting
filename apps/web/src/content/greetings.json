@@ -109,7 +109,7 @@
       "anonymous": "Wombat poop is cube-shaped. You needed to know.",
       "source": {
         "label": "National Geographic",
-        "url": "https://www.nationalgeographic.com/animals/article/why-does-wombat-poop-cube-shaped-scientists-narrow-in-on-the-answer"
+        "url": "https://www.nationalgeographic.com/animals/article/wombat-poop-cube-why-is-it-square-shaped"
       }
     },
     {
@@ -156,8 +156,8 @@
       "named": "Some caterpillars drum a secret beat so ants adopt them, {name}.",
       "anonymous": "Some caterpillars drum a secret beat so ants adopt them.",
       "source": {
-        "label": "Science",
-        "url": "https://www.science.org/content/article/caterpillar-uses-vibrations-summon-army-ant-bodyguards"
+        "label": "Science News",
+        "url": "https://www.sciencenews.org/article/caterpillar-noise-tricks-ants-service"
       }
     },
     {
@@ -165,15 +165,15 @@
       "anonymous": "Crows remember faces for years. Be nice to crows.",
       "source": {
         "label": "Univ. of Washington",
-        "url": "https://www.washington.edu/news/2011/09/13/crows-can-distinguish-faces-in-a-crowd/"
+        "url": "https://urban.uw.edu/news/crows-hold-grudges-against-individual-humans-for-up-to-17-years/"
       }
     },
     {
       "named": "Bananas are berries, {name}. Strawberries are not berries.",
       "anonymous": "Bananas are berries. Strawberries are not berries.",
       "source": {
-        "label": "Britannica",
-        "url": "https://www.britannica.com/story/is-a-banana-a-berry"
+        "label": "McGill OSS",
+        "url": "https://www.mcgill.ca/oss/article/did-you-know/bananas-are-berries-raspberries-are-not"
       }
     },
     {
@@ -181,7 +181,7 @@
       "anonymous": "Sharks are older than trees, and older than Saturn's rings.",
       "source": {
         "label": "Natural History Museum",
-        "url": "https://www.nhm.ac.uk/discover/how-old-are-sharks.html"
+        "url": "https://www.nhm.ac.uk/discover/shark-evolution-a-450-million-year-timeline.html"
       }
     },
     {
@@ -189,7 +189,7 @@
       "anonymous": "Tooth enamel is the hardest substance your body makes.",
       "source": {
         "label": "Cleveland Clinic",
-        "url": "https://my.clevelandclinic.org/health/body/22458-tooth-enamel"
+        "url": "https://my.clevelandclinic.org/health/body/24798-tooth-enamel"
       }
     },
     {
@@ -220,16 +220,16 @@
       "named": "Butterflies taste with their feet, {name}.",
       "anonymous": "Butterflies taste with their feet.",
       "source": {
-        "label": "Smithsonian",
-        "url": "https://www.si.edu/spotlight/buginfo/butterfly"
+        "label": "Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Butterfly#Senses"
       }
     },
     {
       "named": "{name}, monarchs navigate thousands of miles with a sun compass in their antennae.",
       "anonymous": "Monarchs navigate thousands of miles with a sun compass in their antennae.",
       "source": {
-        "label": "Science",
-        "url": "https://www.science.org/doi/10.1126/science.1176221"
+        "label": "Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Monarch_butterfly_migration"
       }
     },
     {
@@ -253,7 +253,7 @@
       "anonymous": "Morpho wings are not blue pigment. The color is built from microscopic structure.",
       "source": {
         "label": "Natural History Museum",
-        "url": "https://www.nhm.ac.uk/discover/how-do-butterflies-get-their-colour.html"
+        "url": "https://www.nhm.ac.uk/discover/spotlight-blue-morpho.html"
       }
     },
     {

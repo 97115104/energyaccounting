@@ -546,9 +546,10 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         completed: l.completed,
       }));
       // Amendments to a closed day record what actually happened, so the
-      // live capacity guard does not apply to them.
+      // live capacity guard does not apply to them. Deposits restore energy
+      // and never compete for the finite use-energy supply.
       const avail = availableCapacity(day.openingBalance, allocatable);
-      if (day.phase !== "closed" && planned > avail) {
+      if (day.phase !== "closed" && body.side === "withdrawal" && planned > avail) {
         set.status = 400;
         return {
           error: `That uses ${planned} points, and only ${avail} remain available to allocate.`,

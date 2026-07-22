@@ -58,7 +58,27 @@ describe("energy balance math", () => {
     ];
     expect(reservedCapacity(tasks)).toBe(35);
     expect(availableCapacity(100, tasks)).toBe(65);
-    expect(completedFreedEnergy(tasks)).toBe(30);
+    // Completed deposits do not count as freed reservation (they never reserved).
+    expect(completedFreedEnergy(tasks)).toBe(0);
+  });
+
+  test("incomplete deposits do not reserve the daily supply", () => {
+    const tasks = [
+      { side: "withdrawal" as const, planned: 80, actual: null, completed: false },
+      { side: "deposit" as const, planned: 20, actual: null, completed: false },
+    ];
+    expect(reservedCapacity(tasks)).toBe(80);
+    expect(availableCapacity(100, tasks)).toBe(20);
+  });
+
+  test("completed withdrawals free reserved capacity", () => {
+    const tasks = [
+      { side: "withdrawal" as const, planned: 40, actual: null, completed: true },
+      { side: "withdrawal" as const, planned: 25, actual: null, completed: false },
+    ];
+    expect(reservedCapacity(tasks)).toBe(25);
+    expect(availableCapacity(100, tasks)).toBe(75);
+    expect(completedFreedEnergy(tasks)).toBe(40);
   });
 
   test("withdrawal heavy when withdrawals exceed deposits", () => {

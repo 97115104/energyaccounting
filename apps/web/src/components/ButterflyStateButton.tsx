@@ -15,7 +15,7 @@ export function ButterflyStateButton({ state, expanded, onOpen }: Props) {
   return (
     <button
       type="button"
-      className="greeting-state muted"
+      className="greeting-state"
       aria-haspopup="dialog"
       aria-expanded={expanded}
       title="What this means"

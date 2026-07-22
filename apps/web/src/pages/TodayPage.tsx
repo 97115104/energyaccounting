@@ -1072,8 +1072,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const dek = getSessionDek();
     const targetDayId = dayId ?? day?.id;
     if (!dek || !targetDayId) return false;
-    // Closed-day amendments record what happened; capacity only limits live planning.
-    if (!dayId && day && day.phase !== "closed" && cost > day.availableCapacity) {
+    // Closed-day amendments record what happened; capacity only limits live
+    // withdrawal planning. Deposits restore energy and stay plannable.
+    if (
+      !dayId &&
+      day &&
+      day.phase !== "closed" &&
+      side === "withdrawal" &&
+      cost > day.availableCapacity
+    ) {
       setError(
         `That uses ${cost} points, and only ${day.availableCapacity} remain available to allocate.`,
       );
@@ -2170,6 +2177,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                         s.typicalCost,
                         day.availableCapacity,
                         day.phase,
+                        draftSide,
                       );
                       const busy = addingRecentId === s.id;
                       const reasonId = reason ? `recent-reason-${s.id}` : undefined;
@@ -2804,6 +2812,7 @@ function Column(props: {
                 s.typicalCost,
                 props.availableCapacity,
                 props.phase,
+                props.side,
               );
               const reasonId = reason ? `${props.droppableId}-reason-${s.id}` : undefined;
               const busy = props.addingRecentId === s.id;

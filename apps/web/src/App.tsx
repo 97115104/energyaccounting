@@ -102,7 +102,7 @@ export function App() {
     return hasReturningFlag() ? "login" : "register";
   });
   // One fun fact per visit under the signed-out welcome, stable across renders.
-  const [welcomeFact] = useState(() => randomFact().text);
+  const [welcomeFact] = useState(() => randomFact());
   const [stateExplainOpen, setStateExplainOpen] = useState(false);
   const loc = useLocation();
   const navigate = useNavigate();
@@ -310,46 +310,60 @@ export function App() {
           {authed ? (
             <>
               <div className="greeting-row">
-                {identity && (
-                  <Link
-                    to="/you"
-                    className="greeting-seal"
-                    title={`Today: ${butterflyState.label}`}
-                    aria-label={`Your butterfly, today: ${butterflyState.label}. Open You.`}
-                  >
-                    <NeuroMe
-                      identity={identity}
-                      state={butterflyState}
-                      size={65}
-                      decorative
-                    />
-                  </Link>
-                )}
-                <div className="greeting-text">
-                  {/* Wordmark lives in the text column so it aligns over the
-                      greeting, leaving the seal alone on the left. */}
-                  <p className="wordmark">Your Energy Matters</p>
-                  <h1
-                    className="brand greeting"
-                    key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
-                  >
-                    {greeting?.text}
-                  </h1>
+                {/* Wordmark sits over the quote only; seal centers on the h1. */}
+                <p className="wordmark">Your Energy Matters</p>
+                <div className="greeting-seal-col">
+                  {identity && (
+                    <Link
+                      to="/you"
+                      className="greeting-seal"
+                      title={`Today: ${butterflyState.label}`}
+                      aria-label={`Your butterfly, today: ${butterflyState.label}. Open You.`}
+                    >
+                      <NeuroMe
+                        identity={identity}
+                        state={butterflyState}
+                        size={65}
+                        decorative
+                      />
+                    </Link>
+                  )}
                   <ButterflyStateButton
                     state={butterflyState}
                     expanded={stateExplainOpen}
                     onOpen={() => setStateExplainOpen(true)}
                   />
-                  {greeting?.factSource && (
+                </div>
+                <div className="greeting-quote">
+                  {greeting?.factSource ? (
                     <a
-                      className="greeting-source"
+                      className="greeting-quote-card greeting-quote-card--link"
                       href={greeting.factSource.url}
                       target="_blank"
                       rel="noreferrer"
+                      aria-label={`Fun fact: ${greeting.text}. Source: ${greeting.factSource.label}.`}
+                      title={`Source: ${greeting.factSource.label}`}
                     >
-                      Source: {greeting.factSource.label}
-                      <span aria-hidden="true"> ↗</span>
+                      <span
+                        className="brand greeting"
+                        key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
+                      >
+                        {greeting.text}
+                      </span>
+                      <span className="greeting-fact-hint" aria-hidden="true">
+                        Source: {greeting.factSource.label}
+                        <span aria-hidden="true"> ↗</span>
+                      </span>
                     </a>
+                  ) : (
+                    <div className="greeting-quote-card">
+                      <h1
+                        className="brand greeting"
+                        key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
+                      >
+                        {greeting?.text}
+                      </h1>
+                    </div>
                   )}
                 </div>
               </div>
@@ -370,7 +384,20 @@ export function App() {
                   text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"}
                 />
               </h1>
-              <p className="welcome-fact">Did you know… {welcomeFact}</p>
+              <a
+                className="welcome-fact-card"
+                href={welcomeFact.source.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Fun fact: ${welcomeFact.text}. Source: ${welcomeFact.source.label}.`}
+                title={`Source: ${welcomeFact.source.label}`}
+              >
+                <span className="welcome-fact">Did you know… {welcomeFact.text}</span>
+                <span className="greeting-fact-hint" aria-hidden="true">
+                  Source: {welcomeFact.source.label}
+                  <span aria-hidden="true"> ↗</span>
+                </span>
+              </a>
             </>
           )}
         </div>

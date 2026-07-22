@@ -436,7 +436,7 @@ html[data-weather="thunder"] .sky-layer {
 /* Auth welcome: Lexend like greetings, sized for a form header not a billboard. */
 .top-bar-centered .brand-welcome {
   font-family: var(--display);
-  font-size: clamp(1.2rem, 3.2vw, 1.75rem);
+  font-size: clamp(1.4rem, 3.8vw, 2rem);
   font-weight: 500;
   text-align: left;
   line-height: 1.2;
@@ -466,7 +466,7 @@ html[data-weather="thunder"] .sky-layer {
   }
 
   .top-bar-centered .brand-welcome {
-    font-size: clamp(1.1rem, 4.8vw, 1.35rem);
+    font-size: clamp(1.25rem, 5.2vw, 1.55rem);
   }
 
   .top-bar-centered .welcome-fact {
@@ -499,17 +499,18 @@ html[data-weather="thunder"] .sky-layer {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 0;
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.15s ease, transform 0.12s ease;
+  transition: background 0.15s ease, transform 0.12s ease, color 0.15s ease;
 }
 
-.icon-btn:hover {
-  background: rgba(42, 34, 8, 0.08);
-  background: color-mix(in srgb, var(--ink) 10%, var(--panel));
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
 }
 
 .icon-btn:active {
@@ -561,7 +562,7 @@ html[data-weather="thunder"] .sky-layer {
 /* Signed-in header: small wordmark above a time-of-day greeting headline. */
 .wordmark {
   font-family: var(--display);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -570,21 +571,127 @@ html[data-weather="thunder"] .sky-layer {
   animation: greet-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-/* Small reference link under a fun-fact greeting, so claims are verifiable. */
+/* Shared quiet outbound cite (Energy Guide, etc.). */
 .greeting-source {
   display: inline-flex;
   align-items: center;
-  margin-top: 0.3rem;
+  margin-top: 0.25rem;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--muted);
+  opacity: 0.65;
   text-decoration: none;
 }
 
 .greeting-source:hover,
 .greeting-source:focus-visible {
   color: var(--accent);
+  opacity: 1;
   text-decoration: underline;
+}
+
+/* Greeting quote: plain text stack; facts stay outbound links. */
+.greeting-quote-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
+  max-width: min(28rem, 100%);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none !important;
+}
+
+.greeting-quote-card,
+.greeting-quote-card:hover,
+.greeting-quote-card:focus,
+.greeting-quote-card:focus-visible,
+.greeting-quote-card * {
+  text-decoration: none !important;
+}
+
+.greeting-quote-card .brand.greeting {
+  display: block;
+  max-width: none;
+  animation: none;
+  text-decoration: none !important;
+}
+
+.greeting-quote-card--link {
+  color: inherit;
+  cursor: pointer;
+}
+
+.greeting-quote-card--link:hover .greeting-fact-hint,
+.greeting-quote-card--link:focus-visible .greeting-fact-hint {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.greeting-fact-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  opacity: 0.7;
+  text-decoration: none !important;
+}
+
+.greeting-quote-card .greeting-fact-hint {
+  align-self: flex-end;
+}
+
+/* Auth welcome fact: quiet text link, no plaque (signed-in header keeps its card). */
+.welcome-fact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  max-width: 34rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none !important;
+  cursor: pointer;
+}
+
+.welcome-fact-card,
+.welcome-fact-card:hover,
+.welcome-fact-card:focus-visible,
+.welcome-fact-card * {
+  text-decoration: none !important;
+}
+
+.welcome-fact-card .welcome-fact {
+  margin: 0;
+}
+
+.welcome-fact-card .greeting-fact-hint {
+  opacity: 0.55;
+  font-weight: 500;
+}
+
+.welcome-fact-card:hover .greeting-fact-hint,
+.welcome-fact-card:focus-visible .greeting-fact-hint {
+  color: var(--accent);
+  opacity: 0.9;
 }
 
 /* Greeting is the page h1 but shouldn't dominate like the product title did. */
@@ -2174,7 +2281,7 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   padding-right: 2.2rem;
 }
 
-/* Tips FAB: frosted-glass circular button, understated Apple-style. */
+/* Tips FAB: quiet circular control, no frosted plaque. */
 .tips-fab {
   position: fixed;
   right: 1rem;
@@ -2187,27 +2294,26 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   width: 45px;
   height: 45px;
   border-radius: 50% !important;
-  border: 1px solid rgba(128, 128, 160, 0.45);
-  /* The solid fallback comes first because color-mix is progressive enhancement. */
-  background: rgba(255, 253, 243, 0.82);
-  background: color-mix(in srgb, var(--panel) 78%, transparent);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
-  transition: transform 0.15s ease, box-shadow 0.25s ease;
+  box-shadow: none;
+  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
 html[data-theme="night"] .tips-fab {
-  background: rgba(40, 48, 80, 0.88);
-  background: color-mix(in srgb, var(--panel) 88%, #fff 6%);
-  border-color: rgba(200, 184, 255, 0.55);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
-.tips-fab:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+.tips-fab:hover,
+.tips-fab:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: none;
 }
 
 .tips-fab:active {
@@ -3485,45 +3591,94 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   }
 }
 
-/* Header greeting with the NeuroMe seal. */
+/* Header greeting with the NeuroMe seal.
+   Wordmark spans the quote column; seal + quote stretch to the same height. */
 .greeting-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.85rem;
+  align-items: stretch;
+}
+
+.greeting-row .wordmark {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* Seal + today's pose: stacked under the mark, no plaque chrome. */
+.greeting-seal-col {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.85rem;
+  justify-content: center;
+  gap: 0.3rem;
+  align-self: stretch;
+  min-width: 6.5rem;
+  min-height: 100%;
+  padding: 0.25rem 0.35rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Header seal: no disc fill; keep a dotted outer ring around the mark. */
+.greeting-seal-col .neurome-disc {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--ink) 42%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 2.5 3.25;
+}
+
+.greeting-quote {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  align-self: stretch;
+}
+
+.greeting-quote .greeting-quote-card {
+  flex: 1;
 }
 
 .greeting-seal {
   display: inline-flex;
-  border-radius: 50%;
+  border-radius: 50% !important;
   transition: transform 0.2s ease;
 }
 
 .greeting-seal:hover,
 .greeting-seal:focus-visible {
-  transform: scale(1.06);
+  transform: scale(1.05);
 }
 
 .greeting-state {
-  margin: 0.15rem 0 0;
-  font-size: 0.9rem;
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  padding: 0;
+  margin: 0;
+  padding: 0.2rem 0.15rem 0;
   border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  border-radius: 0 !important;
   background: transparent;
-  color: inherit;
+  display: block;
+  width: 100%;
+  max-width: 5.5rem;
   font-family: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-align: center;
+  color: var(--muted);
   cursor: pointer;
 }
 
 .greeting-state:hover,
 .greeting-state:focus-visible {
-  color: inherit;
+  color: var(--accent);
 }
 
 .butterfly-state-modal {
@@ -4128,12 +4283,6 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   grid-column: 1 / -1;
   margin: 0;
   font-size: 0.8rem;
-}
-
-/* Greeting text column: keep the source link aligned under the state. */
-.greeting-text {
-  display: flex;
-  flex-direction: column;
 }
 
 .you-new-link {

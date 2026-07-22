@@ -66,19 +66,24 @@ export function closingBalance(
   return opening + depositTotal - withdrawalTotal;
 }
 
-/** Planned cost still locked in incomplete lines (finite daily supply). */
+/** Planned withdrawal cost still locked in incomplete lines (finite daily supply).
+ * Deposits restore energy and must stay plannable even when uses are fully booked. */
 export function reservedCapacity(tasks: AllocatableTask[]): number {
   let sum = 0;
   for (const t of tasks) {
-    if (t.completed) continue;
+    if (t.completed || t.side !== "withdrawal") continue;
     sum += clampCost(t.planned);
   }
   return sum;
 }
 
-/** Planned points released by completed work, tracked separately from balance. */
+/** Planned withdrawal points released by completed work, tracked separately from balance. */
 export function completedFreedEnergy(tasks: AllocatableTask[]): number {
-  return tasks.reduce((sum, task) => sum + (task.completed ? clampCost(task.planned) : 0), 0);
+  return tasks.reduce(
+    (sum, task) =>
+      sum + (task.completed && task.side === "withdrawal" ? clampCost(task.planned) : 0),
+    0,
+  );
 }
 
 /** Points free to allocate to new tasks after incomplete reservations. */

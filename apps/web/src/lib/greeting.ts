@@ -29,7 +29,11 @@ type Pool = { named: string[]; anonymous: string[] };
 
 export type FactSource = { label: string; url: string };
 
-type FactEntry = { named: string; anonymous: string; source: FactSource };
+type FactEntry = {
+  named: string;
+  anonymous: string;
+  source: FactSource;
+};
 
 const CLASSIC = GREETINGS_JSON.classic as Record<Slot, Pool>;
 const HUMOR = GREETINGS_JSON.humor as Pool;
@@ -78,10 +82,7 @@ export function greetingDetailFor(
     const index = Math.floor(visitSeed * FACTS.length) % FACTS.length;
     const entry = FACTS[index] ?? FACTS[0]!;
     // Facts are did-you-knows; trailing ", {name}" reads as nonsense.
-    return {
-      text: entry.anonymous,
-      factSource: entry.source,
-    };
+    return { text: entry.anonymous, factSource: entry.source };
   }
 
   const pool = style === "humor" ? HUMOR : CLASSIC[slot];

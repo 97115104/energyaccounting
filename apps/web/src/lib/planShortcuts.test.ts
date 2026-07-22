@@ -16,4 +16,8 @@ describe("recentDisabledReason", () => {
   test("never blocks closed-day amendments", () => {
     expect(recentDisabledReason(90, 0, "closed")).toBeNull();
   });
+
+  test("never blocks deposits: adds restore energy, they do not reserve it", () => {
+    expect(recentDisabledReason(90, 0, "plan", "deposit")).toBeNull();
+  });
 });

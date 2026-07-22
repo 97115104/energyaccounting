@@ -5,14 +5,15 @@
 
 /**
  * Why a recent choice cannot be added right now, or null when it can.
- * Only live (non-closed) days enforce capacity; closed-day amendments
- * record what happened and are never blocked.
+ * Only live (non-closed) withdrawal planning enforces capacity; deposits
+ * restore energy and stay open, and closed-day amendments are never blocked.
  */
 export function recentDisabledReason(
   cost: number,
   availableCapacity: number,
   phase: string,
+  side: "deposit" | "withdrawal" = "withdrawal",
 ): string | null {
-  if (phase === "closed" || cost <= availableCapacity) return null;
+  if (phase === "closed" || side === "deposit" || cost <= availableCapacity) return null;
   return `Needs ${cost} points, only ${availableCapacity} available`;
 }
