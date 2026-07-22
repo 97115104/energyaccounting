@@ -2700,12 +2700,23 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </h2>
             {closedStats.length >= 2 ? (
               <>
-                <TrendSpark
-                  values={closedStats.slice(-30).map((p) => p.closingBalance)}
-                  className="trend-spark trend-spark-large"
-                />
+                <button
+                  type="button"
+                  className="trend-spark-link"
+                  aria-label="Open dashboard"
+                  onClick={() => {
+                    setTrendsOpen(false);
+                    navigate("/dashboard");
+                  }}
+                >
+                  <TrendSpark
+                    values={closedStats.slice(-30).map((p) => p.closingBalance)}
+                    className="trend-spark trend-spark-large"
+                  />
+                </button>
                 <p className="muted trend-spark-caption">
                   Energy remaining at close, last {Math.min(30, closedStats.length)} closed days.
+                  Select the chart to open the dashboard.
                 </p>
                 <div className="trend-rows">
                   {trendMetrics.map((m) => (
@@ -2738,18 +2749,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 Close a few more days and your patterns will start to appear here.
               </p>
             )}
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn accent"
-                onClick={() => {
-                  setTrendsOpen(false);
-                  navigate("/dashboard");
-                }}
-              >
-                Open dashboard
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -2872,7 +2871,10 @@ function GuideCard(props: {
           <div className="guide-why">
             <BecauseList reasons={item.because} />
             {item.research && (
-              <p className="guide-research">Research basis: {item.research}</p>
+              <p className="guide-research">
+                <span className="guide-research-label">Research basis</span>
+                {item.research}
+              </p>
             )}
           </div>
         </HelpTip>

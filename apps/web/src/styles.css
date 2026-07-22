@@ -1871,7 +1871,30 @@ html[data-theme="night"] .btn.secondary {
 
 .trend-spark-large {
   height: 64px;
-  margin-top: 0.5rem;
+  margin-top: 0;
+}
+
+.trend-spark-link {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0.15rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trend-spark-link:hover .trend-spark {
+  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
+}
+
+.trend-spark-link:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
 }
 
 .trend-spark-caption {
@@ -3055,12 +3078,14 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   overflow: visible;
 }
 
-/* The "Why this?" tip body: personal signals first, research second. */
+/* The "Why this?" tip body: personal signals first (ink), research second (muted). */
 .guide-why {
   margin: 0;
   padding: 0;
   border: 0;
   font-size: inherit;
+  color: var(--ink);
+  font-weight: 400;
 }
 
 .guide-why ul {
@@ -3071,17 +3096,35 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 .guide-why > p,
 .guide-why li {
   margin: 0;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--ink);
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 .guide-why li + li {
-  margin-top: 0.2rem;
+  margin-top: 0.35rem;
 }
 
-.guide-research {
-  margin: 0.5rem 0 0;
+.guide-why .guide-research {
+  margin: 0.65rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 10px;
+  box-sizing: border-box;
   color: var(--muted);
+  font-size: 0.9em;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.guide-research-label {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted) 85%, var(--ink));
 }
 
 .guide-privacy {
