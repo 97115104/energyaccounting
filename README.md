@@ -61,8 +61,8 @@ bun run generate-more-invite-codes 10     # custom count
 ```
 
 Codes are 128-bit random values. The database (resolved via `DATA_DIR`, same as
-the server) stores only SHA-256 hashes; the plaintext codes are appended — never
-replaced — to a gitignored `invite-codes.md` checklist so you can check them off
+the server) stores only SHA-256 hashes; the plaintext codes are appended, never
+replaced, to a gitignored `invite-codes.md` checklist so you can check them off
 as they are handed out or used. Registration consumes a code atomically, so each
 code admits exactly one account.
 

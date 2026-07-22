@@ -3,7 +3,7 @@
  *
  * Stores only SHA-256 hashes in the server database (same DATA_DIR resolution
  * as the server) and appends the plaintext codes to invite-codes.md as a
- * markdown checklist — the file is the single plaintext copy and is gitignored.
+ * markdown checklist, the file is the single plaintext copy and is gitignored.
  *
  * Usage: bun scripts/generate-more-invite-codes.ts [count]   (default 50)
  */
@@ -19,7 +19,7 @@ import {
 const rawCount = process.argv[2] ?? "50";
 const count = Number(rawCount);
 if (!Number.isInteger(count) || count < 1 || count > 1000) {
-  console.error(`Invalid count "${rawCount}" — expected an integer between 1 and 1000.`);
+  console.error(`Invalid count "${rawCount}", expected an integer between 1 and 1000.`);
   process.exit(1);
 }
 

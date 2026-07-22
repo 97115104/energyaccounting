@@ -189,7 +189,7 @@ function isPolarAlwaysUp(lat: number, lon: number, now: Date): boolean {
 
 /**
  * Dawn / day / dusk / night from neighboring UTC rise/set pairs.
- * Polar answers only apply when no civil day offers times — a polar neighbor
+ * Polar answers only apply when no civil day offers times, a polar neighbor
  * must not override a real sunrise on the current day.
  */
 function periodFromSunTimes(lat: number, lon: number, now: Date): SkyPeriod | null {
@@ -241,7 +241,7 @@ function pickQuip(pool: string[], seed: string): string {
 /**
  * Short, lightly funny line about today's weather for the Today header.
  * Copy lives in content/weather-quips.json so pools can grow without
- * touching picker logic. Plain human voice — no energy-accounting jargon.
+ * touching picker logic. Plain human voice, no energy-accounting jargon.
  * Temps are Celsius.
  */
 export function weatherQuip(opts: {

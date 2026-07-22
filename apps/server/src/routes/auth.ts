@@ -72,8 +72,32 @@ function tokenFromRequest(request: Request): string | undefined {
   return parseCookie(request.headers.get("cookie"))[SESSION_COOKIE];
 }
 
+/** Live TOTP or a one-time recovery code (consumed on success). */
+async function verifyTotpOrRecovery(
+  user: typeof userTable.$inferSelect,
+  code: string | undefined,
+): Promise<boolean> {
+  if (!code) return false;
+  if (user.totpSecret && verifyTotp(user.totpSecret, code)) return true;
+  if (!user.recoveryCodesHash) return false;
+  try {
+    const hashes = JSON.parse(user.recoveryCodesHash) as string[];
+    const h = hashCode(code);
+    const idx = hashes.indexOf(h);
+    if (idx < 0) return false;
+    hashes.splice(idx, 1);
+    await db
+      .update(userTable)
+      .set({ recoveryCodesHash: JSON.stringify(hashes) })
+      .where(eq(userTable.id, user.id));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-// One generic message for malformed, unknown, and spent codes — no oracle for
+
+// One generic message for malformed, unknown, and spent codes, no oracle for
 // guessing which codes exist.
 const INVITE_ERROR = "Invite code is invalid or already used.";
 
@@ -240,31 +264,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         set.status = 401;
         return { error: "No pending TOTP challenge." };
       }
-      const secret = auth.user.totpSecret;
-      if (!secret || !verifyTotp(secret, body.code)) {
-        // recovery code path
-        let usedRecovery = false;
-        if (auth.user.recoveryCodesHash) {
-          try {
-            const hashes = JSON.parse(auth.user.recoveryCodesHash) as string[];
-            const h = hashCode(body.code);
-            const idx = hashes.indexOf(h);
-            if (idx >= 0) {
-              hashes.splice(idx, 1);
-              await db
-                .update(userTable)
-                .set({ recoveryCodesHash: JSON.stringify(hashes) })
-                .where(eq(userTable.id, auth.user.id));
-              usedRecovery = true;
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-        if (!usedRecovery) {
-          set.status = 401;
-          return { error: "Invalid authenticator code." };
-        }
+      if (!(await verifyTotpOrRecovery(auth.user, body.code))) {
+        set.status = 401;
+        return { error: "Invalid authenticator code." };
       }
       await db
         .update(sessionTable)
@@ -304,22 +306,26 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
   // Home Screen icon: must be a same-origin URL (iOS ignores blob/data hrefs).
   .get("/touch-icon", async ({ request, set }) => {
     const auth = await sessionFromCookie(tokenFromRequest(request));
-    set.headers["Content-Type"] = "image/png";
     set.headers["Cache-Control"] = "private, max-age=300";
     if (auth && !auth.pendingTotp) {
       try {
         const raw = auth.user.identityJson
           ? (JSON.parse(auth.user.identityJson) as unknown)
           : null;
-        return renderIdentityTouchIcon(raw, auth.user.id);
-      } catch {
-        // Fall through to the brand tile if identity is corrupt.
+        const png = renderIdentityTouchIcon(raw, auth.user.id);
+        set.headers["Content-Type"] = "image/png";
+        return png;
+      } catch (err) {
+        console.error("touch-icon identity render failed", err);
       }
     }
     const brand = await brandTouchIconBytes();
-    if (brand) return brand;
+    if (brand) {
+      set.headers["Content-Type"] = "image/png";
+      return brand;
+    }
     set.status = 404;
-    return new Uint8Array();
+    return { error: "Touch icon unavailable." };
   })
   .post(
     "/totp/setup",
@@ -534,9 +540,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         return { error: "Password incorrect." };
       }
       if (auth.user.totpEnabled) {
-        if (!auth.user.totpSecret || !body.code || !verifyTotp(auth.user.totpSecret, body.code)) {
+        if (!(await verifyTotpOrRecovery(auth.user, body.code))) {
           set.status = 400;
-          return { error: "Authenticator code invalid." };
+          return { error: "Authenticator or recovery code invalid." };
         }
       }
       if (email === auth.user.email) {
@@ -596,9 +602,9 @@ export const authRoutes = new Elysia({ prefix: "/api/auth" })
         return { error: "Type DELETE to confirm." };
       }
       if (auth.user.totpEnabled) {
-        if (!auth.user.totpSecret || !body.code || !verifyTotp(auth.user.totpSecret, body.code)) {
+        if (!(await verifyTotpOrRecovery(auth.user, body.code))) {
           set.status = 400;
-          return { error: "Authenticator code invalid." };
+          return { error: "Authenticator or recovery code invalid." };
         }
       }
       // One row delete removes everything: sessions, days, task lines,

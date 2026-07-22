@@ -143,7 +143,7 @@ function corpusBody(entry: CorpusEntry, ctx: GuideContext): string {
   const named = ctx.firstName?.trim() ? `, ${ctx.firstName.trim()}` : "";
   return entry.body
     .replaceAll("{firstName}", named)
-    .replaceAll("{familiarRestorer}", ctx.familiarRestorer ?? "a familiar restorative activity")
+    .replaceAll("{familiarRestorer}", ctx.familiarRestorer ?? "a familiar activity that adds energy")
     .replaceAll("{heavyWeekday}", ctx.heavyWeekday ?? "This weekday");
 }
 
@@ -159,8 +159,8 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     items.push({
       id: "event:freed",
       kind: "event",
-      title: "Capacity opened up",
-      body: `You freed ${ctx.justFreed} points. Spend them on something restorative, or leave them open; either choice is valid.`,
+      title: "Points opened up",
+      body: `You freed ${ctx.justFreed} points. You can use them on something that adds energy, or leave them open.`,
       because: [`You just completed a task that reserved ${ctx.justFreed} points.`],
       personalized: true,
       score: 100,
@@ -203,15 +203,15 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
         suggestion.title ??
         (isUse
           ? suggestion.familiar
-            ? "A familiar way to use energy well"
-            : "A healthy way to use energy"
+            ? "A familiar way to use energy"
+            : "A way to use energy that fits now"
           : suggestion.familiar
             ? "A familiar way to add energy"
             : "A way to add energy that fits now"),
       body: suggestion.alternative
         ? `${suggestion.label}, or ${suggestion.alternative.label.toLocaleLowerCase()} if that fits better. Either counts.`
         : isUse
-          ? `${suggestion.label} uses ${suggestion.typicalCost} of the ${ctx.available} points still open — a healthy way to spend some of today's capacity.`
+          ? `${suggestion.label} would use ${suggestion.typicalCost} of the ${ctx.available} points still open today.`
           : `${suggestion.label} fits the ${ctx.available} points available now.`,
       because: [suggestion.reason],
       // Familiar items are personal inference, not research; keep the

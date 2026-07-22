@@ -1,6 +1,6 @@
 /**
  * Pure SVG tiles for the person's NeuroMe mark. Safe for server (Resvg) and
- * browser (data-URL favicons) — no DOM APIs.
+ * browser (data-URL favicons), no DOM APIs.
  */
 
 import { buildWingRender } from "./butterflyGeometry";

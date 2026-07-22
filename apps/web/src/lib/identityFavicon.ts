@@ -2,8 +2,9 @@
  * Apply NeuroMe mark icons in the browser.
  *
  * Tab favicons use an SVG data URL. Apple touch / Home Screen icons must be a
- * real same-origin URL — iOS ignores blob: and data: for Add to Home Screen —
- * so we point at /api/auth/touch-icon, which rasterizes the same mark server-side.
+ * real same-origin URL, because iOS ignores blob: and data: for Add to Home
+ * Screen, so we point at /api/auth/touch-icon, which rasterizes the same mark
+ * server-side.
  */
 
 import { normalizeIdentity, type IdentityConfig } from "./identity";
@@ -47,7 +48,7 @@ export function applyBrandFavicon(theme: "day" | "night"): void {
   ) as HTMLLinkElement | null;
   if (apple) {
     appleIconVersion = null;
-    apple.href = touchIconHref("brand");
+    apple.href = "/apple-touch-icon.png";
   }
 }
 

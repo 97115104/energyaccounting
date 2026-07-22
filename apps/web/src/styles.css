@@ -5,7 +5,7 @@ html[data-theme="day"] {
   --ink: #2a2208;
   --muted: #5c4e20;
   --panel: #fffdf3;
-  /* Nested inset cards (stats, weather, tasks) — softer than pure white. */
+  /* Nested inset cards (stats, weather, tasks), softer than pure white. */
   --surface: #fffef8;
   /* Soft, translucent hairlines so panels blend into the sky. */
   --line: rgba(42, 34, 8, 0.22);
@@ -1116,8 +1116,6 @@ html[data-theme="night"] .btn.secondary {
   padding: 0.65rem 0.75rem;
   margin-bottom: 0.5rem;
   min-height: 52px;
-  touch-action: none;
-  cursor: grab;
   transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
@@ -2588,7 +2586,7 @@ html[data-theme="night"] .guide-card {
   margin-top: 0.55rem;
 }
 
-/* Soft intelligence suggestion — matches column "past days" picks, not a CTA brick. */
+/* Soft intelligence suggestion, matches column "past days" picks, not a CTA brick. */
 .guide-suggest-btn {
   appearance: none;
   display: grid;
@@ -2682,7 +2680,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   padding: 0.35rem 0;
 }
 
-/* "Why this?" floats like HelpTip — do not grow the guide panel. */
+/* "Why this?" floats like HelpTip, do not grow the guide panel. */
 .guide-card-meta .help-tip {
   margin-left: 0;
 }

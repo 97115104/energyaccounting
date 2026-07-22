@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-// 16 random bytes = 128 bits of entropy per code — unguessable even against
+// 16 random bytes = 128 bits of entropy per code, unguessable even against
 // offline brute force of the stored SHA-256 hashes.
 export const INVITE_CODE_BYTES = 16;
 const NORMALIZED_LENGTH = INVITE_CODE_BYTES * 2; // hex chars
@@ -18,7 +18,7 @@ export function isWellFormedInviteCode(code: string): boolean {
   return normalizeInviteCode(code).length === NORMALIZED_LENGTH;
 }
 
-/** Dash-grouped hex, e.g. "3f9a-1c…" — easier to read aloud and copy. */
+/** Dash-grouped hex, e.g. "3f9a-1c…", easier to read aloud and copy. */
 export function generateInviteCode(): string {
   const hex = randomBytes(INVITE_CODE_BYTES).toString("hex");
   return hex.match(/.{4}/g)!.join("-");

@@ -201,4 +201,54 @@ describe("POST /api/auth/email", () => {
     );
     expect(res.status).toBe(409);
   });
+
+  test("with TOTP enabled requires a code", async () => {
+    const { createHash } = await import("node:crypto");
+    const { generateTotpSecret } = await import("../lib/totp.ts");
+    const { userId, email, cookie } = await makeSession("email-totp-req");
+    const secret = generateTotpSecret();
+    await db
+      .update(userTable)
+      .set({
+        totpEnabled: true,
+        totpSecret: secret,
+        recoveryCodesHash: JSON.stringify([
+          createHash("sha256").update("recovery-unused".toLowerCase()).digest("hex"),
+        ]),
+      })
+      .where(eq(userTable.id, userId));
+    const res = await authRoutes.handle(
+      emailReq(cookie, { email: `new-${email}`, password: PASSWORD }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("with TOTP enabled accepts a recovery code", async () => {
+    const { createHash } = await import("node:crypto");
+    const { generateTotpSecret } = await import("../lib/totp.ts");
+    const { userId, email, cookie } = await makeSession("email-totp-rec");
+    const secret = generateTotpSecret();
+    const recovery = "abcd-efgh-ijkl";
+    await db
+      .update(userTable)
+      .set({
+        totpEnabled: true,
+        totpSecret: secret,
+        recoveryCodesHash: JSON.stringify([
+          createHash("sha256").update(recovery.toLowerCase()).digest("hex"),
+        ]),
+      })
+      .where(eq(userTable.id, userId));
+    const next = `recovered-${email}`;
+    const res = await authRoutes.handle(
+      emailReq(cookie, { email: next, password: PASSWORD, code: recovery }),
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { user: { email: string } };
+    expect(json.user.email).toBe(next.toLowerCase());
+    const row = await db.query.userTable.findFirst({
+      where: eq(userTable.id, userId),
+    });
+    expect(JSON.parse(row!.recoveryCodesHash!)).toEqual([]);
+  });
 });

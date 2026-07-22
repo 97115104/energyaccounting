@@ -25,7 +25,7 @@ function writeMap(map: Record<string, string>) {
   try {
     localStorage.setItem(KEY, JSON.stringify(map));
   } catch {
-    /* private mode / quota — Copy-later simply won't be available */
+    /* private mode / quota, Copy-later simply won't be available */
   }
 }
 

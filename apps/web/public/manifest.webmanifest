@@ -8,12 +8,6 @@
   "theme_color": "#12182e",
   "icons": [
     {
-      "src": "/api/auth/touch-icon",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",

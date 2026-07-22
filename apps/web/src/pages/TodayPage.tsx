@@ -1894,8 +1894,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onOpen={openTaskDetails}
           />
         </div>
-        <SiteFooter />
-
+        
       {(day.phase === "audit" || closed) && (
         <div className="panel" style={{ marginTop: "1rem" }}>
           <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Evening audit</h2>
@@ -1959,6 +1958,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
           </div>
         </div>
       )}
+
+      <SiteFooter />
 
       </div>
 

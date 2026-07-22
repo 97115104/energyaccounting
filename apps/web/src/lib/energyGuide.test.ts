@@ -173,7 +173,7 @@ describe("buildGuide", () => {
     }
   });
 
-  test("surplus capacity can recommend a healthy way to use energy", () => {
+  test("surplus capacity can recommend a way to use energy", () => {
     const guide = buildGuide(
       guideContext({
         available: 85,

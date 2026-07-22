@@ -18,10 +18,11 @@ describe("identityFaviconSvg", () => {
     }
   });
 
-  test("butterfly output includes wing gradients", () => {
-    const identity = normalizeIdentity({ symbol: "butterfly" }, "bf");
-    const svg = identityFaviconSvg(identity, "#12182e", 32);
-    expect(svg).toContain("linearGradient");
-    expect(svg).toContain("favicon-bf-fore");
+  test("identity favicon scales from the correct viewBox width and height", () => {
+    const identity = normalizeIdentity({ symbol: "butterfly" }, "vb");
+    const svg = identityFaviconSvg(identity, "#fff6c8", 180);
+    // Correct parse yields a non-zero scale and a translate that is not half-width.
+    expect(svg).toMatch(/scale\(0\.\d+\)/);
+    expect(svg).not.toMatch(/translate\(90\.00/);
   });
 });

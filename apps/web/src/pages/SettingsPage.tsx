@@ -289,10 +289,9 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             </div>
             {user.totpEnabled && (
               <div className="field">
-                <label htmlFor="email-code">Authenticator code</label>
+                <label htmlFor="email-code">Authenticator or recovery code</label>
                 <input
                   id="email-code"
-                  inputMode="numeric"
                   autoComplete="one-time-code"
                   value={emailCode}
                   onChange={(e) => setEmailCode(e.target.value)}
@@ -568,10 +567,10 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             </div>
             {user.totpEnabled && (
               <div className="field">
-                <label htmlFor="delete-code">Authenticator code</label>
+                <label htmlFor="delete-code">Authenticator or recovery code</label>
                 <input
                   id="delete-code"
-                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   value={deleteCode}
                   onChange={(e) => setDeleteCode(e.target.value)}
                 />

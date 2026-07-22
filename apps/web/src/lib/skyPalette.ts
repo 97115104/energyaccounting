@@ -19,7 +19,7 @@ export type SkyColors = {
   sunFace: string;
   sunHalo: string;
   panel: string;
-  /** Nested inset cards (stats, weather, task rows) — tracks sky with panels. */
+  /** Nested inset cards (stats, weather, task rows), tracks sky with panels. */
   surface: string;
   ink: string;
   muted: string;
@@ -122,7 +122,7 @@ const GOLDEN: SkyColors = {
   accent: "#d87830",
 };
 
-/** Sunset: muted peach — panels + ink soften together. */
+/** Sunset: muted peach, panels + ink soften together. */
 const DUSK: SkyColors = {
   bg0: "#ffe0bc",
   bg1: "#e8b090",

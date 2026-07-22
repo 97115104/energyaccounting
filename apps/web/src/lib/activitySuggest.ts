@@ -307,7 +307,7 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
         side: "withdrawal",
         label,
         typicalCost: candidate.typicalCost,
-        reason: `You still have ${ctx.available} points open. “${label}” is a familiar, sized way to use some of today's capacity well.${
+        reason: `You still have ${ctx.available} points open. “${label}” is a familiar option that usually costs ${candidate.typicalCost}.${
           difficultyKnown
             ? ` You usually rate it ${candidate.typicalDifficulty}/10 for difficulty.`
             : ""
