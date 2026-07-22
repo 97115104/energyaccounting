@@ -2140,13 +2140,6 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   }
 }
 
-.guide-card-actions .btn.accent {
-  min-height: 36px;
-  min-width: 36px;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.92rem;
-}
-
 .day-rhythm-status .help-tip-panel,
 .day-rhythm-panel > .help-tip .help-tip-panel {
   left: auto;
@@ -2359,13 +2352,82 @@ html[data-theme="night"] .guide-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.4rem;
-  margin-top: 0.35rem;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
 }
 
-.guide-card-actions .btn {
+/* Soft intelligence suggestion — matches column "past days" picks, not a CTA brick. */
+.guide-suggest-btn {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1.5px dotted color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
   text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.guide-suggest-btn:hover:not(:disabled),
+.guide-suggest-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.guide-suggest-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.guide-suggest-sparkle {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.guide-suggest-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.guide-suggest-cost {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.guide-suggest-cost-deposit {
+  color: var(--deposit);
+}
+
+.guide-suggest-cost-withdrawal {
+  color: var(--withdraw);
+}
+
+html[data-theme="night"] .guide-suggest-btn {
+  background: color-mix(in srgb, var(--panel) 45%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+}
+
+html[data-theme="night"] .guide-suggest-btn:hover:not(:disabled),
+html[data-theme="night"] .guide-suggest-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* Always under the action buttons, every breakpoint. */

@@ -26,6 +26,8 @@ export type ActivitySuggestion = {
   research: string;
   sourceUrl: string;
   familiar: boolean;
+  /** Defaults to deposit when omitted (legacy novel/movement picks). */
+  side?: "deposit" | "withdrawal";
   /** Playful card title override (movement families). */
   title?: string;
   /** Lower-impact alternative, always offered next to a movement dose. */
@@ -252,6 +254,7 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
           : "";
     ranked.push({
       id: `familiar:${candidate.id}`,
+      side: "deposit",
       label,
       typicalCost: candidate.typicalCost,
       reason: `You have used this to add energy ${candidate.useCount}×.${conditionReason}${
@@ -264,6 +267,57 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
       familiar: true,
       score,
     });
+  }
+
+  // Plenty of capacity and a light day: offer familiar ways to use energy
+  // healthily, in modest bites, so surplus does not sit idle by default.
+  const capacitySurplus =
+    ctx.available >= 55 || (ctx.available >= 40 && !ctx.withdrawalHeavy);
+  if (capacitySurplus) {
+    const maxHealthySpend = Math.min(ctx.available, 30);
+    for (const candidate of ctx.candidates) {
+      const label = candidate.label?.trim();
+      if (
+        candidate.side !== "withdrawal" ||
+        !label ||
+        existing.has(normalized(label)) ||
+        candidate.typicalCost > maxHealthySpend ||
+        candidate.typicalCost <= 0
+      ) {
+        continue;
+      }
+      if (!includePhysical && isPhysicalActivity(label)) continue;
+
+      let score = Math.min(candidate.useCount, 10) * 2;
+      if ((candidate.weekdayMask & weekday) !== 0) score += 6;
+      if (recentEnough(candidate.lastUsed, ctx.date)) score += 3;
+      const difficultyKnown =
+        (candidate.difficultyCount ?? 0) >= 3 && candidate.typicalDifficulty != null;
+      if (difficultyKnown) {
+        // Prefer sustainable effort when the day still has room.
+        const easeNudge = 6 - candidate.typicalDifficulty!;
+        score += easeNudge;
+      }
+      // Boost when almost nothing has been spent yet.
+      if (ctx.available >= 70) score += 4;
+      if (score <= 0) continue;
+
+      ranked.push({
+        id: `familiar-use:${candidate.id}`,
+        side: "withdrawal",
+        label,
+        typicalCost: candidate.typicalCost,
+        reason: `You still have ${ctx.available} points open. “${label}” is a familiar, sized way to use some of today's capacity well.${
+          difficultyKnown
+            ? ` You usually rate it ${candidate.typicalDifficulty}/10 for difficulty.`
+            : ""
+        }`,
+        research: "Personal history, ranked locally on this device.",
+        sourceUrl: "",
+        familiar: true,
+        score,
+      });
+    }
   }
 
   const flags = { lowUv, safeOutdoor, withdrawalHeavy: ctx.withdrawalHeavy, nonPhysicalPreferred };

@@ -173,6 +173,32 @@ describe("buildGuide", () => {
     }
   });
 
+  test("surplus capacity can recommend a healthy way to use energy", () => {
+    const guide = buildGuide(
+      guideContext({
+        available: 85,
+        withdrawalHeavy: false,
+        withdrawalTotal: 5,
+        depositTotal: 10,
+        candidates: [
+          candidate({
+            id: "write",
+            side: "withdrawal",
+            label: "Focused writing block",
+            typicalCost: 20,
+            useCount: 7,
+            typicalDifficulty: 3,
+            difficultyCount: 4,
+          }),
+        ],
+      }),
+    );
+    const use = guide.items.find((i) => i.id === "activity:familiar-use:write");
+    expect(use?.action?.side).toBe("withdrawal");
+    expect(use?.action?.cost).toBe(20);
+    expect(use?.title).toMatch(/use energy/i);
+  });
+
   test("personal state selects a named, research-backed nourishment tip", () => {
     const guide = buildGuide(
       guideContext({

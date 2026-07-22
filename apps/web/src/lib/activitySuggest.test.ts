@@ -87,6 +87,52 @@ describe("suggestActivities", () => {
     expect(suggestions.every((s) => s.typicalCost <= 10)).toBe(true);
   });
 
+  test("surplus capacity surfaces familiar ways to use energy", () => {
+    const suggestions = suggestActivities(
+      context({
+        available: 80,
+        withdrawalHeavy: false,
+        candidates: [
+          {
+            id: "deep-work",
+            side: "withdrawal",
+            label: "Focused writing block",
+            typicalCost: 20,
+            weekdayMask: 127,
+            useCount: 8,
+            typicalDifficulty: 4,
+            difficultyCount: 5,
+            lastUsed: "2026-07-18",
+          },
+        ],
+      }),
+    );
+    const use = suggestions.find((s) => s.id === "familiar-use:deep-work");
+    expect(use?.side).toBe("withdrawal");
+    expect(use?.label).toBe("Focused writing block");
+  });
+
+  test("heavy days do not push surplus use-energy picks at moderate capacity", () => {
+    const suggestions = suggestActivities(
+      context({
+        available: 45,
+        withdrawalHeavy: true,
+        candidates: [
+          {
+            id: "deep-work",
+            side: "withdrawal",
+            label: "Focused writing block",
+            typicalCost: 20,
+            weekdayMask: 127,
+            useCount: 8,
+            lastUsed: "2026-07-18",
+          },
+        ],
+      }),
+    );
+    expect(suggestions.every((s) => s.side !== "withdrawal")).toBe(true);
+  });
+
   test("offers exactly one movement family per day with a gentler alternative", () => {
     const suggestions = suggestActivities(context());
     const movement = suggestions.filter((s) => s.id.startsWith("movement:"));

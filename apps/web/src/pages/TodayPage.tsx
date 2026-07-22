@@ -2587,14 +2587,34 @@ function GuideCard(props: {
           {item.action && (
             <button
               type="button"
-              className="btn accent"
+              className="guide-suggest-btn"
               disabled={props.closed}
+              aria-label={
+                props.actionLabel
+                  ? `${props.actionLabel}: ${item.action.label}, ${item.action.cost} points`
+                  : item.action.requiresStart
+                    ? `Start new day and add energy: ${item.action.label}, ${item.action.cost} points`
+                    : item.action.side === "withdrawal"
+                      ? `Use energy: ${item.action.label}, ${item.action.cost} points`
+                      : `Add energy: ${item.action.label}, ${item.action.cost} points`
+              }
               onClick={() => props.onAction(item)}
             >
-              {props.actionLabel ??
-                (item.action.requiresStart
-                  ? `Start new day · Add energy: ${item.action.label} · ${item.action.cost}`
-                  : `Add energy: ${item.action.label} · ${item.action.cost}`)}
+              <span className="guide-suggest-sparkle" aria-hidden="true">
+                ✦
+              </span>
+              <span className="guide-suggest-label">
+                {props.actionLabel ??
+                  (item.action.requiresStart
+                    ? `Start day · ${item.action.label}`
+                    : item.action.label)}
+              </span>
+              <span
+                className={`guide-suggest-cost guide-suggest-cost-${item.action.side}`}
+                aria-hidden="true"
+              >
+                {item.action.side === "deposit" ? `+${item.action.cost}` : `−${item.action.cost}`}
+              </span>
             </button>
           )}
           {item.altAction && (
@@ -2602,11 +2622,27 @@ function GuideCard(props: {
                equal choice, not a fallback. */
             <button
               type="button"
-              className="btn accent"
+              className="guide-suggest-btn"
               disabled={props.closed}
+              aria-label={
+                item.altAction.side === "withdrawal"
+                  ? `Use energy: ${item.altAction.label}, ${item.altAction.cost} points`
+                  : `Add energy: ${item.altAction.label}, ${item.altAction.cost} points`
+              }
               onClick={() => props.onAction(item, true)}
             >
-              {`Add energy: ${item.altAction.label} · ${item.altAction.cost}`}
+              <span className="guide-suggest-sparkle" aria-hidden="true">
+                ✦
+              </span>
+              <span className="guide-suggest-label">{item.altAction.label}</span>
+              <span
+                className={`guide-suggest-cost guide-suggest-cost-${item.altAction.side}`}
+                aria-hidden="true"
+              >
+                {item.altAction.side === "deposit"
+                  ? `+${item.altAction.cost}`
+                  : `−${item.altAction.cost}`}
+              </span>
             </button>
           )}
         </div>
@@ -2757,7 +2793,9 @@ function Column(props: {
                     aria-label={
                       reason
                         ? `${s.label}, ${s.typicalCost} points`
-                        : `Add ${s.label}, ${s.typicalCost} points`
+                        : props.side === "deposit"
+                          ? `Add energy: ${s.label}, ${s.typicalCost} points`
+                          : `Use energy: ${s.label}, ${s.typicalCost} points`
                     }
                     onClick={() => {
                       if (reason) return;
@@ -2765,7 +2803,12 @@ function Column(props: {
                     }}
                   >
                     <span className="recent-label">{s.label}</span>
-                    <span className="recent-points">{s.typicalCost}</span>
+                    <span
+                      className={`recent-points guide-suggest-cost-${props.side}`}
+                      aria-hidden="true"
+                    >
+                      {props.side === "deposit" ? `+${s.typicalCost}` : `−${s.typicalCost}`}
+                    </span>
                     <span className="recent-add" aria-hidden="true">
                       {busy ? "…" : "+"}
                     </span>

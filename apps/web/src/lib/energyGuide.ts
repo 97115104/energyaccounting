@@ -20,7 +20,7 @@ import { selectFromCorpus, type CorpusContext, type CorpusEntry } from "./tipsCo
 import type { WeatherKind } from "./weatherUi";
 
 export type GuideAction = {
-  side: "deposit";
+  side: "deposit" | "withdrawal";
   /** Activity label to add to the day. */
   label: string;
   cost: number;
@@ -194,22 +194,32 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     includePhysicalActivities: ctx.includePhysicalActivities,
   });
   activities.forEach((suggestion, index) => {
+    const side = suggestion.side ?? "deposit";
+    const isUse = side === "withdrawal";
     items.push({
       id: `activity:${suggestion.id}`,
       kind: "activity",
       title:
         suggestion.title ??
-        (suggestion.familiar ? "A familiar way to add energy" : "A way to add energy that fits now"),
+        (isUse
+          ? suggestion.familiar
+            ? "A familiar way to use energy well"
+            : "A healthy way to use energy"
+          : suggestion.familiar
+            ? "A familiar way to add energy"
+            : "A way to add energy that fits now"),
       body: suggestion.alternative
         ? `${suggestion.label}, or ${suggestion.alternative.label.toLocaleLowerCase()} if that fits better. Either counts.`
-        : `${suggestion.label} fits the ${ctx.available} points available now.`,
+        : isUse
+          ? `${suggestion.label} uses ${suggestion.typicalCost} of the ${ctx.available} points still open — a healthy way to spend some of today's capacity.`
+          : `${suggestion.label} fits the ${ctx.available} points available now.`,
       because: [suggestion.reason],
       // Familiar items are personal inference, not research; keep the
       // research slot for actual evidence so provenance stays honest.
       research: suggestion.familiar ? undefined : suggestion.research,
       sourceUrl: suggestion.sourceUrl || undefined,
       personalized: suggestion.familiar,
-      action: { side: "deposit", label: suggestion.label, cost: suggestion.typicalCost },
+      action: { side, label: suggestion.label, cost: suggestion.typicalCost },
       altAction: suggestion.alternative
         ? {
             side: "deposit",
