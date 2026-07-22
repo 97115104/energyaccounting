@@ -1,0 +1,24 @@
+{
+  "any": [
+    "Nice one.",
+    "Checked off. Brain likes that.",
+    "Tiny win, real win.",
+    "Look at you go.",
+    "Done. Next.",
+    "That counts.",
+    "Smooth.",
+    "One less open loop."
+  ],
+  "deposit": [
+    "Energy in. Good call.",
+    "You fed the battery.",
+    "Refill logged.",
+    "Future-you says thanks."
+  ],
+  "withdrawal": [
+    "Spent on purpose.",
+    "Used, not leaked.",
+    "That one earned its keep.",
+    "Energy spent, task done."
+  ]
+}

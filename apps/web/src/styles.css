@@ -374,9 +374,26 @@ html[data-weather="thunder"] .sky-layer {
   .task-status svg,
   .task-status circle,
   .task-status path,
+  .task-row.task-row-exiting,
+  .completion-burst,
+  .completion-burst-ring,
+  .completion-burst-speck,
+  .completion-burst-quip,
   body {
     animation: none !important;
     transition: none !important;
+  }
+
+  .task-row.task-row-exiting {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .completion-burst {
+    display: none;
   }
 }
 
@@ -1260,6 +1277,183 @@ html[data-theme="night"] .btn.secondary {
 
 .task-status:disabled {
   cursor: default;
+}
+
+/* Collapse out of the active list before joining the hidden completed pool. */
+.task-row.task-row-exiting {
+  overflow: hidden;
+  pointer-events: none;
+  min-height: 0 !important;
+  max-height: 200px;
+  animation: task-row-exit 0.32s ease forwards;
+}
+
+@keyframes task-row-exit {
+  to {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+    transform: scale(0.98);
+  }
+}
+
+/* Apple Reminders–style reveal for finished items (per column). */
+.col-completed {
+  margin-top: 0.35rem;
+  margin-bottom: 0.15rem;
+}
+
+.col-completed-toggle {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.2rem;
+  text-align: left;
+  cursor: pointer;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.col-completed-toggle:hover,
+.col-completed-toggle:focus-visible {
+  color: var(--ink);
+}
+
+.col-completed-toggle:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.col-completed-copy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+}
+
+.col-completed-action {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.col-completed-list {
+  margin-top: 0.35rem;
+}
+
+/* Variable-ratio completion bursts (CSS only; anchored near the checkbox). */
+.completion-burst {
+  position: fixed;
+  z-index: 35;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.completion-burst-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: completion-ring 0.55s ease-out forwards;
+}
+
+.completion-burst-deposit {
+  color: var(--deposit);
+}
+
+.completion-burst-withdrawal {
+  color: var(--withdraw);
+}
+
+.completion-burst-small .completion-burst-ring {
+  animation-duration: 0.45s;
+}
+
+.completion-burst-speck {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: completion-speck 0.7s ease-out forwards;
+}
+
+.completion-burst-rare .completion-burst-speck {
+  animation-duration: 0.85s;
+}
+
+.completion-burst-quip {
+  position: absolute;
+  left: 0;
+  top: -1.6rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 70%, transparent);
+  opacity: 0;
+  animation: completion-quip 1.25s ease-out forwards;
+}
+
+@keyframes completion-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+@keyframes completion-speck {
+  0% {
+    opacity: 0.9;
+    transform: rotate(var(--angle)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(calc(-1 * var(--dist))) scale(0.4);
+  }
+}
+
+@keyframes completion-quip {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -4px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
 }
 
 /* Recent activities inside the add sheet and empty day columns. */

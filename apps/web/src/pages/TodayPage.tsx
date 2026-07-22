@@ -4,11 +4,17 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
 import { BecauseList } from "../components/BecauseList";
+import { CompletionBurst } from "../components/CompletionBurst";
 import { ModalCloseButton } from "../components/ModalCloseButton";
 import { SiteFooter } from "../components/SiteFooter";
 import { WeatherDetailModal } from "../components/WeatherDetailModal";
 import { WeatherGlyph } from "../components/WeatherGlyph";
 import { api } from "../lib/api";
+import {
+  COMPLETION_EXIT_MS,
+  rollCompletionDelight,
+  type DelightTier,
+} from "../lib/completionDelight";
 import {
   decryptText,
   encryptText,
@@ -210,6 +216,26 @@ function guideDismissKey(dayId: string): string {
   return `eaj-guide-dismissed:${dayId}`;
 }
 
+function showCompletedStorageKey(side: "deposit" | "withdrawal"): string {
+  return `eaj-col-show-completed:${side}`;
+}
+
+function loadShowCompleted(side: "deposit" | "withdrawal"): boolean {
+  try {
+    return localStorage.getItem(showCompletedStorageKey(side)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistShowCompleted(side: "deposit" | "withdrawal", show: boolean): void {
+  try {
+    localStorage.setItem(showCompletedStorageKey(side), show ? "1" : "0");
+  } catch {
+    // Preference is nicety-only; private mode should not break the column.
+  }
+}
+
 function loadDismissedGuideIds(dayId: string): Set<string> {
   try {
     const raw = localStorage.getItem(guideDismissKey(dayId));
@@ -284,6 +310,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
   const [justFreed, setJustFreed] = useState<number | undefined>();
+  // Rows mid exit-animation before they join the hidden/completed pool.
+  const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
+  // In-flight complete/uncomplete (sync lock + checkbox disable).
+  const [completingIds, setCompletingIds] = useState<Set<string>>(() => new Set());
+  const completingIdsRef = useRef<Set<string>>(new Set());
+  const [completionBurst, setCompletionBurst] = useState<{
+    key: number;
+    tier: DelightTier;
+    side: "deposit" | "withdrawal";
+    x: number;
+    y: number;
+    quip: string | null;
+  } | null>(null);
+  const burstKeyRef = useRef(0);
+  const burstTimerRef = useRef<number | null>(null);
   // Explicit edit mode for a closed day opened from history: amendments
   // correct the record without reopening the day's lifecycle.
   const [amending, setAmending] = useState(false);
@@ -330,8 +371,22 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setDetailLineId(null);
     setAmending(false);
     setWeatherOpen(false);
+    setExitingIds(new Set());
+    setCompletingIds(new Set());
+    completingIdsRef.current = new Set();
+    setCompletionBurst(null);
+    if (burstTimerRef.current != null) {
+      window.clearTimeout(burstTimerRef.current);
+      burstTimerRef.current = null;
+    }
     if (day?.id) setDismissedGuideIds(loadDismissedGuideIds(day.id));
   }, [day?.id, historyDayId]);
+
+  useEffect(() => {
+    return () => {
+      if (burstTimerRef.current != null) window.clearTimeout(burstTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1205,17 +1260,115 @@ export function TodayPage({ user }: { user: UserProfile }) {
     await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
-  async function toggleComplete(line: Line) {
+  async function toggleComplete(line: Line, anchorEl?: HTMLElement | null) {
     if (!day) return;
+    if (completingIdsRef.current.has(line.id)) return;
+    completingIdsRef.current.add(line.id);
+    setCompletingIds(new Set(completingIdsRef.current));
+
     const next = !line.completed;
-    await withPreservedScroll(async () => {
-      if (next) setJustFreed(line.plannedCost);
-      await api(`/api/days/${day.id}/lines/${line.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ completed: next }),
+    const dayId = day.id;
+    const lineId = line.id;
+    const side = line.side;
+    const plannedCost = line.plannedCost;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const anchorRect = anchorEl?.getBoundingClientRect() ?? null;
+
+    try {
+      if (next) {
+        setExitingIds((prev) => new Set(prev).add(lineId));
+
+        const exitWait = reducedMotion
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              window.setTimeout(resolve, COMPLETION_EXIT_MS);
+            });
+
+        try {
+          await Promise.all([
+            exitWait,
+            api(`/api/days/${dayId}/lines/${lineId}`, {
+              method: "PATCH",
+              body: JSON.stringify({ completed: true }),
+            }),
+          ]);
+        } catch (e) {
+          setExitingIds((prev) => {
+            const n = new Set(prev);
+            n.delete(lineId);
+            return n;
+          });
+          throw e;
+        }
+
+        // Server accepted: flip local line before guide/delight so counts agree.
+        // Skip if the person already navigated away from this day.
+        setDay((prev) =>
+          prev && prev.id === dayId
+            ? {
+                ...prev,
+                lines: prev.lines.map((l) =>
+                  l.id === lineId
+                    ? {
+                        ...l,
+                        completed: true,
+                        actualCost: l.actualCost ?? l.plannedCost,
+                      }
+                    : l,
+                ),
+              }
+            : prev,
+        );
+        setExitingIds((prev) => {
+          const n = new Set(prev);
+          n.delete(lineId);
+          return n;
+        });
+
+        // Withdrawals free reserved capacity; deposits never reserved Available.
+        if (side === "withdrawal") setJustFreed(plannedCost);
+        const hit = rollCompletionDelight(side, { reducedMotion });
+        if (hit && anchorRect) {
+          burstKeyRef.current += 1;
+          const key = burstKeyRef.current;
+          setCompletionBurst({
+            key,
+            tier: hit.tier,
+            side,
+            x: anchorRect.left + anchorRect.width / 2,
+            y: anchorRect.top + anchorRect.height / 2,
+            quip: hit.quip,
+          });
+          const ttl = hit.tier === "rare" ? 1400 : hit.tier === "medium" ? 750 : 550;
+          if (burstTimerRef.current != null) window.clearTimeout(burstTimerRef.current);
+          burstTimerRef.current = window.setTimeout(() => {
+            setCompletionBurst((cur) => (cur?.key === key ? null : cur));
+            burstTimerRef.current = null;
+          }, ttl);
+        }
+
+        await withPreservedScroll(() => load(undefined, { soft: true }));
+        return;
+      }
+
+      await withPreservedScroll(async () => {
+        await api(`/api/days/${dayId}/lines/${lineId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ completed: false }),
+        });
+        await load(undefined, { soft: true });
       });
-      await load(undefined, { soft: true });
-    });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update that item.");
+      try {
+        await load(undefined, { soft: true });
+      } catch {
+        // Soft reload is best-effort after a failed toggle.
+      }
+    } finally {
+      completingIdsRef.current.delete(lineId);
+      setCompletingIds(new Set(completingIdsRef.current));
+    }
   }
 
   async function saveTaskDetails() {
@@ -1920,9 +2073,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onAdd={() => setDraftSide("withdrawal")}
             onAddRecent={(s) => void addRecent(s)}
             onActual={updateActual}
-            onComplete={(l) => void toggleComplete(l)}
+            onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
+            exitingIds={exitingIds}
+            completingIds={completingIds}
           />
           <Column
             title="Add energy"
@@ -1938,9 +2093,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onAdd={() => setDraftSide("deposit")}
             onAddRecent={(s) => void addRecent(s)}
             onActual={updateActual}
-            onComplete={(l) => void toggleComplete(l)}
+            onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
+            exitingIds={exitingIds}
+            completingIds={completingIds}
           />
         </div>
         
@@ -2009,6 +2166,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       )}
 
       <SiteFooter />
+
+      {completionBurst && (
+        <CompletionBurst
+          key={completionBurst.key}
+          tier={completionBurst.tier}
+          side={completionBurst.side}
+          x={completionBurst.x}
+          y={completionBurst.y}
+          quip={completionBurst.quip}
+        />
+      )}
 
       </div>
 
@@ -2712,17 +2880,46 @@ function Column(props: {
   phase: string;
   availableCapacity: number;
   addingRecentId: string | null;
+  exitingIds: Set<string>;
+  completingIds: Set<string>;
   onAdd: () => void;
   onAddRecent: (s: RecentActivity) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
-  onComplete: (line: Line) => void;
+  onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
 }) {
   const columnId = `col-${props.side}`;
+  const completedListId = `${columnId}-completed`;
+  const [showCompleted, setShowCompleted] = useState(() => loadShowCompleted(props.side));
+
+  // Exiting rows stay in the active list until the collapse finishes.
+  const incomplete = props.lines.filter(
+    (l) => !l.completed || props.exitingIds.has(l.id),
+  );
+  const completed = props.lines.filter(
+    (l) => l.completed && !props.exitingIds.has(l.id),
+  );
+  const completedCount = completed.length;
+
   // Empty columns surface prior-ledger picks so the day can fill without a
-  // separate "repeat plan" control.
-  const showRecent = !props.lines.length && !props.closed && props.recent.length > 0;
+  // separate "repeat plan" control. Key off incomplete so "all done + hidden"
+  // does not look like a blank day.
+  const showRecent =
+    !incomplete.length && !completedCount && !props.closed && props.recent.length > 0;
+  const showEmptyCopy = !incomplete.length && !completedCount && !showRecent;
+
+  function toggleShowCompleted() {
+    setShowCompleted((prev) => {
+      const next = !prev;
+      persistShowCompleted(props.side, next);
+      return next;
+    });
+  }
+
+  const doneLabel =
+    completedCount === 1 ? "1 done already · nice" : `${completedCount} done already · nice`;
+
   return (
     <div className={`panel column-panel ${props.className}`}>
       <div className="col-head">
@@ -2741,18 +2938,56 @@ function Column(props: {
           +
         </button>
       </div>
-      {props.lines.map((l) => (
+      {incomplete.map((l) => (
         <TaskRow
           key={l.id}
           line={l}
           closed={props.closed}
           audit={props.audit}
+          exiting={props.exitingIds.has(l.id)}
+          busy={props.completingIds.has(l.id)}
           onActual={props.onActual}
           onComplete={props.onComplete}
           onRemove={props.onRemove}
           onOpen={props.onOpen}
         />
       ))}
+      {completedCount > 0 && (
+        <div className="col-completed">
+          <button
+            type="button"
+            className="col-completed-toggle"
+            aria-expanded={showCompleted}
+            aria-controls={completedListId}
+            onClick={toggleShowCompleted}
+          >
+            <span className="col-completed-copy">
+              {doneLabel}
+              <span className="col-completed-action">
+                · {showCompleted ? "Hide" : "Show"}
+              </span>
+            </span>
+          </button>
+          {showCompleted && (
+            <div className="col-completed-list" id={completedListId}>
+              {completed.map((l) => (
+                <TaskRow
+                  key={l.id}
+                  line={l}
+                  closed={props.closed}
+                  audit={props.audit}
+                  exiting={false}
+                  busy={props.completingIds.has(l.id)}
+                  onActual={props.onActual}
+                  onComplete={props.onComplete}
+                  onRemove={props.onRemove}
+                  onOpen={props.onOpen}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {showRecent ? (
         <div className="column-recent">
           <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
@@ -2813,7 +3048,7 @@ function Column(props: {
           </ul>
         </div>
       ) : (
-        !props.lines.length && (
+        showEmptyCopy && (
           <p className="muted">
             {props.side === "withdrawal"
               ? "Nothing using energy yet. Suspiciously well-rested."
@@ -2829,23 +3064,26 @@ function TaskRow(props: {
   line: Line;
   closed: boolean;
   audit: boolean;
+  exiting?: boolean;
+  busy?: boolean;
   onActual: (line: Line, actual: number | null) => Promise<void>;
-  onComplete: (line: Line) => void;
+  onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
 }) {
+  const checked = props.line.completed || !!props.exiting;
   return (
     <div
-      className={`task-row day-task${props.line.completed ? " completed" : ""}`}
+      className={`task-row day-task${checked ? " completed" : ""}${props.exiting ? " task-row-exiting" : ""}`}
       role="group"
     >
       <button
         type="button"
-        className={`task-status${props.line.completed ? " checked" : ""}`}
-        aria-label={props.line.completed ? "Mark incomplete" : "Mark complete"}
-        aria-pressed={props.line.completed}
-        disabled={props.closed}
-        onClick={() => props.onComplete(props.line)}
+        className={`task-status${checked ? " checked" : ""}`}
+        aria-label={checked ? "Mark incomplete" : "Mark complete"}
+        aria-pressed={checked}
+        disabled={props.closed || props.exiting || props.busy}
+        onClick={(e) => props.onComplete(props.line, e.currentTarget)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9.5" />
@@ -2857,13 +3095,13 @@ function TaskRow(props: {
         className="task-main task-detail-trigger"
         onClick={() => props.onOpen(props.line)}
       >
-        <div className={props.line.completed ? "task-done-label" : undefined}>{props.line.label}</div>
+        <div className={checked ? "task-done-label" : undefined}>{props.line.label}</div>
         <div className="task-meta">
           Planned {props.line.plannedCost}
           {props.audit || props.closed
             ? ` · Actual ${props.line.actualCost ?? props.line.plannedCost}`
             : ""}
-          {props.line.completed ? " · Done" : ""}
+          {checked ? " · Done" : ""}
         </div>
       </button>
       {!props.closed && (
@@ -2888,6 +3126,7 @@ function TaskRow(props: {
             type="button"
             className="task-remove"
             aria-label="Remove"
+            disabled={props.busy || props.exiting}
             onClick={() => props.onRemove(props.line.id)}
           >
             ×
