@@ -282,6 +282,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [listening, setListening] = useState<SpeechTarget | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [detailLineId, setDetailLineId] = useState<string | null>(null);
+  const [detailLabel, setDetailLabel] = useState("");
+  const [detailPlannedCost, setDetailPlannedCost] = useState("20");
+  const [detailActualCost, setDetailActualCost] = useState("");
   const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
   const [detailText, setDetailText] = useState("");
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -1029,6 +1032,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     if (dndBusy || activeDragId || suppressOpenRef.current) return;
     stopLiveSpeech();
     setDetailLineId(line.id);
+    setDetailLabel(line.label ?? "");
+    setDetailPlannedCost(String(line.plannedCost));
+    setDetailActualCost(String(line.actualCost ?? line.plannedCost));
     setDetailDifficulty(line.difficulty);
     setDetailText(line.details ?? "");
     setDetailError(null);
@@ -1222,18 +1228,48 @@ export function TodayPage({ user }: { user: UserProfile }) {
     // Release the mic first so nothing lands in the field after we snapshot it.
     if (listening === "details") stopLiveSpeech();
     setDetailError(null);
+    const nextLabel = detailLabel.trim();
+    if (!nextLabel) {
+      setDetailError("Give this item a name.");
+      return;
+    }
+    const nextPlanned = Math.max(0, Math.min(100, Number(detailPlannedCost)));
+    if (!Number.isFinite(nextPlanned)) {
+      setDetailError("Energy value must be a number from 0 to 100.");
+      return;
+    }
+    const editActual = day.phase === "audit" || (day.phase === "closed" && amending);
+    let nextActual: number | null | undefined;
+    if (editActual) {
+      const raw = Number(detailActualCost);
+      if (!Number.isFinite(raw)) {
+        setDetailError("Actual energy value must be a number from 0 to 100.");
+        return;
+      }
+      nextActual = Math.max(0, Math.min(100, raw));
+    }
     try {
       const text = detailText.trim();
       const encrypted = text
         ? await encryptText(dek, text, "eaj-task-details")
         : { ciphertext: null, iv: null };
+      const patch: Record<string, unknown> = {
+        plannedCost: nextPlanned,
+        difficulty: detailDifficulty,
+        detailsCiphertext: encrypted.ciphertext,
+        detailsIv: encrypted.iv,
+      };
+      if (nextActual !== undefined) patch.actualCost = nextActual;
+      // Relabel only when the wording changed; server needs ciphertext + IV + hash together.
+      if (nextLabel !== (detailLine.label ?? "")) {
+        const { ciphertext, iv } = await encryptText(dek, nextLabel, "eaj-label");
+        patch.labelCiphertext = ciphertext;
+        patch.labelIv = iv;
+        patch.labelHash = await labelHash(nextLabel);
+      }
       await api(`/api/days/${day.id}/lines/${detailLine.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          difficulty: detailDifficulty,
-          detailsCiphertext: encrypted.ciphertext,
-          detailsIv: encrypted.iv,
-        }),
+        body: JSON.stringify(patch),
       });
       setDetailLineId(null);
       await withPreservedScroll(() => load(undefined, { soft: true }));
@@ -2278,17 +2314,50 @@ export function TodayPage({ user }: { user: UserProfile }) {
             />
             <p className="ob-eyebrow">
               {detailLine.side === "deposit" ? "Add energy" : "Use energy"}
-            </p>
-            <h2 id="task-detail-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
-              {detailLine.label}
-            </h2>
-            <p className="muted">
-              Planned {detailLine.plannedCost}
-              {day.phase !== "plan"
-                ? ` · Actual ${detailLine.actualCost ?? detailLine.plannedCost}`
-                : ""}
               {detailLine.completed ? " · Done" : " · Pending"}
             </p>
+            <h2 id="task-detail-title" className="sr-only">
+              {detailLabel.trim() || detailLine.label || "Task details"}
+            </h2>
+            <div className="field">
+              <label htmlFor="task-detail-label">Activity / experience</label>
+              <input
+                id="task-detail-label"
+                value={detailLabel}
+                disabled={readOnly}
+                onChange={(e) => setDetailLabel(e.target.value)}
+              />
+            </div>
+            <div className="task-detail-costs">
+              <div className="field">
+                <label htmlFor="task-detail-planned">
+                  {day.phase === "plan" ? "Energy value (0 to 100)" : "Planned energy"}
+                </label>
+                <input
+                  id="task-detail-planned"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={detailPlannedCost}
+                  disabled={readOnly}
+                  onChange={(e) => setDetailPlannedCost(e.target.value)}
+                />
+              </div>
+              {(day.phase === "audit" || (closed && amending)) && (
+                <div className="field">
+                  <label htmlFor="task-detail-actual">Actual energy</label>
+                  <input
+                    id="task-detail-actual"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={detailActualCost}
+                    disabled={readOnly}
+                    onChange={(e) => setDetailActualCost(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
             <fieldset className="difficulty-field" disabled={readOnly}>
               <legend>How hard was this for you? Optional</legend>
               <div className="difficulty-scale" aria-label="Difficulty from 1 easy to 10 hard">
