@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking at EAJ. This document covers getting a local copy running, the checks a change must pass, and the conventions the codebase already follows. For the system tour, including the encryption boundary that most decisions here trace back to, read [ARCHITECTURE.md](ARCHITECTURE.md) first.
+Thanks for looking at EAJ. This document covers getting a local copy running, the checks a change must pass, and the conventions the codebase already follows. For the system tour, including the encryption boundary that most decisions here trace back to, read [ARCHITECTURE.md](ARCHITECTURE.md) first. Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Vulnerability reports belong in [SECURITY.md](SECURITY.md), and not in public issues before a fix exists.
 
 ## Getting it running
 
@@ -42,4 +42,4 @@ UI work matches the existing `panel`, `btn`, and `field` classes in `apps/web/sr
 
 ## Commits and attestation
 
-Keep commits focused and describe the why in the message body when it is not obvious from the diff. The project records AI collaboration openly, in the pattern of the attestation link in the README footer, so note substantial AI-generated work in your pull request description. Do not commit anything from `data/`, and never commit credentials or tokens.
+Keep commits focused and describe the why in the message body when it is not obvious from the diff. The project records AI collaboration openly, in the pattern of the attestation link in the README footer, so note substantial AI-generated work in your pull request description. Do not commit anything from `data/`, and never commit credentials, tokens, or the operator `invite-codes.md` checklist.

@@ -4,12 +4,7 @@ EAJ's identity system: one living mark per person, grown from their own days.
 
 ## Why a butterfly
 
-The butterfly is the app's symbol of becoming: change that looks like struggle
-from the inside. It draws on Jean-Dominique Bauby's *The Diving Bell and the
-Butterfly*, where a mind stayed vivid inside a body that could barely speak.
-Many neurodivergent people know a version of that bandwidth gap, thinking far
-faster than any channel can carry. The butterfly holds both truths at once:
-locked in, and becoming.
+The butterfly is the app's symbol of becoming: change that looks like struggle from the inside. It draws on Jean-Dominique Bauby's *The Diving Bell and the Butterfly*, where a mind stayed vivid inside a body that could barely speak. Many neurodivergent people know a version of that bandwidth gap, thinking far faster than any channel can carry. The butterfly holds both truths at once: locked in, and becoming.
 
 ## The pieces
 
@@ -20,7 +15,7 @@ locked in, and becoming.
 - **Wing grammar** ([apps/web/src/lib/butterflyGeometry.ts](apps/web/src/lib/butterflyGeometry.ts)):
   eight wing families (monarch, morpho, swallowtail, glasswing, longwing, owl,
   sulphur, peacock) crossed with independent traits, so identity comes from
-  combination rather than a fixed menu:
+  combination and not from a fixed menu:
   - **edge**: smooth, scalloped, angular
   - **tail**: none, short, long, twin
   - **pattern**: veined, banded, spotted, eyespots, clear panels
@@ -92,23 +87,23 @@ sections, and only that chosen plaintext is frozen into a snapshot.
 
 ## Motion and accessibility
 
-Wing tempo follows the daily state, but the person's own motion setting (follow
+Wing tempo follows the daily state, and the person's own motion setting (follow
 my day, calm, still) and the OS `prefers-reduced-motion` setting always win.
 When motion is off the pose is still readable through its label and vitality
 ring. Every state carries text; the seal exposes a full `aria-label`.
 
 ## Deletion
 
-Settings has a full profile deletion behind password (plus TOTP when enabled)
-and a typed confirmation, with a last-chance data export in the same dialog.
-One user-row delete cascades through days, tasks, catalog, sessions, the You
-profile, and every share snapshot.
+Settings has a full profile deletion behind password (plus TOTP or a recovery
+code when enabled) and a typed confirmation, with a last-chance data export in
+the same dialog. One user-row delete cascades through days, tasks, catalog,
+sessions, the You profile, and every share snapshot.
 
 ## Toward a personal machine intelligence
 
 The exported corpus now carries the identity config and decrypted You profile
 alongside days and catalog, so a future personal model can learn how its person
 works as well as what they did. The trait suggester and the how-to-work-with-me
-drafter are the first, deliberately transparent steps: both read only the
+drafter are the first, deliberately transparent steps. Both read only the
 on-device personal-data model, everything they believe is visible with its
 evidence, and every line is the person's to accept, edit, or dismiss.

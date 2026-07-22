@@ -6,6 +6,7 @@ data/
 .env
 .env.local
 invite-codes.md
+.tmp*
 .DS_Store
 apps/web/dist/
 apps/server/dist/
