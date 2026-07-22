@@ -2548,8 +2548,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
               </>
             ) : (
               <p className="muted">
-                These trends will populate slowly but surely 🙂 Close a few more days and your
-                patterns will start to appear here.
+                These trends will populate slowly but surely 🙂
+                <br />
+                Close a few more days and your patterns will start to appear here.
               </p>
             )}
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

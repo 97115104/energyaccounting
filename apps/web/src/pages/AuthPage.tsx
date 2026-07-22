@@ -371,7 +371,12 @@ export function AuthPage({
       ) : mode === "register" && !inviteVerified ? (
         <>
           <p className="muted">
-            EAJ is invite-only right now. Enter your invite code to create an account.
+            EAJ is invite-only right now. Enter your invite code to create an account. Need
+            one? Email{" "}
+            <a className="linkish" href="mailto:eaj@97115104.com">
+              eaj@97115104.com
+            </a>
+            .
           </p>
           <div className="field">
             <label htmlFor="invite-code">Invite code</label>
