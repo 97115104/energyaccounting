@@ -361,6 +361,7 @@ html[data-weather="thunder"] .sky-layer {
   .sky-clouds::after,
   .sky-precip,
   .weather-chip[data-kind="rain"] .weather-glyph,
+  .weather-glyph[data-icon="rain"],
   .task-status svg,
   .task-status circle,
   .task-status path,
@@ -1642,47 +1643,72 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 }
 
 .weather-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   flex-shrink: 0;
-  background: #ffcc33;
-  box-shadow: 0 0 12px rgba(255, 200, 40, 0.5);
+  border-radius: calc(var(--radius) * 0.65);
+  background: linear-gradient(180deg, #ffe066, #ffb300);
+  box-shadow: 0 0 12px rgba(255, 190, 40, 0.55);
+  color: #fff;
 }
 
-html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
-  background: #f3efff;
-  box-shadow: 0 0 12px rgba(210, 198, 255, 0.45);
+.weather-glyph svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
 }
 
-.weather-chip[data-kind="rain"] .weather-glyph {
-  background: linear-gradient(180deg, #88aacc, #4477aa);
+.weather-glyph[data-icon="sun"] {
+  background: linear-gradient(180deg, #ffe066, #ffb300);
+  box-shadow: 0 0 12px rgba(255, 190, 40, 0.55);
+  color: #fff;
+}
+
+.weather-glyph[data-icon="moon"] {
+  background: linear-gradient(180deg, #2d3560, #12182e);
+  box-shadow: 0 0 14px rgba(180, 165, 255, 0.55);
+  color: #f3efff;
+}
+
+.weather-glyph[data-icon="cloud"] {
+  background: linear-gradient(180deg, #dfe3ec, #b8beca);
+  box-shadow: none;
+  color: #fff;
+}
+
+.weather-glyph[data-icon="rain"] {
+  background: linear-gradient(180deg, #7eb0d8, #3d6f9c);
+  box-shadow: 0 0 10px rgba(110, 170, 230, 0.45);
+  color: #fff;
   animation: rain-drip 1.2s linear infinite;
 }
 
-.weather-chip[data-kind="cloud"] .weather-glyph {
-  background: #c8c8d0;
-  box-shadow: none;
-}
-
-.weather-chip[data-kind="snow"] .weather-glyph {
-  background: radial-gradient(circle, #fff 40%, #cfe0f0 100%);
+.weather-glyph[data-icon="snow"] {
+  background: linear-gradient(180deg, #f7fbff, #c8daf0);
   box-shadow: 0 0 10px rgba(200, 220, 255, 0.7);
+  color: #6f95c7;
 }
 
-.weather-chip[data-kind="fog"] .weather-glyph {
-  background: linear-gradient(180deg, #d8d8de, #b0b0bc);
+.weather-glyph[data-icon="fog"] {
+  background: linear-gradient(180deg, #e2e4ea, #b9bec8);
   box-shadow: none;
-  filter: blur(1px);
+  color: #fff;
 }
 
-.weather-chip[data-kind="thunder"] .weather-glyph {
-  background: linear-gradient(180deg, #667, #334);
-  box-shadow: 0 0 12px rgba(255, 230, 120, 0.8);
+.weather-glyph[data-icon="thunder"] {
+  background: linear-gradient(180deg, #6a7088, #34384a);
+  box-shadow: 0 0 12px rgba(255, 230, 120, 0.65);
+  color: #fff;
 }
 
-.weather-chip[data-kind="unknown"] .weather-glyph {
-  background: var(--muted);
+.weather-glyph[data-icon="unknown"] {
+  background: linear-gradient(180deg, #9aa0ad, #727986);
   box-shadow: none;
+  color: #fff;
 }
 
 @keyframes rain-drip {
@@ -2415,6 +2441,15 @@ html[data-theme="night"] .tips-fab {
   max-height: 60vh;
   overflow: auto;
   animation: sheet-in 0.22s cubic-bezier(0.32, 0.72, 0.35, 1.1);
+}
+
+.tips-sheet .modal-close {
+  top: 0.65rem;
+  right: 0.65rem;
+}
+
+.tips-sheet .col-head {
+  padding-right: 2.25rem;
 }
 
 /* Guide sheet scrim: modal semantics with a whisper of a backdrop, so the
@@ -3285,6 +3320,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 }
 
 .insight-modal {
+  position: relative;
   width: min(440px, 100%);
   animation: modal-in 0.25s ease;
 }
@@ -3308,7 +3344,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   box-shadow: 0 24px 80px color-mix(in srgb, #000 30%, transparent);
 }
 
-.weather-modal-close {
+.modal-close {
   position: absolute;
   top: 0.85rem;
   right: 0.85rem;
@@ -3325,8 +3361,13 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   cursor: pointer;
 }
 
-.weather-modal-close:hover {
+.modal-close:hover {
   background: color-mix(in srgb, var(--ink) 15%, transparent);
+}
+
+.modal-close:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .weather-modal-hero {
@@ -3340,43 +3381,31 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   width: 64px;
   height: 64px;
   margin-bottom: 0.75rem;
-  box-shadow: 0 0 28px rgba(255, 200, 40, 0.5);
 }
 
-html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
-  background: #f3efff;
-  box-shadow: 0 0 28px rgba(210, 198, 255, 0.45);
+.weather-modal-hero .weather-glyph svg {
+  width: 42px;
+  height: 42px;
 }
 
-.weather-modal-hero[data-kind="rain"] .weather-glyph {
-  background: linear-gradient(180deg, #88aacc, #4477aa);
-  animation: rain-drip 1.2s linear infinite;
+.weather-modal-hero .weather-glyph[data-icon="sun"] {
+  box-shadow: 0 0 28px rgba(255, 190, 40, 0.55);
 }
 
-.weather-modal-hero[data-kind="cloud"] .weather-glyph {
-  background: #c8c8d0;
-  box-shadow: none;
+.weather-modal-hero .weather-glyph[data-icon="moon"] {
+  box-shadow: 0 0 28px rgba(180, 165, 255, 0.55);
 }
 
-.weather-modal-hero[data-kind="snow"] .weather-glyph {
-  background: radial-gradient(circle, #fff 40%, #cfe0f0 100%);
+.weather-modal-hero .weather-glyph[data-icon="rain"] {
+  box-shadow: 0 0 20px rgba(110, 170, 230, 0.45);
+}
+
+.weather-modal-hero .weather-glyph[data-icon="snow"] {
   box-shadow: 0 0 24px rgba(200, 220, 255, 0.7);
 }
 
-.weather-modal-hero[data-kind="fog"] .weather-glyph {
-  background: linear-gradient(180deg, #d8d8de, #b0b0bc);
-  box-shadow: none;
-  filter: blur(1px);
-}
-
-.weather-modal-hero[data-kind="thunder"] .weather-glyph {
-  background: linear-gradient(180deg, #667, #334);
-  box-shadow: 0 0 24px rgba(255, 230, 120, 0.8);
-}
-
-.weather-modal-hero[data-kind="unknown"] .weather-glyph {
-  background: var(--muted);
-  box-shadow: none;
+.weather-modal-hero .weather-glyph[data-icon="thunder"] {
+  box-shadow: 0 0 24px rgba(255, 230, 120, 0.65);
 }
 
 .weather-modal-eyebrow {
@@ -3496,10 +3525,6 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
 }
 
 .weather-modal-footer {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
   margin-top: 0.8rem;
 }
 
@@ -3508,18 +3533,9 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   font-size: 0.78rem;
 }
 
-.weather-modal-footer .btn {
-  margin-top: 0;
-}
-
 @media (max-width: 420px) {
   .weather-modal {
     padding: 1rem;
-  }
-
-  .weather-modal-footer {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 

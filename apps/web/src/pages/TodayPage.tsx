@@ -21,8 +21,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
+import { ModalCloseButton } from "../components/ModalCloseButton";
 import { SiteFooter } from "../components/SiteFooter";
 import { WeatherDetailModal } from "../components/WeatherDetailModal";
+import { WeatherGlyph } from "../components/WeatherGlyph";
 import { api } from "../lib/api";
 import {
   decryptText,
@@ -1542,6 +1544,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           aria-modal="true"
           aria-labelledby="insight-title"
         >
+          <ModalCloseButton label="Close day closed dialog" onClick={() => setCloseCelebration(null)} />
           <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
             Day closed
           </h2>
@@ -1587,13 +1590,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
               }}
             >
               {starting ? "Starting…" : "Start new day"}
-            </button>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => setCloseCelebration(null)}
-            >
-              Rest for now
             </button>
           </div>
         </div>
@@ -1727,7 +1723,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             disabled={!parsedWeather}
             onClick={() => setWeatherOpen(true)}
           >
-            <span className="weather-glyph" aria-hidden="true" />
+            <WeatherGlyph kind={weatherKind} isNight={!isDaylightPeriod(currentSkyPeriod)} />
             <div>
               <strong>{weatherLabel(weatherKind)}</strong>
               {parsedWeather ? (
@@ -2108,11 +2104,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-labelledby="guide-title"
             aria-describedby="guide-privacy"
           >
+            <ModalCloseButton label="Close energy guide" onClick={() => setGuideOpen(false)} />
             <div className="col-head">
               <h2 id="guide-title">Energy guide</h2>
-              <button type="button" className="btn secondary" onClick={() => setGuideOpen(false)}>
-                Close
-              </button>
             </div>
             {guide.items.length === 0 && (
               <p className="muted">
@@ -2161,6 +2155,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               void submitDraft();
             }}
           >
+            <ModalCloseButton label="Cancel adding energy item" onClick={closeDraft} />
             <h2 id="draft-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               {draftSide === "deposit" ? "Add energy" : "Use energy"}
             </h2>
@@ -2248,9 +2243,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <button type="submit" className="btn accent">
                 Save to day
               </button>
-              <button type="button" className="btn secondary" onClick={closeDraft}>
-                Cancel
-              </button>
             </div>
           </form>
         </div>
@@ -2277,6 +2269,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
               void saveTaskDetails();
             }}
           >
+            <ModalCloseButton
+              label="Close task details"
+              onClick={() => {
+                stopLiveSpeech();
+                setDetailLineId(null);
+              }}
+            />
             <p className="ob-eyebrow">
               {detailLine.side === "deposit" ? "Add energy" : "Use energy"}
             </p>
@@ -2381,16 +2380,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   Save task details
                 </button>
               )}
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={() => {
-                  stopLiveSpeech();
-                  setDetailLineId(null);
-                }}
-              >
-                {readOnly ? "Done" : "Cancel"}
-              </button>
             </div>
           </form>
         </div>
@@ -2411,6 +2400,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-labelledby="delete-day-title"
             aria-describedby="delete-day-body"
           >
+            <ModalCloseButton
+              label="Keep this day"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deletingDay}
+            />
             <h2 id="delete-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Delete this day?
             </h2>
@@ -2419,14 +2413,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
               and Dashboard trends. This cannot be undone.
             </p>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn secondary"
-                disabled={deletingDay}
-                onClick={() => setConfirmingDelete(false)}
-              >
-                Keep it
-              </button>
               <button
                 type="button"
                 className="btn danger"
@@ -2455,6 +2441,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-labelledby="close-day-title"
             aria-describedby="close-day-body"
           >
+            <ModalCloseButton
+              label="Keep working on this day"
+              disabled={phaseBusy}
+              onClick={() => setConfirmingClose(false)}
+            />
             <h2 id="close-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Close this day?
             </h2>
@@ -2463,14 +2454,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
               still amend it later from the Dashboard, but the day will not reopen.
             </p>
             <div className="modal-actions">
-              <button
-                type="button"
-                className="btn secondary"
-                disabled={phaseBusy}
-                onClick={() => setConfirmingClose(false)}
-              >
-                Keep going
-              </button>
               <button
                 type="button"
                 className="btn accent"
@@ -2513,6 +2496,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-modal="true"
             aria-labelledby="trends-title"
           >
+            <ModalCloseButton label="Close trends" onClick={() => setTrendsOpen(false)} />
             <h2 id="trends-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Your trends
             </h2>
@@ -2566,9 +2550,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 }}
               >
                 Open dashboard
-              </button>
-              <button type="button" className="btn secondary" onClick={() => setTrendsOpen(false)}>
-                Close
               </button>
             </div>
           </div>

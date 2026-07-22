@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef } from "react";
+import { ModalCloseButton } from "./ModalCloseButton";
+import { WeatherGlyph } from "./WeatherGlyph";
 import {
   uvBand,
   weatherDaySuggestion,
@@ -135,12 +137,10 @@ export function WeatherDetailModal({
         aria-describedby={descriptionId}
         tabIndex={-1}
       >
-        <button type="button" className="weather-modal-close" aria-label="Close weather details" onClick={onClose}>
-          <span aria-hidden="true">×</span>
-        </button>
+        <ModalCloseButton label="Close weather details" onClick={onClose} />
 
         <header className="weather-modal-hero" data-kind={kind}>
-          <span className="weather-glyph" aria-hidden="true" />
+          <WeatherGlyph kind={kind} isNight={!isDaylight} />
           <p className="weather-modal-eyebrow">
             {isHistorical ? "This day’s weather" : "Today’s weather"}
           </p>
@@ -208,9 +208,6 @@ export function WeatherDetailModal({
               Open-Meteo
             </a>
           </p>
-          <button type="button" className="btn secondary" onClick={onClose}>
-            Done
-          </button>
         </footer>
       </div>
     </div>

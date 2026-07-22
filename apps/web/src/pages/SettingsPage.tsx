@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { DictatableField } from "../components/DictatableField";
+import { ModalCloseButton } from "../components/ModalCloseButton";
 import { api } from "../lib/api";
 import { downloadTrainingCorpus } from "../lib/exportCorpus";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
@@ -416,6 +417,11 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             aria-modal="true"
             aria-labelledby="delete-title"
           >
+            <ModalCloseButton
+              label="Keep profile"
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+            />
             <h2 id="delete-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Delete your profile?
             </h2>
@@ -471,14 +477,6 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
                 onClick={() => void deleteAccount()}
               >
                 {deleting ? "Deleting…" : "Delete everything"}
-              </button>
-              <button
-                type="button"
-                className="btn secondary"
-                disabled={deleting}
-                onClick={() => setDeleteOpen(false)}
-              >
-                Keep my profile
               </button>
             </div>
           </div>

@@ -13,6 +13,7 @@ import { readCachedIdentity } from "../lib/identityCache";
 import { AFFIRMATIONS, dailyAffirmation } from "../lib/affirmations";
 import { deviceTimezone } from "../lib/timezone";
 import { IdentityMark } from "../components/IdentityMark";
+import { ModalCloseButton } from "../components/ModalCloseButton";
 import type { UserProfile } from "../App";
 
 function authModeFromParam(raw: string | null): "login" | "register" | null {
@@ -494,6 +495,7 @@ export function AuthPage({
             aria-labelledby="privacy-title"
             onClick={(e) => e.stopPropagation()}
           >
+            <ModalCloseButton label="Close privacy details" onClick={() => setPrivacyOpen(false)} />
             <h2 id="privacy-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               We value privacy
             </h2>
@@ -519,9 +521,6 @@ export function AuthPage({
               Sharing anything personal is always a choice you make, and you can update or revoke it
               in Settings. You can also export your data or delete your account at any time.
             </p>
-            <button type="button" className="btn secondary" onClick={() => setPrivacyOpen(false)}>
-              Close
-            </button>
           </div>
         </div>
       )}

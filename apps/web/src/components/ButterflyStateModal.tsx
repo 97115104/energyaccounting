@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { ModalCloseButton } from "./ModalCloseButton";
 import {
   canonicalStateLabel,
   type ButterflyState,
@@ -79,6 +80,7 @@ export function ButterflyStateModal({ state, onClose }: Props) {
         aria-labelledby="butterfly-state-title"
         tabIndex={-1}
       >
+        <ModalCloseButton label="Close butterfly state details" onClick={onClose} />
         <p className="muted butterfly-state-eyebrow">Today&apos;s butterfly</p>
         <h2 id="butterfly-state-title" className="butterfly-state-title">
           {state.label}
@@ -102,11 +104,6 @@ export function ButterflyStateModal({ state, onClose }: Props) {
             </div>
           </div>
         )}
-        <div className="modal-actions">
-          <button type="button" className="btn accent" onClick={onClose}>
-            Got it
-          </button>
-        </div>
       </div>
     </div>
   );
