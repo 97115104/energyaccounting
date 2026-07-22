@@ -3927,6 +3927,94 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   margin: 1.25rem 0 0.35rem;
 }
 
+/* Your mark: collapsed preview by default; expand to edit. */
+.you-mark-editor {
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+}
+
+.you-mark-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.you-mark-summary::-webkit-details-marker {
+  display: none;
+}
+
+.you-mark-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.you-mark-preview-art {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.you-mark-preview-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.you-mark-preview-name {
+  font-weight: 700;
+}
+
+.you-mark-preview-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.you-mark-preview-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  flex: none;
+}
+
+.you-mark-edit-hint {
+  flex: none;
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.you-mark-hint-open {
+  display: none;
+}
+
+.you-mark-editor[open] .you-mark-hint-closed {
+  display: none;
+}
+
+.you-mark-editor[open] .you-mark-hint-open {
+  display: inline;
+}
+
+.you-mark-editor[open] > .you-mark-summary {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.you-mark-editor-body {
+  padding-bottom: 0.25rem;
+}
+
 .you-symbol-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

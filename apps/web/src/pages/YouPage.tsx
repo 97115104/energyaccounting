@@ -40,6 +40,7 @@ import {
   archetypeMeta,
   normalizeIdentity,
   paletteSwatchBackground,
+  symbolMeta,
   type ButterflyPalette,
   type IdentityConfig,
 } from "../lib/identity";
@@ -441,107 +442,139 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
 
       <IntelligenceOverview intelligence={personalIntel} status={intelStatus} />
 
-      {/* Identity: symbol, base, palette. */}
+      {/* Identity: compact preview by default; expand to customize. */}
       <section className="panel you-section" aria-labelledby="you-identity-title">
         <h3 id="you-identity-title">Your mark</h3>
         <p className="muted">
           The butterfly is always your inside self here. Your mark is the symbol you show
           elsewhere: on shares, exports, and the sign-in welcome.
         </p>
-        <div className="you-symbol-grid" role="radiogroup" aria-label="External symbol">
-          {SYMBOLS.map((s) => (
-            <label
-              key={s.id}
-              className={`you-symbol-card${identity.symbol === s.id ? " selected" : ""}`}
-            >
-              <input
-                type="radio"
-                name="you-symbol"
-                value={s.id}
-                checked={identity.symbol === s.id}
-                onChange={() => saveIdentity({ symbol: s.id })}
-              />
-              <span className="you-symbol-art">
-                <IdentityMark identity={liveIdentity} symbol={s.id} size={44} decorative />
+
+        <details className="you-mark-editor">
+          <summary className="you-mark-summary">
+            <span className="you-mark-preview">
+              <span className="you-mark-preview-art" aria-hidden="true">
+                <IdentityMark identity={liveIdentity} size={48} decorative />
               </span>
-              <span className="you-symbol-name">{s.label}</span>
-              <span className="you-symbol-blurb muted">{s.blurb}</span>
-            </label>
-          ))}
-        </div>
+              <span className="you-mark-preview-copy">
+                <span className="you-mark-preview-name">
+                  {symbolMeta(identity.symbol).label}
+                </span>
+                <span className="muted you-mark-preview-meta">
+                  {archetypeMeta(identity.archetype).label}
+                  <span
+                    className="you-mark-preview-swatch"
+                    style={{ background: paletteSwatchBackground(localPalette) }}
+                    aria-hidden="true"
+                  />
+                </span>
+              </span>
+            </span>
+            <span className="you-mark-edit-hint">
+              <span className="you-mark-hint-closed">Customize</span>
+              <span className="you-mark-hint-open">Done</span>
+            </span>
+          </summary>
 
-        <h4>Wing family</h4>
-        <p className="muted">
-          Neurodivergent people are as varied as butterflies, so pick the silhouette that feels
-          like you, then shape the details.
-        </p>
-        <WingFamilyPicker
-          identity={liveIdentity}
-          value={identity.archetype}
-          onChange={changeFamily}
-        />
-
-        <h4>Wing details</h4>
-        <WingDetails wing={identity.wing} onChange={changeWing} />
-
-        <h4>Wing colors and what they mean</h4>
-        <p className="muted">
-          Colors carry whatever meaning you give them. Write your own; it appears wherever you
-          choose to share.
-        </p>
-        <div className="you-palette-presets">
-          {PALETTE_PRESETS.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              className="you-preset"
-              onClick={() => commitPalette(p.palette)}
-            >
-              <span
-                className="you-preset-swatch"
-                style={{ background: paletteSwatchBackground(p.palette) }}
-                aria-hidden="true"
-              />
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="you-color-rows">
-          {(["primary", "secondary", "accent"] as const).map((slot) => (
-            <div key={slot} className="you-color-row">
-              <label className="you-color-slot" htmlFor={`you-color-${slot}`}>
-                {SLOT_LABEL[slot]}
-              </label>
-              <input
-                id={`you-color-${slot}`}
-                type="color"
-                value={localPalette[slot]}
-                onChange={(e) => {
-                  // Hand-picking a color takes over from the rainbow drift.
-                  const { rainbow: _drop, ...rest } = localPalette;
-                  setLocalPalette({ ...rest, [slot]: e.target.value });
-                }}
-                onBlur={() => commitPalette(localPalette)}
-              />
-              <ColorMeaningInput
-                slot={slot}
-                label={SLOT_LABEL[slot] ?? slot}
-                value={meaningFor(slot)}
-                disabled={!profileLoaded}
-                onLocalChange={(meaning) => {
-                  // Local-only until commit so typing does not thrash encryption.
-                  const prev = profileRef.current;
-                  const rest = prev.colorMeanings.filter((m) => m.slot !== slot);
-                  applyProfile({
-                    ...prev,
-                    colorMeanings: meaning.trim() ? [...rest, { slot, meaning }] : rest,
-                  });
-                }}
-                onCommit={(meaning) => setColorMeaning(slot, meaning)}
-              />
+          <div className="you-mark-editor-body">
+            <div className="you-symbol-grid" role="radiogroup" aria-label="External symbol">
+              {SYMBOLS.map((s) => (
+                <label
+                  key={s.id}
+                  className={`you-symbol-card${identity.symbol === s.id ? " selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="you-symbol"
+                    value={s.id}
+                    checked={identity.symbol === s.id}
+                    onChange={() => saveIdentity({ symbol: s.id })}
+                  />
+                  <span className="you-symbol-art">
+                    <IdentityMark identity={liveIdentity} symbol={s.id} size={44} decorative />
+                  </span>
+                  <span className="you-symbol-name">{s.label}</span>
+                  <span className="you-symbol-blurb muted">{s.blurb}</span>
+                </label>
+              ))}
             </div>
-          ))}
-        </div>
+
+            <h4>Wing family</h4>
+            <p className="muted">
+              Neurodivergent people are as varied as butterflies, so pick the silhouette that
+              feels like you, then shape the details.
+            </p>
+            <WingFamilyPicker
+              identity={liveIdentity}
+              value={identity.archetype}
+              onChange={changeFamily}
+            />
+
+            <h4>Wing details</h4>
+            <WingDetails wing={identity.wing} onChange={changeWing} />
+
+            <h4>Wing colors and what they mean</h4>
+            <p className="muted">
+              Colors carry whatever meaning you give them. Write your own; it appears wherever
+              you choose to share.
+            </p>
+            <div className="you-palette-presets">
+              {PALETTE_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  className="you-preset"
+                  onClick={() => commitPalette(p.palette)}
+                >
+                  <span
+                    className="you-preset-swatch"
+                    style={{ background: paletteSwatchBackground(p.palette) }}
+                    aria-hidden="true"
+                  />
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="you-color-rows">
+              {(["primary", "secondary", "accent"] as const).map((slot) => (
+                <div key={slot} className="you-color-row">
+                  <label className="you-color-slot" htmlFor={`you-color-${slot}`}>
+                    {SLOT_LABEL[slot]}
+                  </label>
+                  <input
+                    id={`you-color-${slot}`}
+                    type="color"
+                    value={localPalette[slot]}
+                    onChange={(e) => {
+                      // Hand-picking a color takes over from the rainbow drift.
+                      const { rainbow: _drop, ...rest } = localPalette;
+                      setLocalPalette({ ...rest, [slot]: e.target.value });
+                    }}
+                    onBlur={() => commitPalette(localPalette)}
+                  />
+                  <ColorMeaningInput
+                    slot={slot}
+                    label={SLOT_LABEL[slot] ?? slot}
+                    value={meaningFor(slot)}
+                    disabled={!profileLoaded}
+                    onLocalChange={(meaning) => {
+                      // Local-only until commit so typing does not thrash encryption.
+                      const prev = profileRef.current;
+                      const rest = prev.colorMeanings.filter((m) => m.slot !== slot);
+                      applyProfile({
+                        ...prev,
+                        colorMeanings: meaning.trim()
+                          ? [...rest, { slot, meaning }]
+                          : rest,
+                      });
+                    }}
+                    onCommit={(meaning) => setColorMeaning(slot, meaning)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
       </section>
 
       {/* What the on-device intelligence noticed. */}
