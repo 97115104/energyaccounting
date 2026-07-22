@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
@@ -50,7 +50,7 @@ function DayGlyph() {
 
 function DayDoneGlyph() {
   // The journal from DayGlyph, but finished: a bold check where the remaining
-  // lines would be, so "close it when you're done" gets its own mark.
+  // lines would be, so closing a day gets its own mark.
   return (
     <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
       <rect x="12" y="8" width="40" height="48" fill="none" stroke="currentColor" strokeWidth="3.5" />
@@ -99,6 +99,31 @@ function PersonGlyph() {
   );
 }
 
+function LockGlyph() {
+  return (
+    <svg viewBox="0 0 64 64" className="ob-glyph" aria-hidden="true">
+      <rect
+        x="16"
+        y="28"
+        width="32"
+        height="24"
+        rx="4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+      />
+      <path
+        d="M22 28v-6a10 10 0 0 1 20 0v6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+      />
+      <circle cx="32" cy="40" r="3" fill="currentColor" />
+    </svg>
+  );
+}
+
 type Step = {
   eyebrow: string;
   thesis: string;
@@ -110,6 +135,8 @@ type Step = {
   identity?: "symbol" | "butterfly";
   /** Show the person's NeuroMe seal in the aside instead of the glyph. */
   neurome?: boolean;
+  /** Teaching demo mirrored in content controls + aside visual. */
+  demo?: "energy" | "day" | "privacy";
 };
 
 /**
@@ -128,53 +155,54 @@ const NEUROME_DEMO_STATE = resolveButterflyState({
   phase: "audit",
 });
 
-// Deliberately short: the core loop and the privacy boundary. Everything
-// else (capacity mechanics, the Attwood terms, how suggestions are ranked)
-// is taught in place on the Today page via help disclosures and the Energy
-// Guide, where it can attach to a real day instead of theory.
+// One idea per slide: the core loop, the privacy boundary, and identity.
+// Capacity mechanics and ranking detail live on Today via help disclosures.
 const STEPS: Step[] = [
   {
-    eyebrow: "Idea",
+    eyebrow: "Welcome",
     thesis: "Your energy matters.",
     whisper:
-      "An energy accounting journal built for neurodivergent brains, from the method by Maja Toudal and Dr. Tony Attwood. You explicitly start each energy day when you're ready; nothing starts automatically. Every day gets a fresh 100 points with no carry from the last one. Add energy with restorative activities, track what uses energy, and complete planned tasks to free their reserved capacity.",
+      "This is an energy accounting journal for neurodivergent brains, drawn from the method by Maja Toudal and Dr. Tony Attwood. You start each energy day when you are ready, and every day begins with a visible 100 points you can restore and spend. Try the buttons below to feel how that balance moves.",
     glyph: <SunGlyph />,
     source: { label: "Read about Energy Accounting", url: "https://energyaccounting.com/" },
+    demo: "energy",
   },
   {
-    eyebrow: "Your day, your boundary",
-    thesis: "Close it when you're done.",
+    eyebrow: "Your pace",
+    thesis: "Your day is important.",
     whisper:
-      "Your energy day ends when you close it, not when the clock hits midnight. Irregular sleep, long focus stretches, shift work, and time blindness are normal here; an open day stays active across calendar dates with no penalty. When you're ready, close it and explicitly start the next day fresh at 100.",
+      "You decide when your energy day ends. An open day can stay with you across calendar dates, which makes room for irregular sleep, long focus stretches, shift work, and time blindness. When you are ready, you close the day and start the next one fresh at 100.",
     glyph: <DayDoneGlyph />,
+    demo: "day",
   },
   {
     eyebrow: "Rhythm",
     thesis: "Plan, audit, close.",
     whisper:
-      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Your NeuroMe seal beside the greeting keeps that beat with you: the ring around your mark is today's remaining energy, easing as tasks use it and refilling as you add it back. Closed days appear under Previous days on the Dashboard and open read-only, where you can amend the record or delete it permanently.",
+      "Each day moves through three phases: planning, auditing how it actually felt, then closing. Your NeuroMe seal beside the greeting keeps that beat with you, and the ring around your mark shows today's remaining energy as you restore and spend it. Closed days live under Previous days on the Dashboard, where you can amend the record or delete it permanently.",
     glyph: <DayGlyph />,
     neurome: true,
   },
   {
     eyebrow: "Privacy",
-    thesis: "Private by architecture.",
+    thesis: "What you write stays yours.",
     whisper:
-      "Activity labels, journals, and task details are encrypted before they leave your browser. Numeric totals stay available on this device so trends and the Energy Guide can rank suggestions, with an explanation and a dismiss control available for every suggestion.",
+      "Activity labels, journals, and task details are encrypted in your browser before they leave the device. Numeric totals stay available so trends and the Energy Guide can rank suggestions on this device, and every suggestion arrives with an explanation and a dismiss control.",
     glyph: <CheckGlyph />,
+    demo: "privacy",
   },
   {
     eyebrow: "Getting to know you",
     thesis: "A private picture of you.",
     whisper:
-      "On the You page, Your energy intelligence quietly learns from the days you log: what tends to restore you, what costs energy, and what your typical day actually looks like. It is built on this device and stays private unless you choose to share it. How to work with you turns that into a short, shareable perspective, drafted from your history and editable in your own words, so people can understand you without you having to explain from scratch. The more you log, the sharper it gets.",
+      "On the You page, Your energy intelligence learns from the days you log: what tends to restore you, what costs energy, and what your typical day looks like. It is built on this device and stays private until you choose to share it. How to work with you turns that history into a short, editable note you can share in your own words.",
     glyph: <PersonGlyph />,
   },
   {
     eyebrow: "Symbolism matters",
     thesis: "Choose your mark.",
     whisper:
-      "Neurodivergent people carry many symbols with pride. Pick the one that feels like yours; it appears on shares, exports, and your sign-in welcome. Inside the app, your butterfly is always you, and you can change this any time on the You page.",
+      "Neurodivergent people carry many symbols with pride. Pick the one that feels like yours, and it will appear on shares, exports, and your sign-in welcome. Inside the app your butterfly is always you, and you can change this any time on the You page.",
     glyph: <PersonGlyph />,
     identity: "symbol",
   },
@@ -182,7 +210,7 @@ const STEPS: Step[] = [
     eyebrow: "We are all butterflies",
     thesis: "Meet your butterfly.",
     whisper:
-      "The butterfly is this app's symbol of becoming: change that looks like struggle from the inside. Pick a wing family to start from; there are eight, because neurodivergent people are as varied as butterflies. Its wings beat with your energy, and its colors mean whatever you decide. Shape the edges, tails, and patterns any time on the You page.",
+      "The butterfly is this app's symbol of becoming, with change that can feel like struggle from the inside. Pick a wing family to start from; there are eight, because neurodivergent people are as varied as butterflies. Its wings beat with your energy, and you can shape the edges, tails, and patterns any time on the You page.",
     glyph: <PersonGlyph />,
     identity: "butterfly",
   },
@@ -217,6 +245,10 @@ export function OnboardingPage({ user, onUser }: Props) {
   const [identity, setIdentity] = useState<IdentityConfig>(() =>
     normalizeIdentity(user.identity, user.id),
   );
+  // Demo state for teaching slides; aside visuals mirror these controls.
+  const [demoEnergy, setDemoEnergy] = useState(100);
+  const [demoDayClosed, setDemoDayClosed] = useState(false);
+  const [demoSealed, setDemoSealed] = useState(false);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const replay = params.get("replay") === "1";
@@ -232,23 +264,43 @@ export function OnboardingPage({ user, onUser }: Props) {
 
   const last = step >= STEPS.length - 1;
   const current = STEPS[step]!;
+  const tall =
+    current.setup ||
+    current.identity === "butterfly" ||
+    current.identity === "symbol" ||
+    Boolean(current.demo);
 
   function go(delta: 1 | -1) {
     setDirection(delta === 1 ? "next" : "prev");
     setStep((s) => Math.min(Math.max(s + delta, 0), STEPS.length - 1));
   }
 
-  // Arrow keys page through the slides, Apple-keynote style.
+  // Arrow keys page slides unless focus is in a field, picker, or teaching demo
+  // (those controls own Left/Right). Chrome Continue/Back still allow paging.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable="true"], .ob-demo, .ob-identity, [role="radiogroup"]',
+        )
+      ) {
+        return;
+      }
       if (e.key === "ArrowRight" && !last) go(1);
       if (e.key === "ArrowLeft" && step > 0) go(-1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [step, last]);
+
+  // Reset teaching demos when entering their slide so the thesis stays true
+  // (every day begins at 100; day starts open; sample note starts readable).
+  useEffect(() => {
+    if (current.demo === "energy") setDemoEnergy(100);
+    if (current.demo === "day") setDemoDayClosed(false);
+    if (current.demo === "privacy") setDemoSealed(false);
+  }, [step, current.demo]);
 
   async function finish() {
     setError(null);
@@ -307,10 +359,7 @@ export function OnboardingPage({ user, onUser }: Props) {
 
   return (
     <div className="ob-root">
-      <div
-        className="ob-progress"
-        aria-hidden="true"
-      >
+      <div className="ob-progress" aria-hidden="true">
         <div
           className="ob-progress-fill"
           style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
@@ -319,13 +368,11 @@ export function OnboardingPage({ user, onUser }: Props) {
 
       {/* key remounts the slide so the enter animation replays each step */}
       <article
-        className={`ob-card ob-card-${direction}${
-          current.setup || current.identity === "butterfly" ? " ob-card-tall" : ""
-        }`}
+        className={`ob-card ob-card-${direction}${tall ? " ob-card-tall" : ""}`}
         key={step}
         aria-labelledby="ob-thesis"
       >
-        <div className="ob-content" aria-live="polite" aria-atomic="true">
+        <div className="ob-content">
           <p className="ob-eyebrow">{current.eyebrow}</p>
           <h2 className="ob-thesis" id="ob-thesis">
             {current.thesis}
@@ -337,29 +384,49 @@ export function OnboardingPage({ user, onUser }: Props) {
               <span aria-hidden="true"> ↗</span>
             </a>
           )}
+          {current.demo === "energy" && (
+            <EnergyControls balance={demoEnergy} onChange={setDemoEnergy} />
+          )}
+          {current.demo === "day" && (
+            <DayBoundaryControls closed={demoDayClosed} onChange={setDemoDayClosed} />
+          )}
+          {current.demo === "privacy" && (
+            <PrivacyControls sealed={demoSealed} onChange={setDemoSealed} />
+          )}
           {current.identity === "symbol" && (
-            <div className="ob-setup ob-identity" role="radiogroup" aria-label="Your symbol">
-              {SYMBOLS.map((s) => (
-                <label
-                  key={s.id}
-                  className={`ob-symbol-card${identity.symbol === s.id ? " selected" : ""}`}
-                >
-                  <input
-                    type="radio"
-                    name="ob-symbol"
-                    value={s.id}
-                    checked={identity.symbol === s.id}
-                    onChange={() => setIdentity({ ...identity, symbol: s.id })}
-                  />
-                  <span className="ob-symbol-art">
-                    <IdentityMark identity={identity} symbol={s.id} size={40} decorative />
-                  </span>
-                  <span className="ob-symbol-copy">
-                    <strong>{s.label}</strong>
-                    <span className="muted">{s.blurb}</span>
-                  </span>
-                </label>
-              ))}
+            <div className="ob-setup ob-identity">
+              <div
+                className="you-symbol-grid you-symbol-grid--thumbs you-symbol-grid--symbols"
+                role="radiogroup"
+                aria-label="Your symbol"
+              >
+                {SYMBOLS.map((s) => (
+                  <label
+                    key={s.id}
+                    className={`you-symbol-card${identity.symbol === s.id ? " selected" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="ob-symbol"
+                      value={s.id}
+                      checked={identity.symbol === s.id}
+                      onChange={() => setIdentity({ ...identity, symbol: s.id })}
+                    />
+                    <span className="you-symbol-art">
+                      <IdentityMark identity={identity} symbol={s.id} size={40} decorative />
+                    </span>
+                    <span className="you-symbol-copy">
+                      <span className="you-symbol-name">{s.label}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="ob-family-blurb muted">
+                <strong>
+                  {SYMBOLS.find((s) => s.id === identity.symbol)?.label ?? "Symbol"}.
+                </strong>{" "}
+                {SYMBOLS.find((s) => s.id === identity.symbol)?.blurb}
+              </p>
             </div>
           )}
           {current.identity === "butterfly" && (
@@ -368,7 +435,7 @@ export function OnboardingPage({ user, onUser }: Props) {
                 identity={identity}
                 value={identity.archetype}
                 suggestPalettes
-                compact
+                density="thumbnails"
                 name="ob-archetype"
                 onChange={(family) =>
                   setIdentity({
@@ -475,7 +542,13 @@ export function OnboardingPage({ user, onUser }: Props) {
           {error && <p className="error">{error}</p>}
         </div>
         <div className="ob-aside" aria-hidden="true">
-          {current.identity === "symbol" ? (
+          {current.demo === "energy" ? (
+            <EnergyRing balance={demoEnergy} />
+          ) : current.demo === "day" ? (
+            <DayBoundaryVisual closed={demoDayClosed} />
+          ) : current.demo === "privacy" ? (
+            <PrivacyVisual sealed={demoSealed} />
+          ) : current.identity === "symbol" ? (
             <SymbolShowcase identity={identity} />
           ) : current.identity === "butterfly" ? (
             <Butterfly identity={identity} beatMs={2400} size={160} />
@@ -537,6 +610,169 @@ export function OnboardingPage({ user, onUser }: Props) {
   );
 }
 
+const ENERGY_STEP = 12;
+
+function EnergyControls({
+  balance,
+  onChange,
+}: {
+  balance: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div className="ob-demo" role="group" aria-label="Try a sample energy balance">
+      <p className="ob-demo-value" aria-live="polite">
+        {balance} of 100
+      </p>
+      <div className="ob-demo-actions">
+        <button
+          type="button"
+          className="ob-demo-chip"
+          onClick={() => onChange(Math.min(100, balance + ENERGY_STEP))}
+          disabled={balance >= 100}
+        >
+          Add energy
+        </button>
+        <button
+          type="button"
+          className="ob-demo-chip"
+          onClick={() => onChange(Math.max(0, balance - ENERGY_STEP))}
+          disabled={balance <= 0}
+        >
+          Use energy
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EnergyRing({ balance }: { balance: number }) {
+  const prefersReduced = usePrefersReducedMotion();
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const filled = (balance / 100) * c;
+  return (
+    <div className="ob-energy-ring">
+      <svg viewBox="0 0 120 120" width="140" height="140" aria-hidden="true">
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="8"
+          opacity="0.18"
+        />
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={`${filled} ${c - filled}`}
+          transform="rotate(-90 60 60)"
+          style={
+            prefersReduced
+              ? undefined
+              : { transition: "stroke-dasharray 0.45s cubic-bezier(0.32, 0.72, 0, 1)" }
+          }
+        />
+        <text
+          x="60"
+          y="60"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="ob-energy-ring-num"
+          fill="currentColor"
+        >
+          {balance}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function DayBoundaryControls({
+  closed,
+  onChange,
+}: {
+  closed: boolean;
+  onChange: (closed: boolean) => void;
+}) {
+  return (
+    <div className="ob-demo" role="radiogroup" aria-label="Day state">
+      <div className="ob-segment">
+        <label className={`ob-segment-btn${!closed ? " selected" : ""}`}>
+          <input
+            type="radio"
+            name="ob-day-state"
+            checked={!closed}
+            onChange={() => onChange(false)}
+          />
+          Day still open
+        </label>
+        <label className={`ob-segment-btn${closed ? " selected" : ""}`}>
+          <input
+            type="radio"
+            name="ob-day-state"
+            checked={closed}
+            onChange={() => onChange(true)}
+          />
+          Day closed by you
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function DayBoundaryVisual({ closed }: { closed: boolean }) {
+  return (
+    <div className={`ob-day-visual${closed ? " closed" : ""}`}>
+      {closed ? <DayDoneGlyph /> : <DayGlyph />}
+      <p className="ob-day-caption">{closed ? "Closed by you" : "Still open"}</p>
+    </div>
+  );
+}
+
+function PrivacyControls({
+  sealed,
+  onChange,
+}: {
+  sealed: boolean;
+  onChange: (sealed: boolean) => void;
+}) {
+  return (
+    <div className="ob-demo" role="group" aria-label="Try keeping a note private">
+      <p className="ob-privacy-sample" aria-live="polite">
+        {sealed ? "•••• ••••• ••••••• •••••" : "A quiet note about my day"}
+      </p>
+      <div className="ob-demo-actions">
+        <button
+          type="button"
+          className="ob-demo-chip"
+          aria-pressed={sealed}
+          onClick={() => onChange(!sealed)}
+        >
+          {sealed ? "Show sample" : "Keep private"}
+        </button>
+      </div>
+      <p className="muted ob-demo-note">
+        Labels encrypt in your browser before they leave the device.
+      </p>
+    </div>
+  );
+}
+
+function PrivacyVisual({ sealed }: { sealed: boolean }) {
+  return (
+    <div className={`ob-privacy-visual${sealed ? " sealed" : ""}`}>
+      {sealed ? <LockGlyph /> : <CheckGlyph />}
+    </div>
+  );
+}
+
 /**
  * Decorative slideshow for the "Your symbol" slide: cycles through every mark
  * with a gentle pop-and-float so the aside shows the whole range, not only the
@@ -548,21 +784,28 @@ function SymbolShowcase({ identity }: { identity: IdentityConfig }) {
   const [index, setIndex] = useState(() =>
     Math.max(0, SYMBOLS.findIndex((s) => s.id === identity.symbol)),
   );
+  // Hold still only after the person changes the radiogroup; idle cycling
+  // still shows the full range on first visit.
+  const [pinned, setPinned] = useState(false);
+  const lastSymbol = useRef(identity.symbol);
 
-  // A fresh selection takes the spotlight immediately.
   useEffect(() => {
     const i = SYMBOLS.findIndex((s) => s.id === identity.symbol);
     if (i >= 0) setIndex(i);
+    if (identity.symbol !== lastSymbol.current) {
+      lastSymbol.current = identity.symbol;
+      setPinned(true);
+    }
   }, [identity.symbol]);
 
   useEffect(() => {
-    if (prefersReduced) return;
+    if (prefersReduced || pinned) return;
     const id = window.setInterval(
       () => setIndex((i) => (i + 1) % SYMBOLS.length),
       2400,
     );
     return () => window.clearInterval(id);
-  }, [prefersReduced]);
+  }, [prefersReduced, pinned]);
 
   return (
     <div className="ob-symbol-cycle">

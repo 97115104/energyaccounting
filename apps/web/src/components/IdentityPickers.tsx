@@ -62,6 +62,11 @@ export function WingFamilyPicker({
   suggestPalettes = false,
   /** Compact row cards for tight surfaces (onboarding slide). */
   compact = false,
+  /**
+   * Thumbnail grid for onboarding: names only in a 2×4 layout, with the
+   * selected family's blurb shown once under the grid (progressive disclosure).
+   */
+  density = "default" as "default" | "compact" | "thumbnails",
   /** Radio input name; unique when multiple pickers could share a page. */
   name = "you-archetype",
 }: {
@@ -72,43 +77,59 @@ export function WingFamilyPicker({
       palette is chosen together with the family). */
   suggestPalettes?: boolean;
   compact?: boolean;
+  density?: "default" | "compact" | "thumbnails";
   name?: string;
 }) {
-  const artSize = compact ? 52 : 64;
+  // compact remains supported for older call sites; thumbnails win when set.
+  const mode = density === "default" && compact ? "compact" : density;
+  const artSize = mode === "thumbnails" ? 44 : mode === "compact" ? 52 : 64;
+  const selected = ARCHETYPES.find((a) => a.id === value) ?? ARCHETYPES[0]!;
+  const gridClass =
+    mode === "thumbnails"
+      ? "you-symbol-grid you-symbol-grid--thumbs"
+      : mode === "compact"
+        ? "you-symbol-grid you-symbol-grid--compact"
+        : "you-symbol-grid";
+
   return (
-    <div
-      className={`you-symbol-grid${compact ? " you-symbol-grid--compact" : ""}`}
-      role="radiogroup"
-      aria-label="Wing family"
-    >
-      {ARCHETYPES.map((a) => (
-        <label key={a.id} className={`you-symbol-card${value === a.id ? " selected" : ""}`}>
-          <input
-            type="radio"
-            name={name}
-            value={a.id}
-            checked={value === a.id}
-            onChange={() => onChange(a.id)}
-          />
-          <span className="you-symbol-art">
-            <Butterfly
-              identity={{
-                ...identity,
-                archetype: a.id,
-                wing: normalizeWing(a.id, identity.wing),
-                ...(suggestPalettes ? { palette: { ...a.palette } } : {}),
-              }}
-              beatMs={null}
-              size={artSize}
-              decorative
+    <div className={mode === "thumbnails" ? "ob-wing-pick" : undefined}>
+      <div className={gridClass} role="radiogroup" aria-label="Wing family">
+        {ARCHETYPES.map((a) => (
+          <label key={a.id} className={`you-symbol-card${value === a.id ? " selected" : ""}`}>
+            <input
+              type="radio"
+              name={name}
+              value={a.id}
+              checked={value === a.id}
+              onChange={() => onChange(a.id)}
             />
-          </span>
-          <span className="you-symbol-copy">
-            <span className="you-symbol-name">{a.label}</span>
-            <span className="you-symbol-blurb muted">{a.blurb}</span>
-          </span>
-        </label>
-      ))}
+            <span className="you-symbol-art">
+              <Butterfly
+                identity={{
+                  ...identity,
+                  archetype: a.id,
+                  wing: normalizeWing(a.id, identity.wing),
+                  ...(suggestPalettes ? { palette: { ...a.palette } } : {}),
+                }}
+                beatMs={null}
+                size={artSize}
+                decorative
+              />
+            </span>
+            <span className="you-symbol-copy">
+              <span className="you-symbol-name">{a.label}</span>
+              {mode !== "thumbnails" && (
+                <span className="you-symbol-blurb muted">{a.blurb}</span>
+              )}
+            </span>
+          </label>
+        ))}
+      </div>
+      {mode === "thumbnails" && (
+        <p className="ob-family-blurb muted">
+          <strong>{selected.label}.</strong> {selected.blurb}
+        </p>
+      )}
     </div>
   );
 }

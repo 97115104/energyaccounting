@@ -3492,23 +3492,21 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   transition: width 0.45s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Fixed footprint so slides don't jump between steps. */
+/* Fixed footprint floor so dots don't jump; page scrolls instead of an
+   inner scrollbox (nested overflow fights neurodivergent focus). */
 .ob-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2rem;
   align-items: center;
-  height: min(52vh, 520px);
-  overflow: auto;
+  min-height: min(52vh, 520px);
+  height: auto;
+  overflow: visible;
 }
 
-/* The setup slide holds a real form; give it natural height so nothing clips.
-   Centered overflow in the fixed-height card would otherwise cut the fields
-   mid-label with the top unreachable. */
+/* The setup / identity / demo slides still opt into the tall class for
+   align-items:start so forms and pickers sit under the thesis cleanly. */
 .ob-card.ob-card-tall {
-  height: auto;
-  min-height: min(52vh, 520px);
-  overflow: visible;
   align-items: start;
 }
 
@@ -4081,6 +4079,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   .ob-whisper,
   .ob-aside,
   .ob-setup,
+  .ob-demo,
   .ob-dot::after,
   .ob-progress-fill,
   .wordmark,
@@ -5157,17 +5156,217 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 
 /* ---------------------- Onboarding identity slides ---------------------- */
 
+/* Page scrolls if needed; avoid a nested scroll trap inside the card. */
 .ob-identity {
   display: grid;
   gap: 0.5rem;
-  max-height: min(52vh, 28rem);
-  overflow-y: auto;
   padding-right: 0.25rem;
 }
 
+/* Wing family thumbnails: 2×4 grid, one blurb under the selection. */
+.you-symbol-grid--thumbs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.you-symbol-grid--thumbs .you-symbol-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.55rem 0.35rem;
+  text-align: center;
+}
+
+.you-symbol-grid--thumbs .you-symbol-art {
+  width: auto;
+  height: auto;
+}
+
+.you-symbol-grid--thumbs .you-symbol-name {
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.you-symbol-grid--thumbs .you-symbol-copy {
+  justify-items: center;
+}
+
+.ob-family-blurb {
+  margin: 0.65rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.ob-family-blurb strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
-  .ob-identity {
-    max-height: none;
+  .you-symbol-grid--thumbs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.you-symbol-grid--symbols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Teaching demos: controls in content, visual in the aside. */
+.ob-demo {
+  margin-top: 1.35rem;
+  width: 100%;
+  max-width: 26rem;
+  animation: ob-rise 0.55s cubic-bezier(0.32, 0.72, 0, 1) 280ms both;
+}
+
+.ob-demo-value {
+  margin: 0 0 0.65rem;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.ob-demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ob-demo-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent));
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.ob-demo-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.ob-demo-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ob-demo-chip:focus-visible:not(:disabled) {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.ob-demo-note {
+  margin: 0.55rem 0 0;
+  font-size: 0.88rem;
+}
+
+.ob-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 2px);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.ob-segment-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.55rem;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.ob-segment-btn input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ob-segment-btn.selected {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.ob-segment-btn:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.ob-energy-ring {
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.ob-energy-ring-num {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+
+.ob-day-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent);
+}
+
+.ob-day-caption {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ob-privacy-sample {
+  margin: 0 0 0.75rem;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  min-height: 1.6em;
+}
+
+.ob-privacy-visual {
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ob-privacy-visual.sealed {
+  transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-privacy-visual {
+    transition: none;
+  }
+
+  .ob-privacy-visual.sealed {
+    transform: none;
   }
 }
 
