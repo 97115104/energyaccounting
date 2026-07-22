@@ -15,7 +15,7 @@ import { greetingDetailFor, randomFact, type GreetingStyle } from "./lib/greetin
 import { normalizeIdentity } from "./lib/identity";
 import { hasReturningFlag, markReturning } from "./lib/returning";
 import { liveTimezone } from "./lib/timezone";
-import { skyPeriod } from "./lib/weatherUi";
+import { SKY_CSS_VARS, skyPalette } from "./lib/skyPalette";
 import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
 import { FactLinkedText } from "./components/FactLinkedText";
 import { NeuroMe } from "./components/IdentityMark";
@@ -155,29 +155,51 @@ export function App() {
     })();
   }, []);
 
-  // Sky theme follows the real sun when we know where the user is:
-  // dawn/dusk golden hours around sunrise/sunset, otherwise day or night.
+  // Sky colors track the real sun continuously; night chrome still flips
+  // via data-theme when skyPeriod says night (20:00 floor / post-dusk).
   useEffect(() => {
     const tz = liveTimezone(user?.timezone);
+    const root = document.documentElement;
+    const clearSkyVars = () => {
+      for (const key of SKY_CSS_VARS) root.style.removeProperty(key);
+    };
     const apply = () => {
-      const period = skyPeriod(user?.lat, user?.lon, tz);
-      document.documentElement.dataset.theme = period;
+      const palette = skyPalette(user?.lat, user?.lon, tz);
+      const theme = palette.period === "night" ? "night" : "day";
+      root.dataset.theme = theme;
+      if (theme === "night") {
+        clearSkyVars();
+      } else {
+        root.style.setProperty("--bg0", palette.bg0);
+        root.style.setProperty("--bg1", palette.bg1);
+        root.style.setProperty("--sky-glow", palette.skyGlow);
+        root.style.setProperty("--sun-face", palette.sunFace);
+        root.style.setProperty("--sun-halo", palette.sunHalo);
+      }
       const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
       if (favicon) {
-        favicon.href = period === "night" ? "/favicon-moon.svg" : "/favicon-sun.svg";
+        favicon.href = theme === "night" ? "/favicon-moon.svg" : "/favicon-sun.svg";
       }
       // Keep browser chrome (and iOS overscroll area) on the theme's sky color.
       const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
       if (themeColor) {
-        const bg0 = getComputedStyle(document.documentElement)
-          .getPropertyValue("--bg0")
-          .trim();
+        const bg0 = getComputedStyle(root).getPropertyValue("--bg0").trim();
         if (bg0) themeColor.content = bg0;
       }
     };
     apply();
-    const id = window.setInterval(apply, 60_000);
-    return () => window.clearInterval(id);
+    // Align to the next clock minute so sunrise/sunset edges don't lag a full minute.
+    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    let intervalId = 0;
+    const timeoutId = window.setTimeout(() => {
+      apply();
+      intervalId = window.setInterval(apply, 60_000);
+    }, msToNextMinute);
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId) window.clearInterval(intervalId);
+      clearSkyVars();
+    };
   }, [user?.timezone, user?.lat, user?.lon]);
 
   // Keep the last identity and display name cached so the sign-in screen can

@@ -4,6 +4,7 @@ import {
   hourInTimezone,
   isNightInTimezone,
   liveTimezone,
+  minutesSinceMidnightInTimezone,
 } from "./timezone";
 
 describe("liveTimezone", () => {
@@ -51,5 +52,14 @@ describe("isNightInTimezone", () => {
     const instant = new Date("2026-07-21T21:50:00Z");
     expect(isNightInTimezone("America/Los_Angeles", instant)).toBe(false);
     expect(isNightInTimezone("Europe/London", instant)).toBe(true);
+  });
+});
+
+describe("minutesSinceMidnightInTimezone", () => {
+  test("returns hour*60+minute in the zone", () => {
+    // 21:50 UTC = 14:50 PDT
+    const instant = new Date("2026-07-21T21:50:00Z");
+    expect(minutesSinceMidnightInTimezone(instant, "America/Los_Angeles")).toBe(14 * 60 + 50);
+    expect(minutesSinceMidnightInTimezone(instant, "UTC")).toBe(21 * 60 + 50);
   });
 });

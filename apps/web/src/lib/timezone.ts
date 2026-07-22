@@ -48,3 +48,31 @@ export function isNightInTimezone(timezone: string, now = new Date()): boolean {
   const hour = hourInTimezone(now, timezone || "UTC");
   return hour < 6 || hour >= 20;
 }
+
+/**
+ * Minutes since local midnight in an IANA zone (0–1439). Used by the continuous
+ * sky fallback when lat/lon are missing so afternoon can darken without solar math.
+ */
+export function minutesSinceMidnightInTimezone(now: Date, timeZone?: string | null): number {
+  if (!timeZone) {
+    return now.getHours() * 60 + now.getMinutes();
+  }
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      hourCycle: "h23",
+      timeZone,
+    }).formatToParts(now);
+    const hourRaw = parts.find((p) => p.type === "hour")?.value;
+    const minuteRaw = parts.find((p) => p.type === "minute")?.value;
+    if (hourRaw == null || minuteRaw == null) {
+      return now.getHours() * 60 + now.getMinutes();
+    }
+    const hour = Number(hourRaw) % 24;
+    const minute = Number(minuteRaw);
+    return hour * 60 + minute;
+  } catch {
+    return now.getHours() * 60 + now.getMinutes();
+  }
+}

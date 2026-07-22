@@ -1,6 +1,6 @@
 /** Weather mapping, sunrise/sunset math, and temperature formatting. */
 
-import { isNightInTimezone } from "./timezone";
+import { hourInTimezone, isNightInTimezone } from "./timezone";
 
 // Re-exported to keep weatherUi's public API unchanged after the move.
 export { isNightInTimezone };
@@ -120,8 +120,10 @@ export function sunTimes(lat: number, lon: number, now = new Date()): SunTimes {
 
 export type SkyPeriod = "day" | "night" | "dawn" | "dusk";
 
-const GOLDEN_BEFORE_MS = 40 * 60_000;
-const GOLDEN_AFTER_MS = 30 * 60_000;
+/** Predawn / post-dusk golden shoulder (shared with continuous skyPalette). */
+export const GOLDEN_BEFORE_MS = 40 * 60_000;
+/** Post-sunrise / pre-sunset golden shoulder. */
+export const GOLDEN_AFTER_MS = 30 * 60_000;
 const DAY_MS = 86_400_000;
 
 /**
@@ -137,56 +139,73 @@ export function skyPeriod(
   timezone: string,
   now = new Date(),
 ): SkyPeriod {
-  // Keep authenticated and signed-out skies consistent at the local night
-  // boundary; solar golden hour must not reintroduce a sun after 20:00.
-  // Polar day is the only exception because the sun truly never sets.
-  if (isNightInTimezone(timezone, now)) {
-    if (lat != null && lon != null) {
-      const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      for (const offset of [0, -1, 1] as const) {
-        const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
-        if (result.kind === "polar" && result.alwaysUp) return "day";
-      }
-    }
+  const hour = hourInTimezone(now, timezone || "UTC");
+
+  // Hard evening floor: solar golden hour must not keep a sun after 20:00.
+  // Polar day is the only exception (the sun truly never sets).
+  if (hour >= 20) {
+    if (lat != null && lon != null && isPolarAlwaysUp(lat, lon, now)) return "day";
     return "night";
   }
+
   if (lat != null && lon != null) {
-    const t = now.getTime();
-    const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-
-    // Prefer a polar answer if any nearby day is polar (consistent within a day).
-    for (const offset of [0, -1, 1] as const) {
-      const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
-      if (result.kind === "polar") {
-        return result.alwaysUp ? "day" : "night";
-      }
-    }
-
-    // Among neighboring civil days, find the rise/set pair that contains `now`
-    // (or the nearest golden-hour window around those edges).
-    let best: SkyPeriod | null = null;
-    let bestDist = Infinity;
-    for (const offset of [-1, 0, 1] as const) {
-      const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
-      if (result.kind !== "times") continue;
-      const rise = result.sunrise.getTime();
-      const set = result.sunset.getTime();
-
-      if (t >= rise - GOLDEN_BEFORE_MS && t <= rise + GOLDEN_AFTER_MS) return "dawn";
-      if (t >= set - GOLDEN_AFTER_MS && t <= set + GOLDEN_BEFORE_MS) return "dusk";
-      if (t > rise && t < set) return "day";
-
-      // Track distance to the day interval so "night" can still be chosen when
-      // we're between yesterday's set and tomorrow's rise.
-      const dist = t < rise ? rise - t : t - set;
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = "night";
-      }
-    }
-    if (best) return best;
+    const fromSun = periodFromSunTimes(lat, lon, now);
+    if (fromSun != null) return fromSun;
   }
-  return isNightInTimezone(timezone, now) ? "night" : "day";
+
+  // No coords, or sun times left us outside every daylight window.
+  return hour < 6 ? "night" : "day";
+}
+
+/** True when every nearby UTC day is polar-up (no civil rise/set to contradict). */
+function isPolarAlwaysUp(lat: number, lon: number, now: Date): boolean {
+  const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  let sawPolarUp = false;
+  for (const offset of [-1, 0, 1] as const) {
+    const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
+    if (result.kind === "times") return false;
+    if (result.kind === "polar" && result.alwaysUp) sawPolarUp = true;
+  }
+  return sawPolarUp;
+}
+
+/**
+ * Dawn / day / dusk / night from neighboring UTC rise/set pairs.
+ * Polar answers only apply when no civil day offers times — a polar neighbor
+ * must not override a real sunrise on the current day.
+ */
+function periodFromSunTimes(lat: number, lon: number, now: Date): SkyPeriod | null {
+  const t = now.getTime();
+  const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+  let bestNightDist = Infinity;
+  let sawTimes = false;
+  let polarUp = false;
+  let polarDown = false;
+
+  for (const offset of [-1, 0, 1] as const) {
+    const result = sunTimesForUtcDay(lat, lon, new Date(utcMidnight + offset * DAY_MS));
+    if (result.kind === "polar") {
+      if (result.alwaysUp) polarUp = true;
+      else polarDown = true;
+      continue;
+    }
+    sawTimes = true;
+    const rise = result.sunrise.getTime();
+    const set = result.sunset.getTime();
+
+    if (t >= rise - GOLDEN_BEFORE_MS && t <= rise + GOLDEN_AFTER_MS) return "dawn";
+    if (t >= set - GOLDEN_AFTER_MS && t <= set + GOLDEN_BEFORE_MS) return "dusk";
+    if (t > rise && t < set) return "day";
+
+    const dist = t < rise ? rise - t : t - set;
+    if (dist < bestNightDist) bestNightDist = dist;
+  }
+
+  if (sawTimes) return "night";
+  if (polarUp) return "day";
+  if (polarDown) return "night";
+  return null;
 }
 
 /** True when the current sky period is daytime-ish (for UV tips that cite daily max). */
