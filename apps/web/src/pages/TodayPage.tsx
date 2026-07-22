@@ -1145,15 +1145,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
     closeDraft();
   }
 
-  /** One-tap add from the Recent list. The sheet closes only on success, so a
-   * failure leaves it open with the error visible for another try. */
+  /** One-tap add from a Recent row (column or add sheet). Closes the sheet
+   * only when it was open and the add succeeds. */
   async function addRecent(s: RecentActivity) {
     if (!s.label || addingRecentRef.current) return;
     addingRecentRef.current = true;
     setAddingRecentId(s.id);
     try {
       const ok = await addLine(s.side, s.label, s.typicalCost, s.labelHash);
-      if (ok) closeDraft();
+      if (ok && draftSide) closeDraft();
     } finally {
       addingRecentRef.current = false;
       setAddingRecentId(null);
@@ -1925,7 +1925,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
             lines={withdrawals}
             closed={readOnly}
             audit={day.phase === "audit" || (closed && amending)}
+            recent={recent.filter((s) => s.side === "withdrawal" && s.label)}
+            phase={day.phase}
+            availableCapacity={day.availableCapacity}
+            addingRecentId={addingRecentId}
             onAdd={() => setDraftSide("withdrawal")}
+            onAddRecent={(s) => void addRecent(s)}
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
@@ -1939,7 +1944,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
             lines={deposits}
             closed={readOnly}
             audit={day.phase === "audit" || (closed && amending)}
+            recent={recent.filter((s) => s.side === "deposit" && s.label)}
+            phase={day.phase}
+            availableCapacity={day.availableCapacity}
+            addingRecentId={addingRecentId}
             onAdd={() => setDraftSide("deposit")}
+            onAddRecent={(s) => void addRecent(s)}
             onActual={updateActual}
             onComplete={(l) => void toggleComplete(l)}
             onRemove={(id) => void removeLine(id)}
@@ -2669,13 +2679,21 @@ function Column(props: {
   lines: Line[];
   closed: boolean;
   audit: boolean;
+  recent: RecentActivity[];
+  phase: string;
+  availableCapacity: number;
+  addingRecentId: string | null;
   onAdd: () => void;
+  onAddRecent: (s: RecentActivity) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: props.droppableId });
+  // Empty columns surface prior-ledger picks so the day can fill without a
+  // separate "repeat plan" control.
+  const showRecent = !props.lines.length && !props.closed && props.recent.length > 0;
   return (
     <div
       ref={setNodeRef}
@@ -2711,12 +2729,62 @@ function Column(props: {
           />
         ))}
       </SortableContext>
-      {!props.lines.length && (
-        <p className="muted">
-          {props.side === "withdrawal"
-            ? "Nothing using energy yet. Suspiciously well-rested."
-            : "Nothing that adds energy yet. Your battery has questions."}
-        </p>
+      {showRecent ? (
+        <div className="column-recent">
+          <h3 className="recent-heading" id={`${props.droppableId}-recent`}>
+            From recent days
+          </h3>
+          <ul className="recent-list" aria-labelledby={`${props.droppableId}-recent`}>
+            {props.recent.map((s) => {
+              const reason = recentDisabledReason(
+                s.typicalCost,
+                props.availableCapacity,
+                props.phase,
+              );
+              const reasonId = reason ? `${props.droppableId}-reason-${s.id}` : undefined;
+              const busy = props.addingRecentId === s.id;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    className="recent-row"
+                    disabled={!reason && !!props.addingRecentId}
+                    aria-disabled={reason ? true : undefined}
+                    aria-describedby={reasonId}
+                    aria-label={
+                      reason
+                        ? `${s.label}, ${s.typicalCost} points`
+                        : `Add ${s.label}, ${s.typicalCost} points`
+                    }
+                    onClick={() => {
+                      if (reason) return;
+                      props.onAddRecent(s);
+                    }}
+                  >
+                    <span className="recent-label">{s.label}</span>
+                    <span className="recent-points">{s.typicalCost}</span>
+                    <span className="recent-add" aria-hidden="true">
+                      {busy ? "…" : "+"}
+                    </span>
+                  </button>
+                  {reason && (
+                    <p id={reasonId} className="recent-reason">
+                      {reason}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : (
+        !props.lines.length && (
+          <p className="muted">
+            {props.side === "withdrawal"
+              ? "Nothing using energy yet. Suspiciously well-rested."
+              : "Nothing that adds energy yet. Your battery has questions."}
+          </p>
+        )
       )}
     </div>
   );

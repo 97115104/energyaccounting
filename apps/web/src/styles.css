@@ -1057,7 +1057,46 @@ html[data-theme="night"] .task-row.completed {
   cursor: default;
 }
 
-/* Recent activities inside the add sheet: native-feeling tappable rows. */
+/* Recent activities inside the add sheet and empty day columns. */
+.column-recent {
+  margin-top: 0.15rem;
+}
+
+/* Column picks read as soft suggestions: dotted edges, airy gaps, translucent. */
+.column-recent .recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.column-recent .recent-list li + li {
+  border-top: none;
+}
+
+.column-recent .recent-row {
+  border: 1.5px dotted color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  color: var(--ink);
+}
+
+html[data-theme="night"] .column-recent .recent-row {
+  background: color-mix(in srgb, var(--panel) 45%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+}
+
+.column-recent .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+html[data-theme="night"] .column-recent .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .recent-block {
   margin-bottom: 1rem;
 }
