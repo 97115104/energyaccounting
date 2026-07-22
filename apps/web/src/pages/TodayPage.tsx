@@ -2731,8 +2731,11 @@ function Column(props: {
       </SortableContext>
       {showRecent ? (
         <div className="column-recent">
-          <h3 className="recent-heading" id={`${props.droppableId}-recent`}>
-            From recent days
+          <h3 className="recent-heading column-recent-heading" id={`${props.droppableId}-recent`}>
+            <span className="column-recent-sparkle" aria-hidden="true">
+              ✦
+            </span>
+            Suggested from past days
           </h3>
           <ul className="recent-list" aria-labelledby={`${props.droppableId}-recent`}>
             {props.recent.map((s) => {

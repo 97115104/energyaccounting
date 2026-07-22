@@ -1062,6 +1062,25 @@ html[data-theme="night"] .task-row.completed {
   margin-top: 0.15rem;
 }
 
+.column-recent-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+}
+
+.column-recent-sparkle {
+  flex-shrink: 0;
+  font-size: 0.95em;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
 /* Column picks read as soft suggestions: dotted edges, airy gaps, translucent. */
 .column-recent .recent-list {
   display: flex;
