@@ -3455,32 +3455,62 @@ html[data-theme="night"] .weather-modal-hero[data-kind="sun"] .weather-glyph {
   color: inherit;
 }
 
+.butterfly-state-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  min-height: min(28rem, calc(100dvh - 2.5rem));
+  padding: 1.5rem 1.45rem 1.3rem;
+  box-sizing: border-box;
+}
+
 .butterfly-state-modal .butterfly-state-eyebrow {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.45rem;
   font-size: 0.85rem;
 }
 
 .butterfly-state-modal .butterfly-state-also {
-  margin: -0.15rem 0 0.5rem;
-  font-size: 0.9rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
 }
 
 .butterfly-state-modal .butterfly-state-title {
   font-family: var(--display);
-  margin: 0 0 0.5rem;
+  font-size: clamp(1.55rem, 4vw, 1.85rem);
+  margin: 0 0 0.65rem;
+  line-height: 1.15;
+}
+
+.butterfly-state-modal > p {
+  margin: 0 0 0.9rem;
+  line-height: 1.55;
+}
+
+.butterfly-state-modal .butterfly-state-why-block {
+  margin-top: 0.35rem;
 }
 
 .butterfly-state-modal .butterfly-state-why {
   font-family: var(--display);
-  font-size: 1.05rem;
-  margin: 0.85rem 0 0.35rem;
+  font-size: 1.1rem;
+  margin: 0 0 0.55rem;
 }
 
 .butterfly-state-modal .butterfly-state-because {
   margin: 0;
-  padding-left: 1.1rem;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.55rem;
+}
+
+.butterfly-state-modal .butterfly-state-because p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.butterfly-state-modal .modal-actions {
+  margin-top: auto;
+  padding-top: 1.35rem;
 }
 
 .auth-welcome-mark {

@@ -93,14 +93,14 @@ export function ButterflyStateModal({ state, onClose }: Props) {
           calm or still motion.
         </p>
         {state.because.length > 0 && (
-          <>
+          <div className="butterfly-state-why-block">
             <h3 className="butterfly-state-why">Why this pose</h3>
-            <ul className="butterfly-state-because">
+            <div className="butterfly-state-because">
               {state.because.map((line) => (
-                <li key={line}>{line}</li>
+                <p key={line}>{line}</p>
               ))}
-            </ul>
-          </>
+            </div>
+          </div>
         )}
         <div className="modal-actions">
           <button type="button" className="btn accent" onClick={onClose}>
