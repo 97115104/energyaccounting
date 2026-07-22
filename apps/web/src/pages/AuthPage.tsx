@@ -497,10 +497,27 @@ export function AuthPage({
             <h2 id="privacy-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               We value privacy
             </h2>
+            <p>
+              <strong>TL;DR:</strong> we cannot read what you write. The words in your journal,
+              activity names, task notes, and You profile are end-to-end encrypted with a key from
+              your password. Our server only ever stores{" "}
+              <a
+                href="https://en.wikipedia.org/wiki/Ciphertext"
+                target="_blank"
+                rel="noreferrer"
+              >
+                ciphertext
+              </a>{" "}
+              for those.
+            </p>
             <p className="muted">
-              Journal labels and notes are encrypted on your device before they reach the server.
-              The server stores ciphertext and cannot read those fields without your
-              password-derived key.
+              What stays readable so the app can work: your email, energy numbers (costs, balances,
+              how you rated the day), and the look of your butterfly. Those let trends and the Energy
+              Guide run without opening your private text.
+            </p>
+            <p className="muted">
+              Sharing anything personal is always a choice you make, and you can update or revoke it
+              in Settings. You can also export your data or delete your account at any time.
             </p>
             <button type="button" className="btn secondary" onClick={() => setPrivacyOpen(false)}>
               Close
