@@ -413,7 +413,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
           <input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
         </div>
         <div className="field settings-location">
-          <p className="field-legend">Location</p>
+          <label>Location</label>
           <p className="muted settings-location-why">
             Location powers your live sky and weather-aware suggestions.
           </p>
@@ -431,20 +431,20 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
               Permission stayed off. You can try again from this button.
             </p>
           )}
+          <button
+            type="button"
+            className="btn secondary"
+            style={{ marginTop: "0.55rem" }}
+            disabled={cityStatus === "locating"}
+            onClick={requestLocation}
+          >
+            {cityStatus === "locating"
+              ? "Asking…"
+              : lat != null && lon != null
+                ? "Update location"
+                : "Use my location"}
+          </button>
         </div>
-      <button
-          type="button"
-          className="btn secondary"
-          style={{ marginBottom: "1rem" }}
-          disabled={cityStatus === "locating"}
-          onClick={requestLocation}
-        >
-          {cityStatus === "locating"
-            ? "Asking…"
-            : lat != null && lon != null
-              ? "Update location"
-              : "Use my location"}
-        </button>
         <div className="field">
           <label htmlFor="country">Country (holidays)</label>
           <select id="country" value={country} onChange={(e) => setCountry(e.target.value)}>
