@@ -231,44 +231,50 @@ export function isDaylightPeriod(period: SkyPeriod): boolean {
   return period === "day" || period === "dawn" || period === "dusk";
 }
 
-/** Stable day-keyed pick so the quip rotates across days without flickering. */
+/** Stable pick so the quip rotates across days/slots without flickering. */
 function pickQuip(pool: string[], seed: string): string {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return pool[hash % pool.length]!;
 }
 
+export type WeatherQuipSlot = "morning" | "afternoon" | "evening" | "night";
+
 /**
- * Short, lightly funny line about today's weather for the Today header.
+ * Short, lightly funny line about current weather for the Today header.
  * Copy lives in content/weather-quips.json so pools can grow without
  * touching picker logic. Plain human voice, no energy-accounting jargon.
- * Temps are Celsius.
+ * Temps are Celsius. Seed includes the time slot so lines rotate through the day.
  */
 export function weatherQuip(opts: {
   kind: WeatherKind;
-  uvMax: number | null;
-  tempMax: number | null;
+  /** Effective UV right now. */
+  uv: number | null;
+  /** Temperature right now (°C). */
+  temp: number | null;
   date: string;
+  slot?: WeatherQuipSlot;
 }): string {
-  const { kind, uvMax, tempMax, date } = opts;
-  const hot = tempMax != null && tempMax >= 29;
-  const warm = tempMax != null && tempMax >= 24;
-  const chilly = tempMax != null && tempMax <= 10;
-  const highUv = uvMax != null && uvMax >= 7;
-  const spicyUv = uvMax != null && uvMax >= 5;
+  const { kind, uv, temp, date, slot = "morning" } = opts;
+  const seed = `${date}|${slot}`;
+  const hot = temp != null && temp >= 29;
+  const warm = temp != null && temp >= 24;
+  const chilly = temp != null && temp <= 10;
+  const highUv = uv != null && uv >= 7;
+  const spicyUv = uv != null && uv >= 5;
 
-  if (kind === "thunder") return pickQuip(QUIPS.thunder, date);
-  if (kind === "rain") return pickQuip(QUIPS.rain, date);
-  if (kind === "snow") return pickQuip(QUIPS.snow, date);
-  if (kind === "fog") return pickQuip(QUIPS.fog, date);
-  if (kind === "cloud") return pickQuip(QUIPS.cloud, date);
+  if (kind === "thunder") return pickQuip(QUIPS.thunder, seed);
+  if (kind === "rain") return pickQuip(QUIPS.rain, seed);
+  if (kind === "snow") return pickQuip(QUIPS.snow, seed);
+  if (kind === "fog") return pickQuip(QUIPS.fog, seed);
+  if (kind === "cloud") return pickQuip(QUIPS.cloud, seed);
   if (kind === "sun" || kind === "unknown") {
-    if (hot && highUv) return pickQuip(QUIPS.sunHotHighUv, date);
-    if (hot) return pickQuip(QUIPS.sunHot, date);
-    if (highUv || (warm && spicyUv)) return pickQuip(QUIPS.sunHighUv, date);
-    if (chilly) return pickQuip(QUIPS.sunChilly, date);
-    if (warm) return pickQuip(QUIPS.sunWarm, date);
-    return pickQuip(QUIPS.sunClear, date);
+    if (hot && highUv) return pickQuip(QUIPS.sunHotHighUv, seed);
+    if (hot) return pickQuip(QUIPS.sunHot, seed);
+    if (highUv || (warm && spicyUv)) return pickQuip(QUIPS.sunHighUv, seed);
+    if (chilly) return pickQuip(QUIPS.sunChilly, seed);
+    if (warm) return pickQuip(QUIPS.sunWarm, seed);
+    return pickQuip(QUIPS.sunClear, seed);
   }
-  return pickQuip(QUIPS.fallback, date);
+  return pickQuip(QUIPS.fallback, seed);
 }

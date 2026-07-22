@@ -412,11 +412,13 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
           <p className="you-state-label">
             <strong>{butterflyState.label}.</strong> {butterflyState.summary}
           </p>
-          <ul className="you-because muted">
-            {butterflyState.because.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          {butterflyState.because.length > 0 && (
+            <ul className="you-because muted">
+              {butterflyState.because.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
           <div className="field you-motion">
             <label htmlFor="you-motion">Wing motion</label>
             <select

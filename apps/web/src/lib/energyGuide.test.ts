@@ -18,7 +18,7 @@ function guideContext(overrides: Partial<GuideContext> = {}): GuideContext {
     withdrawalTotal: 20,
     incompleteWithdrawals: 0,
     weatherKind: "sun",
-    uvMax: 1,
+    uv: 1,
     isDaylight: true,
     withdrawalHeavy: false,
     existingLabels: [],
@@ -98,7 +98,7 @@ describe("buildGuide", () => {
       guideContext({
         includePhysicalActivities: false,
         weatherKind: "sun",
-        uvMax: 1,
+        uv: 1,
         isDaylight: true,
         available: 80,
       }),
@@ -151,7 +151,7 @@ describe("buildGuide", () => {
       guideContext({
         available: 0,
         isDaylight: false,
-        uvMax: null,
+        uv: null,
         weatherKind: "cloud",
         depositTotal: 0,
         withdrawalTotal: 0,
@@ -206,7 +206,7 @@ describe("buildGuide", () => {
         recentLowFeel: true,
         recentRatedSample: 3,
         weatherKind: "cloud",
-        uvMax: null,
+        uv: null,
         isDaylight: false,
       }),
     );
@@ -222,7 +222,7 @@ describe("buildGuide", () => {
       guideContext({
         heavyWeekday: "Monday",
         weatherKind: "cloud",
-        uvMax: null,
+        uv: null,
         isDaylight: false,
       }),
     );
@@ -258,7 +258,7 @@ describe("buildGuide", () => {
     // available: 5 leaves only cost-5 movement doses; primary must stay null
     // unless something else earns it.
     const guide = buildGuide(
-      guideContext({ available: 5, weatherKind: "cloud", uvMax: null, isDaylight: false }),
+      guideContext({ available: 5, weatherKind: "cloud", uv: null, isDaylight: false }),
     );
     const movement = guide.items.find((i) => i.id.startsWith("activity:movement:"));
     expect(movement).toBeDefined();

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { parseDayWeather, uvBand, weatherDaySuggestion } from "./weatherInsight";
+import {
+  conditionsAt,
+  dayAverageConditions,
+  interpolateUv,
+  parseDayWeather,
+  uvBand,
+  weatherDaySuggestion,
+} from "./weatherInsight";
 
 const favorites = [
   { side: "deposit" as const, label: "Read a favorite book", useCount: 9 },
@@ -27,6 +34,9 @@ describe("weather insight", () => {
       sunrise: null,
       sunset: null,
       source: "Open-Meteo",
+      timezone: null,
+      minutely15: null,
+      hourlyUv: null,
     });
   });
 
@@ -41,7 +51,7 @@ describe("weather insight", () => {
   test("suggests a familiar outdoor energy giver in favorable conditions", () => {
     const suggestion = weatherDaySuggestion({
       kind: "sun",
-      uvMax: 2,
+      uv: 2,
       precip: 0,
       isDaylight: true,
       favorites,
@@ -54,14 +64,14 @@ describe("weather insight", () => {
   test("suggests a familiar indoor energy giver in rain or very high UV", () => {
     const rainy = weatherDaySuggestion({
       kind: "rain",
-      uvMax: 1,
+      uv: 1,
       precip: 8,
       isDaylight: true,
       favorites,
     });
     const sunny = weatherDaySuggestion({
       kind: "sun",
-      uvMax: 9,
+      uv: 9,
       precip: 0,
       isDaylight: true,
       favorites,
@@ -73,7 +83,7 @@ describe("weather insight", () => {
   test("does not expose withdrawal labels as favorite activities", () => {
     const suggestion = weatherDaySuggestion({
       kind: "rain",
-      uvMax: null,
+      uv: null,
       precip: 4,
       isDaylight: true,
       favorites: [{ side: "withdrawal", label: "Read reports", useCount: 30 }],
@@ -85,14 +95,14 @@ describe("weather insight", () => {
   test("does not recommend outside when UV is unknown or daylight has ended", () => {
     const unknownUv = weatherDaySuggestion({
       kind: "sun",
-      uvMax: null,
+      uv: null,
       precip: 0,
       isDaylight: true,
       favorites,
     });
     const evening = weatherDaySuggestion({
       kind: "sun",
-      uvMax: 1,
+      uv: 1,
       precip: 0,
       isDaylight: false,
       favorites,
@@ -106,7 +116,7 @@ describe("weather insight", () => {
     for (const kind of ["snow", "thunder"] as const) {
       const suggestion = weatherDaySuggestion({
         kind,
-        uvMax: 1,
+        uv: 1,
         precip: 0,
         isDaylight: true,
         favorites,
@@ -118,30 +128,207 @@ describe("weather insight", () => {
   test("keeps high and very high UV guidance distinct", () => {
     const high = weatherDaySuggestion({
       kind: "sun",
-      uvMax: 6,
+      uv: 6,
       precip: 0,
       isDaylight: true,
       favorites,
     });
     const veryHigh = weatherDaySuggestion({
       kind: "sun",
-      uvMax: 8,
+      uv: 8,
       precip: 0,
       isDaylight: true,
       favorites,
     });
     expect(high.headline).toBe("Plan around the sun");
-    expect(veryHigh.headline).toBe("Very strong sun today");
+    expect(veryHigh.headline).toBe("Very strong sun right now");
   });
 
   test("uses the condition code rather than a small daily total to call a day rainy", () => {
     const suggestion = weatherDaySuggestion({
       kind: "cloud",
-      uvMax: 2,
+      uv: 2,
       precip: 1,
       isDaylight: true,
       favorites,
     });
     expect(suggestion.activity).toBe("Walk by the river");
+  });
+});
+
+describe("conditionsAt / interpolateUv", () => {
+  const baseWeather = {
+    weathercode: 0,
+    tempMax: 28,
+    tempMin: 16,
+    precip: 0,
+    uvMax: 8,
+    sunrise: "2026-07-21T06:00",
+    sunset: "2026-07-21T20:00",
+    source: "Open-Meteo",
+    timezone: "America/Los_Angeles",
+    minutely15: {
+      time: ["2026-07-21T10:00", "2026-07-21T10:15", "2026-07-21T12:00", "2026-07-21T18:00"],
+      weathercode: [61, 61, 0, 0],
+      temp: [18, 18, 27, 22],
+      precip: [0.4, 0.2, 0, 0],
+    },
+    hourlyUv: {
+      time: ["2026-07-21T12:00", "2026-07-21T13:00"],
+      uv: [8, 4],
+    },
+  };
+
+  test("flips kind when the 15-min bucket clears", () => {
+    const rainy = conditionsAt(baseWeather, {
+      now: new Date("2026-07-21T17:10:00Z"), // 10:10 PDT
+      timeZone: "America/Los_Angeles",
+      lat: 37.77,
+      lon: -122.42,
+    });
+    const clear = conditionsAt(baseWeather, {
+      now: new Date("2026-07-21T19:05:00Z"), // 12:05 PDT
+      timeZone: "America/Los_Angeles",
+      lat: 37.77,
+      lon: -122.42,
+    });
+    expect(rainy.kind).toBe("rain");
+    expect(clear.kind).toBe("sun");
+  });
+
+  test("interpolates UV between hourly points", () => {
+    expect(interpolateUv(baseWeather.hourlyUv, "2026-07-21T12:00")).toBe(8);
+    expect(interpolateUv(baseWeather.hourlyUv, "2026-07-21T12:30")).toBe(6);
+    expect(interpolateUv(baseWeather.hourlyUv, "2026-07-21T13:00")).toBe(4);
+  });
+
+  test("indexes series in the forecast timezone, not the device timezone", () => {
+    // 19:00 UTC = 12:00 PDT / 20:00 London. Series keys are Pacific.
+    const now = new Date("2026-07-21T19:00:00Z");
+    const pacific = conditionsAt(baseWeather, {
+      now,
+      timeZone: "Europe/London",
+      lat: 37.77,
+      lon: -122.42,
+    });
+    expect(pacific.kind).toBe("sun");
+    expect(pacific.bucket).toBe("2026-07-21T12:00");
+  });
+
+  test("keeps an overnight open day from using yesterday's night bucket", () => {
+    // Series is only for 2026-07-21; "now" is the next afternoon.
+    const nextAfternoon = conditionsAt(baseWeather, {
+      now: new Date("2026-07-22T20:00:00Z"), // 13:00 PDT Jul 22
+      timeZone: "America/Los_Angeles",
+      lat: 37.77,
+      lon: -122.42,
+    });
+    // Must not snap to 2026-07-21T23:45 (UV 0 / evening temp).
+    expect(nextAfternoon.bucket).toBeNull();
+    expect(nextAfternoon.temp).toBe(28); // daily max fallback
+    expect(nextAfternoon.uv).toBe(8); // daily uvMax while sky is day
+  });
+
+  test("without hourly UV, dawn does not inherit the daily max", () => {
+    const dawn = conditionsAt(
+      { ...baseWeather, hourlyUv: null, minutely15: null },
+      {
+        now: new Date("2026-07-21T13:10:00Z"), // ~06:10 PDT near sunrise
+        timeZone: "America/Los_Angeles",
+        lat: 37.77,
+        lon: -122.42,
+      },
+    );
+    if (dawn.sky === "dawn" || dawn.sky === "dusk" || dawn.sky === "night") {
+      expect(dawn.uv).toBe(0);
+    }
+  });
+
+  test("late-day UV drop unlocks outdoor-friendly suggestion", () => {
+    const midday = conditionsAt(baseWeather, {
+      now: new Date("2026-07-21T19:00:00Z"), // 12:00 PDT
+      timeZone: "America/Los_Angeles",
+      lat: 37.77,
+      lon: -122.42,
+    });
+    const later = conditionsAt(
+      {
+        ...baseWeather,
+        hourlyUv: { time: ["2026-07-21T12:00", "2026-07-21T18:00"], uv: [8, 2] },
+      },
+      {
+        now: new Date("2026-07-22T01:00:00Z"), // 18:00 PDT
+        timeZone: "America/Los_Angeles",
+        lat: 37.77,
+        lon: -122.42,
+      },
+    );
+    expect(midday.uv!).toBeGreaterThanOrEqual(6);
+    expect(later.uv!).toBeLessThanOrEqual(3);
+    const middayTip = weatherDaySuggestion({
+      kind: midday.kind,
+      uv: midday.uv,
+      precip: midday.precip,
+      isDaylight: midday.isDaylight,
+      favorites,
+    });
+    const laterTip = weatherDaySuggestion({
+      kind: later.kind,
+      uv: later.uv,
+      precip: later.precip,
+      isDaylight: later.isDaylight,
+      favorites,
+    });
+    expect(middayTip.activity).toBe("Read a favorite book");
+    expect(laterTip.activity).toBe("Walk by the river");
+  });
+});
+
+describe("dayAverageConditions", () => {
+  test("averages temp and daytime UV for a closed day summary", () => {
+    const avg = dayAverageConditions({
+      weathercode: 0,
+      tempMax: 30,
+      tempMin: 20,
+      precip: 0,
+      uvMax: 8,
+      sunrise: null,
+      sunset: null,
+      source: "Open-Meteo",
+      timezone: "America/Los_Angeles",
+      minutely15: {
+        time: ["2026-07-21T10:00", "2026-07-21T14:00"],
+        weathercode: [0, 0],
+        temp: [22, 28],
+        precip: [0, 0],
+      },
+      hourlyUv: {
+        time: ["2026-07-21T00:00", "2026-07-21T12:00", "2026-07-21T13:00"],
+        uv: [0, 8, 4],
+      },
+    });
+    expect(avg.temp).toBe(25);
+    expect(avg.uv).toBe(6);
+    expect(avg.uvMax).toBe(8);
+    expect(avg.slot).toBe("afternoon");
+  });
+
+  test("falls back to high/low mid-point and uvMax without series", () => {
+    const avg = dayAverageConditions({
+      weathercode: 3,
+      tempMax: 30,
+      tempMin: 20,
+      precip: 1,
+      uvMax: 5,
+      sunrise: null,
+      sunset: null,
+      source: null,
+      timezone: null,
+      minutely15: null,
+      hourlyUv: null,
+    });
+    expect(avg.temp).toBe(25);
+    expect(avg.uv).toBe(5);
+    expect(avg.kind).toBe("cloud");
   });
 });

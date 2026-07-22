@@ -16,7 +16,7 @@ import { db } from "../db/index.ts";
 import { dayTable, taskCatalogTable, taskLineTable, userTable } from "../db/schema.ts";
 import { holidayForDate } from "../lib/holidays.ts";
 import { assertIsoDate, newId, requireFullUser } from "../lib/session.ts";
-import { fetchDayWeather } from "../lib/weather.ts";
+import { fetchDayWeather, calendarDateInTimeZone, weatherNeedsRefresh } from "../lib/weather.ts";
 
 function weekdayBit(dateIso: string): number {
   const d = new Date(dateIso + "T12:00:00Z");
@@ -293,6 +293,56 @@ async function createDay(user: typeof userTable.$inferSelect, dateIso: string) {
   return (await db.query.dayTable.findFirst({ where: eq(dayTable.id, id) }))!;
 }
 
+/**
+ * Keep an open day's weatherJson on the location's current calendar day so
+ * quips/guide track this afternoon — not last night of an overnight-open day.
+ */
+async function upgradeOpenDayWeather(
+  user: typeof userTable.$inferSelect,
+  day: typeof dayTable.$inferSelect,
+): Promise<typeof dayTable.$inferSelect> {
+  if (day.phase === "closed") return day;
+  if (user.lat == null || user.lon == null) return day;
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = day.weatherJson ? (JSON.parse(day.weatherJson) as Record<string, unknown>) : {};
+  } catch {
+    existing = {};
+  }
+
+  // Prefer Open-Meteo zone from a prior fetch; skip profile "UTC" defaults that
+  // mis-date Pacific users near midnight.
+  let zone =
+    typeof existing.timezone === "string" && existing.timezone
+      ? existing.timezone
+      : user.timezone && user.timezone !== "UTC"
+        ? user.timezone
+        : null;
+
+  if (!zone) {
+    const probe = await fetchDayWeather(user.lat, user.lon, day.date);
+    if (probe && typeof probe.timezone === "string" && probe.timezone) {
+      zone = probe.timezone;
+      existing = { ...existing, ...probe };
+    } else {
+      zone = "UTC";
+    }
+  }
+
+  const todayLocal = calendarDateInTimeZone(new Date(), zone);
+  if (!weatherNeedsRefresh(existing, todayLocal)) return day;
+
+  const fresh = await fetchDayWeather(user.lat, user.lon, todayLocal);
+  if (!fresh) return day;
+  const holidayName =
+    typeof existing.holidayName === "string"
+      ? existing.holidayName
+      : holidayForDate(day.date, user.country ?? "US").name;
+  const weatherJson = JSON.stringify({ ...fresh, holidayName });
+  await db.update(dayTable).set({ weatherJson }).where(eq(dayTable.id, day.id));
+  return { ...day, weatherJson };
+}
+
 function serializeDay(
   day: typeof dayTable.$inferSelect,
   lines: (typeof taskLineTable.$inferSelect)[],
@@ -348,7 +398,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    const day = await db.query.dayTable.findFirst({
+    let day = await db.query.dayTable.findFirst({
       where: and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")),
       orderBy: [desc(dayTable.startedAt), desc(dayTable.id)],
     });
@@ -361,6 +411,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         .where(eq(dayTable.id, day.id));
       day.openingBalance = DAILY_ENERGY;
     }
+    day = await upgradeOpenDayWeather(user, day);
     const lines = await linesForDay(day.id);
     return { day: serializeDay(day, lines) };
   })
@@ -449,11 +500,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       set.status = 401;
       return { error: "Unauthorized" };
     }
-    const day = await ownedDay(user.id, params.dayId);
+    let day = await ownedDay(user.id, params.dayId);
     if (!day) {
       set.status = 404;
       return { error: "Day not found." };
     }
+    day = await upgradeOpenDayWeather(user, day);
     return await serializeDay(day, await linesForDay(day.id));
   })
   .get("/export/days", async ({ request, set }) => {

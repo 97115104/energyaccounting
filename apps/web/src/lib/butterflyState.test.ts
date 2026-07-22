@@ -27,7 +27,8 @@ describe("resolveButterflyState", () => {
     expect(s.id).toBe("resting");
     expect(STATE_LABEL_POOLS.resting).toContain(s.label);
     expect(s.vitality).toBe(1);
-    expect(s.because.length).toBeGreaterThan(0);
+    // Label/summary already cover "plenty available" — no redundant because line.
+    expect(s.because).toEqual([]);
   });
 
   test("no open day rests with its own explanation", () => {

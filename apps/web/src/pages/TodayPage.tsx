@@ -35,14 +35,13 @@ import { recentDisabledReason } from "../lib/planShortcuts";
 import { withPreservedScroll } from "../lib/preserveScroll";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
-import { parseDayWeather } from "../lib/weatherInsight";
+import { useQuarterHourClock } from "../lib/useQuarterHourClock";
+import { conditionsAt, dayAverageConditions, parseDayWeather } from "../lib/weatherInsight";
 import {
   defaultTemperatureUnit,
   formatTemp,
   formatTempRange,
   isDaylightPeriod,
-  skyPeriod,
-  weatherKindFromCode,
   weatherLabel,
   weatherQuip,
 } from "../lib/weatherUi";
@@ -852,11 +851,27 @@ export function TodayPage({ user }: { user: UserProfile }) {
   );
 
   const parsedWeather = useMemo(() => parseDayWeather(day?.weather ?? null), [day?.weather]);
-  const weatherKind = weatherKindFromCode(parsedWeather?.weathercode);
+  const dayClosed = day?.phase === "closed";
+  // Closed days (including history) show the day's average; open days track the 15-min forecast.
+  const useDayAverage = dayClosed || isHistoryView;
+  const clockNow = useQuarterHourClock(Boolean(parsedWeather) && !useDayAverage);
+  const tz = liveTimezone(user.timezone);
+  const liveConditions = useMemo(() => {
+    if (!parsedWeather) return null;
+    if (useDayAverage) return dayAverageConditions(parsedWeather);
+    return conditionsAt(parsedWeather, {
+      now: clockNow,
+      timeZone: tz,
+      lat: user.lat,
+      lon: user.lon,
+    });
+  }, [parsedWeather, clockNow, tz, user.lat, user.lon, useDayAverage]);
+  const weatherKind = liveConditions?.kind ?? "unknown";
+  const uvNow = liveConditions?.uv ?? null;
   const uvMax = parsedWeather?.uvMax ?? null;
   const tempUnit = user.temperatureUnit ?? defaultTemperatureUnit(user.country);
 
-  // Let the global sky scene react to today's conditions.
+  // Let the global sky scene react to current conditions.
   useEffect(() => {
     document.documentElement.dataset.weather = weatherKind;
     return () => {
@@ -865,22 +880,24 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [weatherKind]);
 
   const playHeavy = day ? isWithdrawalHeavy(day.attwood) : false;
-  const currentSkyPeriod = skyPeriod(user.lat, user.lon, liveTimezone(user.timezone));
+  const currentSkyPeriod = liveConditions?.sky ?? "day";
+  const isDaylight = liveConditions?.isDaylight ?? false;
 
   // Trend hint while planning; recovery only at close (never during audit,
   // so tomorrow's day row is not created before today locks).
   const dayDate = day?.date ?? isoDate();
   const weatherQuipLine = useMemo(
     () =>
-      parsedWeather
+      liveConditions
         ? weatherQuip({
-            kind: weatherKind,
-            uvMax,
-            tempMax: parsedWeather.tempMax,
+            kind: liveConditions.kind,
+            uv: liveConditions.uv,
+            temp: liveConditions.temp,
             date: dayDate,
+            slot: liveConditions.slot,
           })
         : "Set a location to unlock today's weather commentary.",
-    [parsedWeather, weatherKind, uvMax, dayDate],
+    [liveConditions, dayDate],
   );
 
   const hint = useMemo(
@@ -958,8 +975,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
         withdrawalTotal: day.attwood.withdrawalTotal,
         incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
         weatherKind,
-        uvMax,
-        isDaylight: isDaylightPeriod(currentSkyPeriod),
+        uv: uvNow,
+        isDaylight,
         withdrawalHeavy: playHeavy,
         existingLabels: day.lines.map((line) => line.label ?? ""),
         candidates: suggestions,
@@ -969,11 +986,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
         recentLowFeel: personalIntel.tipSignals.recentLowFeel,
         recentRatedSample: personalIntel.tipSignals.recentRatedSample,
         timeOfDay:
-          new Date().getHours() < 12
-            ? "morning"
-            : new Date().getHours() < 17
-              ? "afternoon"
-              : "evening",
+          liveConditions?.slot === "night"
+            ? "evening"
+            : liveConditions?.slot === "morning" ||
+                liveConditions?.slot === "afternoon" ||
+                liveConditions?.slot === "evening"
+              ? liveConditions.slot
+              : new Date().getHours() < 12
+                ? "morning"
+                : new Date().getHours() < 17
+                  ? "afternoon"
+                  : "evening",
         familiarRestorer: personalIntel.tipSignals.familiarRestorer,
         heavyWeekday: personalIntel.tipSignals.heavyWeekday,
         justFreed,
@@ -986,8 +1009,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
     day,
     withdrawals,
     weatherKind,
-    uvMax,
-    currentSkyPeriod,
+    uvNow,
+    isDaylight,
+    liveConditions,
     playHeavy,
     suggestions,
     user.displayName,
@@ -1640,25 +1664,49 @@ export function TodayPage({ user }: { user: UserProfile }) {
             disabled={!parsedWeather}
             onClick={() => setWeatherOpen(true)}
           >
-            <WeatherGlyph kind={weatherKind} isNight={!isDaylightPeriod(currentSkyPeriod)} />
+            <WeatherGlyph kind={weatherKind} isNight={!useDayAverage && !isDaylightPeriod(currentSkyPeriod)} />
             <div>
               <strong>{weatherLabel(weatherKind)}</strong>
               {parsedWeather ? (
                 <span>
                   {" "}
-                  {parsedWeather.tempMin != null && parsedWeather.tempMax != null
+                  {useDayAverage && parsedWeather.tempMin != null && parsedWeather.tempMax != null
                     ? formatTempRange(parsedWeather.tempMin, parsedWeather.tempMax, tempUnit)
-                    : parsedWeather.tempMax != null
-                      ? formatTemp(parsedWeather.tempMax, tempUnit)
-                      : parsedWeather.tempMin != null
-                        ? formatTemp(parsedWeather.tempMin, tempUnit)
-                        : "Details available"}
-                  {parsedWeather.precip != null ? ` · ${parsedWeather.precip} mm` : ""}
+                    : liveConditions?.temp != null
+                      ? formatTemp(liveConditions.temp, tempUnit)
+                      : parsedWeather.tempMax != null
+                        ? formatTemp(parsedWeather.tempMax, tempUnit)
+                        : parsedWeather.tempMin != null
+                          ? formatTemp(parsedWeather.tempMin, tempUnit)
+                          : "Details available"}
+                  {useDayAverage
+                    ? parsedWeather.precip != null
+                      ? ` · ${parsedWeather.precip} mm`
+                      : ""
+                    : liveConditions?.precip != null && liveConditions.precip > 0
+                      ? ` · ${liveConditions.precip} mm`
+                      : !liveConditions?.bucket && parsedWeather.precip != null
+                        ? ` · ${parsedWeather.precip} mm`
+                        : ""}
                 </span>
               ) : (
                 <span> Set location in settings.</span>
               )}
-              {uvMax != null && <span>{` · UV ${Math.round(uvMax)}`}</span>}
+              {useDayAverage
+                ? uvMax != null && (
+                    <span>{` · UV avg ${Math.round(uvNow ?? uvMax)}${
+                      uvNow != null && Math.round(uvNow) !== Math.round(uvMax)
+                        ? ` (max ${Math.round(uvMax)})`
+                        : ""
+                    }`}</span>
+                  )
+                : uvNow != null && (
+                    <span>
+                      {uvMax != null && Math.round(uvMax) !== Math.round(uvNow)
+                        ? ` · UV ~${Math.round(uvNow)} (max ${Math.round(uvMax)})`
+                        : ` · UV ${Math.round(uvNow)}`}
+                    </span>
+                  )}
             </div>
           </button>
         </div>
@@ -2409,10 +2457,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
       {weatherOpen && parsedWeather && (
         <WeatherDetailModal
           weather={parsedWeather}
+          conditions={liveConditions}
           tempUnit={tempUnit}
           favorites={intelCatalog}
-          isDaylight={isHistoryView || isDaylightPeriod(currentSkyPeriod)}
-          isHistorical={isHistoryView}
+          isDaylight={useDayAverage || isDaylight}
+          isHistorical={useDayAverage}
           onClose={() => setWeatherOpen(false)}
         />
       )}
@@ -2549,14 +2598,16 @@ function GuideCard(props: {
               }
               onClick={() => props.onAction(item)}
             >
-              <span className="guide-suggest-sparkle" aria-hidden="true">
-                ✦
-              </span>
-              <span className="guide-suggest-label">
-                {props.actionLabel ??
-                  (item.action.requiresStart
-                    ? `Start day · ${item.action.label}`
-                    : item.action.label)}
+              <span className="guide-suggest-main">
+                <span className="guide-suggest-sparkle" aria-hidden="true">
+                  ✦
+                </span>
+                <span className="guide-suggest-label">
+                  {props.actionLabel ??
+                    (item.action.requiresStart
+                      ? `Start day · ${item.action.label}`
+                      : item.action.label)}
+                </span>
               </span>
               <span
                 className={`guide-suggest-cost guide-suggest-cost-${item.action.side}`}
@@ -2580,10 +2631,12 @@ function GuideCard(props: {
               }
               onClick={() => props.onAction(item, true)}
             >
-              <span className="guide-suggest-sparkle" aria-hidden="true">
-                ✦
+              <span className="guide-suggest-main">
+                <span className="guide-suggest-sparkle" aria-hidden="true">
+                  ✦
+                </span>
+                <span className="guide-suggest-label">{item.altAction.label}</span>
               </span>
-              <span className="guide-suggest-label">{item.altAction.label}</span>
               <span
                 className={`guide-suggest-cost guide-suggest-cost-${item.altAction.side}`}
                 aria-hidden="true"

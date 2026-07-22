@@ -5,23 +5,23 @@ describe("weatherQuip", () => {
   test("hot high-UV clear days get a heat-and-UV line", () => {
     const line = weatherQuip({
       kind: "sun",
-      uvMax: 8,
-      tempMax: 33,
+      uv: 8,
+      temp: 33,
       date: "2026-07-21",
     });
     expect(line.toLowerCase()).toMatch(/sunscreen|shade|uv|hot|sun|cover|water/);
   });
 
   test("same inputs are stable for a given date", () => {
-    const a = weatherQuip({ kind: "rain", uvMax: 2, tempMax: 18, date: "2026-07-21" });
-    const b = weatherQuip({ kind: "rain", uvMax: 2, tempMax: 18, date: "2026-07-21" });
+    const a = weatherQuip({ kind: "rain", uv: 2, temp: 18, date: "2026-07-21" });
+    const b = weatherQuip({ kind: "rain", uv: 2, temp: 18, date: "2026-07-21" });
     expect(a).toBe(b);
   });
 
   test("different dates can rotate the rain pool", () => {
     const lines = new Set(
       ["2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28"].map(
-        (date) => weatherQuip({ kind: "rain", uvMax: 1, tempMax: 16, date }),
+        (date) => weatherQuip({ kind: "rain", uv: 1, temp: 16, date }),
       ),
     );
     expect(lines.size).toBeGreaterThan(1);
@@ -30,9 +30,39 @@ describe("weatherQuip", () => {
   test("hot high-UV pool has enough variety across dates", () => {
     const dates = Array.from({ length: 24 }, (_, i) => `2026-07-${String(i + 1).padStart(2, "0")}`);
     const lines = new Set(
-      dates.map((date) => weatherQuip({ kind: "sun", uvMax: 8, tempMax: 33, date })),
+      dates.map((date) => weatherQuip({ kind: "sun", uv: 8, temp: 33, date })),
     );
     expect(lines.size).toBeGreaterThan(3);
+  });
+
+  test("same date rotates across time slots", () => {
+    const morning = weatherQuip({
+      kind: "rain",
+      uv: 1,
+      temp: 16,
+      date: "2026-07-21",
+      slot: "morning",
+    });
+    const evening = weatherQuip({
+      kind: "rain",
+      uv: 1,
+      temp: 16,
+      date: "2026-07-21",
+      slot: "evening",
+    });
+    // Different seeds; pools are large enough that slots usually differ.
+    const slots = new Set(
+      (["morning", "afternoon", "evening", "night"] as const).map((slot) =>
+        weatherQuip({ kind: "rain", uv: 1, temp: 16, date: "2026-07-21", slot }),
+      ),
+    );
+    expect(slots.size).toBeGreaterThan(1);
+    expect(morning).toBe(
+      weatherQuip({ kind: "rain", uv: 1, temp: 16, date: "2026-07-21", slot: "morning" }),
+    );
+    expect(evening).toBe(
+      weatherQuip({ kind: "rain", uv: 1, temp: 16, date: "2026-07-21", slot: "evening" }),
+    );
   });
 });
 describe("skyPeriod / sunTimes", () => {

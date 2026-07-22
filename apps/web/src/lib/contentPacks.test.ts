@@ -89,7 +89,7 @@ describe("includePhysicalActivities gating", () => {
     date: "2026-07-21",
     available: 80,
     weatherKind: "cloud" as const,
-    uvMax: 3,
+    uv: 3,
     isDaylight: true,
     withdrawalHeavy: true,
     existingLabels: [] as string[],

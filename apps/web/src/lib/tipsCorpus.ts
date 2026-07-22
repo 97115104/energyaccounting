@@ -11,9 +11,9 @@ import type { WeatherKind } from "./weatherUi";
 
 export type CorpusContext = {
   weatherKind: WeatherKind;
-  /** Open-Meteo daily max UV index; null when location is unset. */
-  uvMax: number | null;
-  /** Gate UV tips: daily max is only actionable while the sun is up. */
+  /** Effective UV right now; null when location/UV unknown. */
+  uv: number | null;
+  /** Gate UV tips: only actionable while the sun is up. */
   isDaylight: boolean;
   available: number;
   depositTotal: number;
@@ -100,7 +100,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
   {
     id: "uv-low-walk",
     title: "Green light for the outdoors",
-    body: "Today's UV max is low, so sunscreen logistics stay light. A 20-minute walk or short hike is one of the least costly ways to add energy.",
+    body: "UV is low right now, so sunscreen logistics stay light. A 20-minute walk or short hike is one of the least costly ways to add energy.",
     research:
       "Green-exercise meta-analyses (Barton & Pretty 2010) find mood and self-esteem gains from even 5-minute outdoor doses; low UV removes the sunburn cost.",
     sourceUrl: "https://doi.org/10.1021/es903183r",
@@ -108,15 +108,15 @@ export const TIPS_CORPUS: CorpusEntry[] = [
     physical: true,
     matches: (c) =>
       c.isDaylight &&
-      c.uvMax != null &&
-      c.uvMax <= 2 &&
+      c.uv != null &&
+      c.uv <= 2 &&
       DRY_KINDS.includes(c.weatherKind) &&
       c.available >= 10,
   },
   {
     id: "uv-moderate-outside",
     title: "Outdoor window is open",
-    body: "Today's UV peaks in the moderate range, so outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which can make the next day's 100 points easier to protect.",
+    body: "UV is moderate right now, so outside is very doable with a hat or a shady route. Daylight now also helps tonight's sleep, which can make the next day's 100 points easier to protect.",
     research:
       "Morning/afternoon daylight advances circadian phase and improves sleep quality (Wright et al. 2013); moderate UV (3–5) is safe with basic shade.",
     sourceUrl: "https://doi.org/10.1016/j.cub.2013.06.039",
@@ -124,16 +124,16 @@ export const TIPS_CORPUS: CorpusEntry[] = [
     physical: true,
     matches: (c) =>
       c.isDaylight &&
-      c.uvMax != null &&
-      c.uvMax >= 3 &&
-      c.uvMax <= 5 &&
+      c.uv != null &&
+      c.uv >= 3 &&
+      c.uv <= 5 &&
       DRY_KINDS.includes(c.weatherKind) &&
       c.available >= 10,
   },
   {
     id: "uv-high-shift",
-    title: "Sun is spicy today",
-    body: "Today's UV max is high. If you want outdoor time, lean toward early morning or evening, or pick a shaded route to add the same energy with a lower burn tax.",
+    title: "Sun is spicy right now",
+    body: "UV is high right now. If you want outdoor time, wait for it to ease, lean toward shade, or pick a covered route to add the same energy with a lower burn tax.",
     research:
       "WHO UV index guidance recommends limiting midday exposure above UV 6; timing shifts preserve the mood benefit of outdoor activity.",
     sourceUrl:
@@ -141,7 +141,7 @@ export const TIPS_CORPUS: CorpusEntry[] = [
     priority: 7,
     physical: true,
     matches: (c) =>
-      c.isDaylight && c.uvMax != null && c.uvMax >= 6 && DRY_KINDS.includes(c.weatherKind),
+      c.isDaylight && c.uv != null && c.uv >= 6 && DRY_KINDS.includes(c.weatherKind),
   },
   {
     id: "rain-indoor",

@@ -4,14 +4,16 @@ import { WeatherGlyph } from "./WeatherGlyph";
 import {
   uvBand,
   weatherDaySuggestion,
-  weatherKindFor,
   type DayWeather,
+  type WeatherConditionsNow,
   type WeatherFavorite,
 } from "../lib/weatherInsight";
 import { formatTemp, formatTempRange, weatherLabel, type TemperatureUnit } from "../lib/weatherUi";
 
 type WeatherDetailModalProps = {
   weather: DayWeather;
+  /** Live (or history-snapshot) conditions for advice; daily fields stay on `weather`. */
+  conditions: WeatherConditionsNow | null;
   tempUnit: TemperatureUnit;
   favorites: WeatherFavorite[];
   isDaylight: boolean;
@@ -35,6 +37,7 @@ function localClock(iso: string | null): string {
 
 export function WeatherDetailModal({
   weather,
+  conditions,
   tempUnit,
   favorites,
   isDaylight,
@@ -46,18 +49,20 @@ export function WeatherDetailModal({
   onCloseRef.current = onClose;
   const titleId = useId();
   const descriptionId = useId();
-  const kind = weatherKindFor(weather);
-  const uv = weather.uvMax == null ? null : uvBand(weather.uvMax);
+  const kind = conditions?.kind ?? "unknown";
+  const uvNow = conditions?.uv ?? null;
+  const uvNowBand = uvNow == null ? null : uvBand(uvNow);
+  const uvMaxBand = weather.uvMax == null ? null : uvBand(weather.uvMax);
   const suggestion = useMemo(
     () =>
       weatherDaySuggestion({
         kind,
-        uvMax: weather.uvMax,
-        precip: weather.precip,
+        uv: uvNow,
+        precip: conditions?.precip ?? weather.precip,
         isDaylight,
         favorites,
       }),
-    [favorites, isDaylight, kind, weather.precip, weather.uvMax],
+    [favorites, isDaylight, kind, conditions?.precip, weather.precip, uvNow],
   );
 
   useEffect(() => {
@@ -142,16 +147,24 @@ export function WeatherDetailModal({
         <header className="weather-modal-hero" data-kind={kind}>
           <WeatherGlyph kind={kind} isNight={!isDaylight} />
           <p className="weather-modal-eyebrow">
-            {isHistorical ? "This day’s weather" : "Today’s weather"}
+            {isHistorical ? "This day’s weather" : "Current forecast"}
           </p>
           <h2 id={titleId}>{weatherLabel(kind)}</h2>
-          <p className="weather-modal-temperature">{temperature}</p>
+          <p className="weather-modal-temperature">
+            {isHistorical && weather.tempMin != null && weather.tempMax != null
+              ? formatTempRange(weather.tempMin, weather.tempMax, tempUnit)
+              : conditions?.temp != null
+                ? formatTemp(conditions.temp, tempUnit)
+                : temperature}
+          </p>
           <p id={descriptionId} className="weather-modal-summary">
-            A daily forecast and a personal idea for planning your energy.
+            {isHistorical
+              ? "Day averages from the forecast, plus a personal idea for planning your energy."
+              : "Forecast for right now, plus a personal idea for planning your energy."}
           </p>
         </header>
 
-        <div className="weather-metrics" aria-label="Daily weather details">
+        <div className="weather-metrics" aria-label="Weather details">
           <div className="weather-metric">
             <span>High</span>
             <strong>
@@ -169,14 +182,30 @@ export function WeatherDetailModal({
             <strong>{weather.precip == null ? "Unavailable" : `${weather.precip} mm`}</strong>
           </div>
           <div className="weather-metric">
-            <span>UV index</span>
+            <span>{isHistorical ? "UV (day avg)" : "UV"}</span>
             <strong className="weather-uv">
-              {weather.uvMax == null ? (
+              {isHistorical ? (
+                uvNow == null && weather.uvMax == null ? (
+                  "Unavailable"
+                ) : (
+                  <>
+                    <i data-level={(uvNowBand ?? uvMaxBand)?.level} aria-hidden="true" />
+                    {uvNow != null ? Math.round(uvNow) : "—"}
+                    {weather.uvMax != null &&
+                    (uvNow == null || Math.round(uvNow) !== Math.round(weather.uvMax))
+                      ? ` · max ${Math.round(weather.uvMax)}`
+                      : ""}
+                    {uvNowBand ? ` · ${uvNowBand.label}` : uvMaxBand ? ` · ${uvMaxBand.label}` : ""}
+                  </>
+                )
+              ) : uvNow == null && weather.uvMax == null ? (
                 "Unavailable"
               ) : (
                 <>
-                  <i data-level={uv?.level} aria-hidden="true" />
-                  {Math.round(weather.uvMax)} · {uv?.label}
+                  <i data-level={(uvNowBand ?? uvMaxBand)?.level} aria-hidden="true" />
+                  {uvNow != null ? `~${Math.round(uvNow)}` : "—"}
+                  {weather.uvMax != null ? ` · max ${Math.round(weather.uvMax)}` : ""}
+                  {uvNowBand ? ` · ${uvNowBand.label}` : uvMaxBand ? ` · ${uvMaxBand.label}` : ""}
                 </>
               )}
             </strong>
@@ -203,7 +232,7 @@ export function WeatherDetailModal({
 
         <footer className="weather-modal-footer">
           <p className="muted">
-            Daily forecast by{" "}
+            Forecast by{" "}
             <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
               Open-Meteo
             </a>

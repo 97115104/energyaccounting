@@ -38,7 +38,8 @@ export type ActivitySuggestContext = {
   date: string;
   available: number;
   weatherKind: WeatherKind;
-  uvMax: number | null;
+  /** Effective UV right now; null when unknown. */
+  uv: number | null;
   isDaylight: boolean;
   withdrawalHeavy: boolean;
   existingLabels: string[];
@@ -210,8 +211,8 @@ export function suggestActivities(ctx: ActivitySuggestContext): ActivitySuggesti
   const existing = new Set(ctx.existingLabels.map(normalized));
   const weekday = weekdayBit(ctx.date);
   const dry = DRY_WEATHER.includes(ctx.weatherKind);
-  const lowUv = ctx.uvMax != null && ctx.uvMax <= 2;
-  const moderateOrLowerUv = ctx.uvMax != null && ctx.uvMax <= 5;
+  const lowUv = ctx.uv != null && ctx.uv <= 2;
+  const moderateOrLowerUv = ctx.uv != null && ctx.uv <= 5;
   // Outdoor recommendations require known UV so copy never invents a peak index.
   const safeOutdoor = ctx.isDaylight && dry && moderateOrLowerUv;
   const nonPhysicalPreferred = !includePhysical;

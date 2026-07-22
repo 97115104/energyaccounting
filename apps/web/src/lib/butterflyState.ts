@@ -167,11 +167,11 @@ export function resolveButterflyState(input: ButterflyStateInput): ButterflyStat
     );
   } else {
     id = "resting";
-    because.push(
-      input.phase == null
-        ? "No energy day is open yet."
-        : `A fresh day with ${Math.round(input.available)} points available.`,
-    );
+    // Fresh open day: the state label/summary already say energy is available —
+    // only explain when there is no day open yet.
+    if (input.phase == null) {
+      because.push("No energy day is open yet.");
+    }
   }
 
   const meta = META[id];

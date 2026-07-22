@@ -11,7 +11,7 @@ function context(overrides: Partial<ActivitySuggestContext> = {}): ActivitySugge
     date: "2026-07-20",
     available: 40,
     weatherKind: "sun",
-    uvMax: 1,
+    uv: 1,
     isDaylight: true,
     withdrawalHeavy: false,
     existingLabels: [],
@@ -64,10 +64,10 @@ describe("suggestActivities", () => {
     expect(suggestions.some((s) => s.id === "healthy:mindful-pause")).toBe(true);
   });
 
-  test("does not claim UV evidence when uvMax is missing", () => {
+  test("does not claim UV evidence when uv is missing", () => {
     const suggestions = suggestActivities(
       context({
-        uvMax: null,
+        uv: null,
         isDaylight: true,
         weatherKind: "sun",
       }),

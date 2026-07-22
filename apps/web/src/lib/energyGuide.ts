@@ -57,7 +57,8 @@ export type GuideContext = {
   withdrawalTotal: number;
   incompleteWithdrawals: number;
   weatherKind: WeatherKind;
-  uvMax: number | null;
+  /** Effective UV right now; null when unknown. */
+  uv: number | null;
   isDaylight: boolean;
   withdrawalHeavy: boolean;
   existingLabels: string[];
@@ -98,13 +99,13 @@ function normalizedLabel(label: string): string {
 function corpusBecause(entry: CorpusEntry, ctx: GuideContext): string[] {
   const out: string[] = [];
   const mentionsUv = entry.id.startsWith("uv-");
-  if (mentionsUv && ctx.uvMax != null) {
-    out.push(`Today's UV max is ${Math.round(ctx.uvMax)}.`);
+  if (mentionsUv && ctx.uv != null) {
+    out.push(`UV is about ${Math.round(ctx.uv)} right now.`);
   }
   if (entry.id.startsWith("rain") || entry.id.startsWith("snow") || entry.id.startsWith("fog")) {
-    out.push(`Today's forecast is ${ctx.weatherKind}.`);
+    out.push(`Conditions right now look like ${ctx.weatherKind}.`);
   }
-  if (entry.id === "sun-general") out.push("Today's forecast is sunny.");
+  if (entry.id === "sun-general") out.push("It's sunny right now.");
   if (entry.id === "rebalance-play") {
     out.push(
       `So far, ${ctx.withdrawalTotal} points have been used and ${ctx.depositTotal} added.`,
@@ -185,7 +186,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
     date: ctx.date,
     available: ctx.available,
     weatherKind: ctx.weatherKind,
-    uvMax: ctx.uvMax,
+    uv: ctx.uv,
     isDaylight: ctx.isDaylight,
     withdrawalHeavy: ctx.withdrawalHeavy,
     existingLabels: ctx.existingLabels,
@@ -265,7 +266,7 @@ export function buildGuide(ctx: GuideContext, extra: GuideItem[] = []): Guide {
   // Context: research corpus tips matched to weather, UV, and balance state.
   const corpusCtx: CorpusContext = {
     weatherKind: ctx.weatherKind,
-    uvMax: ctx.uvMax,
+    uv: ctx.uv,
     isDaylight: ctx.isDaylight,
     available: ctx.available,
     depositTotal: ctx.depositTotal,
