@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
+import { BecauseList } from "../components/BecauseList";
 import { DictatableField } from "../components/DictatableField";
 import { DictationControl } from "../components/DictationControl";
 import { IdentityMark } from "../components/IdentityMark";
@@ -413,11 +414,7 @@ export function YouPage({ user, onUser, butterflyState }: Props) {
             <strong>{butterflyState.label}.</strong> {butterflyState.summary}
           </p>
           {butterflyState.because.length > 0 && (
-            <ul className="you-because muted">
-              {butterflyState.because.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+            <BecauseList reasons={butterflyState.because} className="you-because muted" />
           )}
           <div className="you-motion">
             <p id="you-motion-label" className="you-motion-label">

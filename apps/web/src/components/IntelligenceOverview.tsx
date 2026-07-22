@@ -2,6 +2,7 @@ import type {
   IntelligenceLine,
   PersonalIntelligence,
 } from "../lib/personalIntelligence";
+import { BecauseList } from "./BecauseList";
 
 function LearnedLine({ line }: { line: IntelligenceLine }) {
   return (
@@ -14,11 +15,7 @@ function LearnedLine({ line }: { line: IntelligenceLine }) {
       </p>
       <details>
         <summary>Why this?</summary>
-        <ul className="muted">
-          {line.because.map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
+        <BecauseList reasons={line.because} className="muted" />
       </details>
     </li>
   );

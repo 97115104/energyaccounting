@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
+import { BecauseList } from "../components/BecauseList";
 import { ModalCloseButton } from "../components/ModalCloseButton";
 import { SiteFooter } from "../components/SiteFooter";
 import { WeatherDetailModal } from "../components/WeatherDetailModal";
@@ -2656,11 +2657,7 @@ function GuideCard(props: {
           buttonClassName="linkish guide-why-btn"
         >
           <div className="guide-why">
-            <ul>
-              {item.because.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
+            <BecauseList reasons={item.because} />
             {item.research && (
               <p className="guide-research">Research basis: {item.research}</p>
             )}

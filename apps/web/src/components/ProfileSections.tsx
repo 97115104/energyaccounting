@@ -13,6 +13,7 @@ import {
   type ColorMeaning,
   type SharedOverviewLine,
 } from "../lib/youProfile";
+import { BecauseList } from "./BecauseList";
 
 type Props = {
   variant: "share" | "print";
@@ -51,11 +52,7 @@ export function ProfileSections({
               <li key={line.text}>
                 <p>{line.text}</p>
                 {line.because.length > 0 && (
-                  <ul className="muted">
-                    {line.because.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
+                  <BecauseList reasons={line.because} className="muted" />
                 )}
               </li>
             ))}
