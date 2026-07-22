@@ -19,6 +19,8 @@ export type SkyColors = {
   sunFace: string;
   sunHalo: string;
   panel: string;
+  /** Nested inset cards (stats, weather, task rows) — tracks sky with panels. */
+  surface: string;
   ink: string;
   muted: string;
   line: string;
@@ -37,6 +39,7 @@ const NIGHT: SkyColors = {
   sunFace: "#f0e8ff",
   sunHalo: "rgba(200, 180, 255, 0.5)",
   panel: "#1c2240",
+  surface: "#0e1428",
   ink: "#e8e4f8",
   muted: "#a8a0c8",
   line: "rgba(200, 184, 255, 0.28)",
@@ -54,6 +57,7 @@ const PREDAWN: SkyColors = {
   sunFace: "#ffc060",
   sunHalo: "rgba(255, 170, 90, 0.32)",
   panel: "#f8e8d8",
+  surface: "#fff4e8",
   ink: "#3a2e18",
   muted: "#6a5a38",
   line: "rgba(42, 34, 8, 0.2)",
@@ -67,6 +71,7 @@ const DAWN: SkyColors = {
   sunFace: "#ffc850",
   sunHalo: "rgba(255, 180, 90, 0.35)",
   panel: "#fff6ea",
+  surface: "#fffaf2",
   ink: "#2e260c",
   muted: "#5c4e24",
   line: "rgba(42, 34, 8, 0.2)",
@@ -80,6 +85,7 @@ const DAY: SkyColors = {
   sunFace: "#ffcf3d",
   sunHalo: "rgba(255, 200, 60, 0.35)",
   panel: "#fffdf3",
+  surface: "#fffef8",
   ink: "#2a2208",
   muted: "#5c4e20",
   line: "rgba(42, 34, 8, 0.22)",
@@ -94,6 +100,7 @@ const LATE: SkyColors = {
   sunFace: "#ffc838",
   sunHalo: "rgba(255, 185, 55, 0.36)",
   panel: "#fff8e8",
+  surface: "#fff8f0",
   ink: "#2a2208",
   muted: "#5c4e20",
   line: "rgba(42, 34, 8, 0.22)",
@@ -108,6 +115,7 @@ const GOLDEN: SkyColors = {
   sunFace: "#ffbe45",
   sunHalo: "rgba(255, 170, 70, 0.36)",
   panel: "#fff0dc",
+  surface: "#fff4e4",
   ink: "#322818",
   muted: "#645438",
   line: "rgba(50, 40, 20, 0.22)",
@@ -122,6 +130,7 @@ const DUSK: SkyColors = {
   sunFace: "#ffb050",
   sunHalo: "rgba(255, 150, 90, 0.34)",
   panel: "#f0dcc8",
+  surface: "#f8e8d8",
   ink: "#4a3a40",
   muted: "#7a6870",
   line: "rgba(80, 60, 70, 0.24)",
@@ -139,6 +148,7 @@ const DUSK_DEEP: SkyColors = {
   sunFace: "#f0a868",
   sunHalo: "rgba(230, 140, 120, 0.3)",
   panel: "#6a5878",
+  surface: "#3a3458",
   ink: "#e0d8f0",
   muted: "#b0a8c8",
   line: "rgba(180, 160, 220, 0.26)",
@@ -152,6 +162,7 @@ const SKY_VAR_KEYS = [
   "--sun-face",
   "--sun-halo",
   "--panel",
+  "--surface",
   "--ink",
   "--muted",
   "--line",
@@ -224,6 +235,7 @@ function lerpSky(a: SkyColors, b: SkyColors, t: number): SkyColors {
     sunFace: lerpColor(a.sunFace, b.sunFace, u),
     sunHalo: lerpColor(a.sunHalo, b.sunHalo, u),
     panel: lerpColor(a.panel, b.panel, u),
+    surface: lerpColor(a.surface, b.surface, u),
     ink: lerpColor(a.ink, b.ink, u),
     muted: lerpColor(a.muted, b.muted, u),
     line: lerpColor(a.line, b.line, u),

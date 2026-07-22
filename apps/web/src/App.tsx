@@ -176,6 +176,7 @@ export function App() {
         root.style.setProperty("--sun-face", palette.sunFace);
         root.style.setProperty("--sun-halo", palette.sunHalo);
         root.style.setProperty("--panel", palette.panel);
+        root.style.setProperty("--surface", palette.surface);
         root.style.setProperty("--ink", palette.ink);
         root.style.setProperty("--muted", palette.muted);
         root.style.setProperty("--line", palette.line);

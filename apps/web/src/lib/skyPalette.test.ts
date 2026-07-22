@@ -116,11 +116,19 @@ describe("skyPalette", () => {
     );
 
     expect(atNoon.panel.toLowerCase()).toBe("#fffdf3");
+    expect(atNoon.surface.toLowerCase()).toBe("#fffef8");
     expect(skyLuminance(atNoon.panel)).toBeGreaterThan(skyLuminance(atSet.panel));
     expect(skyLuminance(atSet.panel)).toBeGreaterThan(skyLuminance(deep.panel));
+    expect(skyLuminance(atNoon.surface)).toBeGreaterThan(skyLuminance(deep.surface));
     // Dusk-deep is closer to night navy than to noon cream.
     expect(skyLuminance(deep.panel)).toBeLessThan(120);
     expect(skyLuminance(deep.ink)).toBeGreaterThan(skyLuminance(atNoon.ink));
+  });
+
+  test("night surface matches nested-card night token", () => {
+    const now = new Date("2026-07-21T03:16:00Z"); // 20:16 PDT
+    const pal = skyPalette(null, null, "America/Los_Angeles", now);
+    expect(pal.surface).toBe("#0e1428");
   });
 
   test("dawn predawn panel is not night navy; ink stays readable", () => {

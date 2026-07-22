@@ -5,6 +5,8 @@ html[data-theme="day"] {
   --ink: #2a2208;
   --muted: #5c4e20;
   --panel: #fffdf3;
+  /* Nested inset cards (stats, weather, tasks) — softer than pure white. */
+  --surface: #fffef8;
   /* Soft, translucent hairlines so panels blend into the sky. */
   --line: rgba(42, 34, 8, 0.22);
   --deposit: #2f6b3a;
@@ -37,6 +39,7 @@ html[data-theme="night"] {
   --ink: #e8e4f8;
   --muted: #a8a0c8;
   --panel: #1c2240;
+  --surface: #0e1428;
   --line: rgba(200, 184, 255, 0.28);
   --deposit: #6fd39a;
   --deposit-soft: #1e3a32;
@@ -778,6 +781,18 @@ html[data-weather="thunder"] .sky-layer {
   transition: background 1.2s ease, color 1.2s ease, box-shadow 1.2s ease;
 }
 
+/*
+  Nested inset surfaces (stats, weather, task rows, form fields). Use .surface
+  / <Surface> for new UI; existing selectors share --surface so they lerp with
+  the sky instead of snapping #fff ↔ night navy.
+*/
+.surface {
+  background: var(--surface);
+  color: var(--ink);
+  border: none;
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
+}
+
 .panel + .panel {
   margin-top: 1rem;
 }
@@ -1018,11 +1033,15 @@ html[data-theme="night"] .btn.secondary {
 .field select,
 .you-color-meaning {
   border: 1px solid var(--line);
-  background: #fff;
-  color: #14241f;
+  background: var(--surface);
+  color: var(--ink);
   padding: 0.7rem 0.85rem;
   min-height: 44px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 1.2s ease,
+    color 1.2s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .field input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus-visible,
@@ -1030,14 +1049,6 @@ html[data-theme="night"] .btn.secondary {
 .field select:focus-visible,
 .you-color-meaning:focus-visible {
   border-color: var(--accent);
-}
-
-html[data-theme="night"] .field input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
-html[data-theme="night"] .field textarea,
-html[data-theme="night"] .field select,
-html[data-theme="night"] .you-color-meaning {
-  background: #0e1428;
-  color: var(--ink);
 }
 
 /* Range inputs (wing detail) keep native chrome, just spaced from the label. */
@@ -1084,19 +1095,15 @@ html[data-theme="night"] .you-color-meaning {
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
   align-items: center;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: #14241f;
+  border: none;
+  background: var(--surface);
+  color: var(--ink);
   padding: 0.65rem 0.75rem;
   margin-bottom: 0.5rem;
   min-height: 52px;
   touch-action: none;
   cursor: grab;
-}
-
-html[data-theme="night"] .task-row {
-  background: #0e1428;
-  color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
 .task-row.day-task {
@@ -1105,12 +1112,8 @@ html[data-theme="night"] .task-row {
 }
 
 .task-row.completed {
-  border-color: color-mix(in srgb, var(--deposit) 32%, var(--line));
-  background: color-mix(in srgb, var(--deposit) 8%, #fff);
-}
-
-html[data-theme="night"] .task-row.completed {
-  background: color-mix(in srgb, var(--deposit) 10%, #0e1428);
+  border: 1px solid color-mix(in srgb, var(--deposit) 32%, var(--line));
+  background: color-mix(in srgb, var(--deposit) 8%, var(--surface));
 }
 
 .task-done-label {
@@ -1290,19 +1293,11 @@ html[data-theme="night"] .task-row.completed {
   border-radius: 10px !important;
   background: color-mix(in srgb, var(--panel) 55%, transparent);
   color: var(--ink);
-}
-
-html[data-theme="night"] .column-recent .recent-row {
-  background: color-mix(in srgb, var(--panel) 45%, transparent);
-  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
 .column-recent .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-html[data-theme="night"] .column-recent .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .recent-block {
@@ -1341,25 +1336,16 @@ html[data-theme="night"] .column-recent .recent-row:hover:not(:disabled):not([ar
   min-height: 44px;
   padding: 0.55rem 0.75rem;
   border: 0;
-  background: #fff;
-  color: #14241f;
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-html[data-theme="night"] .recent-row {
-  background: #0e1428;
-  color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease;
 }
 
 .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent) 7%, #fff);
-}
-
-html[data-theme="night"] .recent-row:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent) 12%, #0e1428);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
 }
 
 .recent-row:focus-visible {
@@ -1405,11 +1391,8 @@ html[data-theme="night"] .recent-row:hover:not(:disabled):not([aria-disabled="tr
   padding: 0 0.75rem 0.5rem;
   font-size: 0.8rem;
   color: var(--muted);
-  background: #fff;
-}
-
-html[data-theme="night"] .recent-reason {
-  background: #0e1428;
+  background: var(--surface);
+  transition: background 1.2s ease, color 1.2s ease;
 }
 
 @media (max-width: 520px) {
@@ -1428,15 +1411,11 @@ html[data-theme="night"] .recent-reason {
   width: 100%;
   margin-top: 0.35rem;
   border: 1px solid var(--line);
-  background: #fff;
-  color: #14241f;
+  background: var(--surface);
+  color: var(--ink);
   padding: 0.45rem 0.5rem;
   min-height: 40px;
-}
-
-html[data-theme="night"] .task-actual-input {
-  background: #0e1428;
-  color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease, border-color 0.15s ease;
 }
 
 .drag-overlay {
@@ -1458,16 +1437,12 @@ html[data-theme="night"] .task-actual-input {
 
 .stat {
   position: relative;
-  border: 1px solid var(--line);
+  border: none;
   padding: 0.75rem;
   padding-right: 1.85rem;
-  background: #fff;
-  color: #14241f;
-}
-
-html[data-theme="night"] .stat {
-  background: #0e1428;
+  background: var(--surface);
   color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
 .stat .label {
@@ -1608,15 +1583,11 @@ html[data-theme="night"] .stat {
   width: 100%;
   margin-top: 0.85rem;
   padding: 0.65rem 0.8rem;
-  border: 1px solid var(--line);
-  /* Match .stat so weather and metrics read as one family. */
-  background: #fff;
-  color: #14241f;
-}
-
-html[data-theme="night"] .weather-row {
-  background: #0e1428;
+  border: none;
+  /* Match .stat / .surface so weather and metrics read as one family. */
+  background: var(--surface);
   color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
 .weather-quip {
@@ -1749,8 +1720,9 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   height: 160px;
   border: 1px solid var(--line);
   padding: 0.5rem;
-  background: #fff;
+  background: var(--surface);
   overflow-x: auto;
+  transition: background 1.2s ease, border-color 1.2s ease;
 }
 
 .bar {
@@ -2819,13 +2791,9 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   border: 1px solid var(--line);
   padding: 0.75rem;
   margin-bottom: 0.65rem;
-  background: #fff;
-  color: #14241f;
-}
-
-html[data-theme="night"] .tip-card {
-  background: #0e1428;
+  background: var(--surface);
   color: var(--ink);
+  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
 }
 
 .tip-card p {
