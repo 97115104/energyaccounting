@@ -590,7 +590,7 @@ html[data-weather="thunder"] .sky-layer {
   text-decoration: underline;
 }
 
-/* Greeting quote: plain text stack; facts stay outbound links. */
+/* Greeting quote: plain text; facts underline only verify words. */
 .greeting-quote-card {
   display: flex;
   flex-direction: column;
@@ -608,33 +608,27 @@ html[data-weather="thunder"] .sky-layer {
   color: inherit;
   font: inherit;
   text-align: left;
-  text-decoration: none !important;
-}
-
-.greeting-quote-card,
-.greeting-quote-card:hover,
-.greeting-quote-card:focus,
-.greeting-quote-card:focus-visible,
-.greeting-quote-card * {
-  text-decoration: none !important;
 }
 
 .greeting-quote-card .brand.greeting {
   display: block;
   max-width: none;
   animation: none;
-  text-decoration: none !important;
 }
 
-.greeting-quote-card--link {
+.fact-inline-link {
   color: inherit;
-  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.14em;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
 }
 
-.greeting-quote-card--link:hover .greeting-fact-hint,
-.greeting-quote-card--link:focus-visible .greeting-fact-hint {
+.fact-inline-link:hover,
+.fact-inline-link:focus-visible {
   color: var(--accent);
-  opacity: 1;
+  text-decoration-color: currentColor;
 }
 
 .greeting-fact-hint {
@@ -646,10 +640,6 @@ html[data-weather="thunder"] .sky-layer {
   color: var(--muted);
   opacity: 0.7;
   text-decoration: none !important;
-}
-
-.greeting-quote-card .greeting-fact-hint {
-  align-self: flex-end;
 }
 
 /* Auth welcome fact: quiet text link, no plaque (signed-in header keeps its card). */
@@ -2291,8 +2281,8 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 45px;
-  height: 45px;
+  width: 52px;
+  height: 52px;
   border-radius: 50% !important;
   border: 0;
   background: transparent;

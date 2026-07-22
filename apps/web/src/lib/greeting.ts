@@ -29,10 +29,14 @@ type Pool = { named: string[]; anonymous: string[] };
 
 export type FactSource = { label: string; url: string };
 
+/** A phrase inside the fact text that opens a verify link in a new tab. */
+export type FactLink = { phrase: string; url: string };
+
 type FactEntry = {
   named: string;
   anonymous: string;
   source: FactSource;
+  links?: FactLink[];
 };
 
 const CLASSIC = GREETINGS_JSON.classic as Record<Slot, Pool>;
@@ -54,7 +58,40 @@ export type GreetingDetail = {
   text: string;
   /** Present only for the "facts" style: where the claim can be verified. */
   factSource?: FactSource;
+  /** Inline phrases inside `text` that link out for verification. */
+  factLinks?: FactLink[];
 };
+
+export type FactSegment = { text: string; url?: string };
+
+/**
+ * Split fact copy into plain and linked segments so the UI can underline only
+ * the verify words without shipping HTML in the content file.
+ */
+export function factSegments(text: string, links: FactLink[] = []): FactSegment[] {
+  if (links.length === 0) return [{ text }];
+  let best: { index: number; link: FactLink } | null = null;
+  for (const link of links) {
+    if (!link.phrase) continue;
+    const index = text.indexOf(link.phrase);
+    if (index < 0) continue;
+    if (!best || index < best.index) best = { index, link };
+  }
+  if (!best) return [{ text }];
+  const { index, link } = best;
+  const before = text.slice(0, index);
+  const after = text.slice(index + link.phrase.length);
+  return [
+    ...(before ? [{ text: before }] : []),
+    { text: link.phrase, url: link.url },
+    ...factSegments(after, links),
+  ];
+}
+
+function linksFor(entry: FactEntry): FactLink[] {
+  if (entry.links && entry.links.length > 0) return entry.links;
+  return [{ phrase: entry.anonymous, url: entry.source.url }];
+}
 
 /**
  * Resolve the header greeting and, for fun facts, the reference link that backs
@@ -82,7 +119,11 @@ export function greetingDetailFor(
     const index = Math.floor(visitSeed * FACTS.length) % FACTS.length;
     const entry = FACTS[index] ?? FACTS[0]!;
     // Facts are did-you-knows; trailing ", {name}" reads as nonsense.
-    return { text: entry.anonymous, factSource: entry.source };
+    return {
+      text: entry.anonymous,
+      factSource: entry.source,
+      factLinks: linksFor(entry),
+    };
   }
 
   const pool = style === "humor" ? HUMOR : CLASSIC[slot];
@@ -100,8 +141,16 @@ export function greetingFor(
  * An anonymous fun fact for surfaces without a signed-in profile, like the
  * sign-in screen. Draws fresh per call; callers memoize per visit.
  */
-export function randomFact(): { text: string; source: FactSource } {
+export function randomFact(): {
+  text: string;
+  source: FactSource;
+  links: FactLink[];
+} {
   const index = Math.floor(Math.random() * FACTS.length);
   const entry = FACTS[index] ?? FACTS[0]!;
-  return { text: entry.anonymous, source: entry.source };
+  return {
+    text: entry.anonymous,
+    source: entry.source,
+    links: linksFor(entry),
+  };
 }

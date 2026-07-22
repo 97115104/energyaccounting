@@ -17,6 +17,7 @@ import { hasReturningFlag, markReturning } from "./lib/returning";
 import { liveTimezone } from "./lib/timezone";
 import { skyPeriod } from "./lib/weatherUi";
 import { cacheIdentity, forgetCachedIdentity, readCachedName } from "./lib/identityCache";
+import { FactLinkedText } from "./components/FactLinkedText";
 import { NeuroMe } from "./components/IdentityMark";
 import { ButterflyStateButton } from "./components/ButterflyStateButton";
 import { ButterflyStateModal } from "./components/ButterflyStateModal";
@@ -335,36 +336,18 @@ export function App() {
                   />
                 </div>
                 <div className="greeting-quote">
-                  {greeting?.factSource ? (
-                    <a
-                      className="greeting-quote-card greeting-quote-card--link"
-                      href={greeting.factSource.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Fun fact: ${greeting.text}. Source: ${greeting.factSource.label}.`}
-                      title={`Source: ${greeting.factSource.label}`}
+                  <div className="greeting-quote-card">
+                    <h1
+                      className="brand greeting"
+                      key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
                     >
-                      <span
-                        className="brand greeting"
-                        key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
-                      >
-                        {greeting.text}
-                      </span>
-                      <span className="greeting-fact-hint" aria-hidden="true">
-                        Source: {greeting.factSource.label}
-                        <span aria-hidden="true"> ↗</span>
-                      </span>
-                    </a>
-                  ) : (
-                    <div className="greeting-quote-card">
-                      <h1
-                        className="brand greeting"
-                        key={`${user?.displayName ?? ""}-${user?.greetingStyle ?? "mix"}`}
-                      >
-                        {greeting?.text}
-                      </h1>
-                    </div>
-                  )}
+                      {greeting?.factLinks ? (
+                        <FactLinkedText text={greeting.text} links={greeting.factLinks} />
+                      ) : (
+                        greeting?.text
+                      )}
+                    </h1>
+                  </div>
                 </div>
               </div>
             </>
@@ -384,20 +367,10 @@ export function App() {
                   text={welcomeName ? `Welcome back, ${welcomeName}!` : "Welcome back!"}
                 />
               </h1>
-              <a
-                className="welcome-fact-card"
-                href={welcomeFact.source.url}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Fun fact: ${welcomeFact.text}. Source: ${welcomeFact.source.label}.`}
-                title={`Source: ${welcomeFact.source.label}`}
-              >
-                <span className="welcome-fact">Did you know… {welcomeFact.text}</span>
-                <span className="greeting-fact-hint" aria-hidden="true">
-                  Source: {welcomeFact.source.label}
-                  <span aria-hidden="true"> ↗</span>
-                </span>
-              </a>
+              <p className="welcome-fact">
+                Did you know…{" "}
+                <FactLinkedText text={welcomeFact.text} links={welcomeFact.links} />
+              </p>
             </>
           )}
         </div>

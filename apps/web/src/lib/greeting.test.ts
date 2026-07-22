@@ -1,5 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { greetingDetailFor } from "./greeting";
+import { factSegments, greetingDetailFor } from "./greeting";
+
+describe("factSegments", () => {
+  test("splits bananas and strawberries into separate verify links", () => {
+    const text = "Bananas are berries. Strawberries are not berries.";
+    const segs = factSegments(text, [
+      { phrase: "Bananas", url: "https://example.com/banana" },
+      { phrase: "Strawberries", url: "https://example.com/strawberry" },
+    ]);
+    expect(segs).toEqual([
+      { text: "Bananas", url: "https://example.com/banana" },
+      { text: " are berries. " },
+      { text: "Strawberries", url: "https://example.com/strawberry" },
+      { text: " are not berries." },
+    ]);
+  });
+});
 
 describe("greetingDetailFor", () => {
   test("facts always ship a verifiable https source link", () => {
@@ -8,6 +24,11 @@ describe("greetingDetailFor", () => {
     expect(detail.factSource).toBeDefined();
     expect(detail.factSource!.label.length).toBeGreaterThan(0);
     expect(detail.factSource!.url.startsWith("https://")).toBe(true);
+    expect(detail.factLinks?.length).toBeGreaterThan(0);
+    for (const link of detail.factLinks ?? []) {
+      expect(detail.text).toContain(link.phrase);
+      expect(link.url.startsWith("https://")).toBe(true);
+    }
   });
 
   test("non-fact styles carry no source link", () => {

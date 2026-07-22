@@ -94,7 +94,13 @@
       "source": {
         "label": "Animal Cognition",
         "url": "https://doi.org/10.1007/s10071-021-01507-2"
-      }
+      },
+      "links": [
+        {
+          "phrase": "giraffes",
+          "url": "https://doi.org/10.1007/s10071-021-01507-2"
+        }
+      ]
     },
     {
       "named": "Fun fact, {name}: honeybees can count landmarks as they fly.",
@@ -102,7 +108,13 @@
       "source": {
         "label": "Springer",
         "url": "https://doi.org/10.1007/s00114-008-0464-y"
-      }
+      },
+      "links": [
+        {
+          "phrase": "honeybees",
+          "url": "https://doi.org/10.1007/s00114-008-0464-y"
+        }
+      ]
     },
     {
       "named": "Wombat poop is cube-shaped, {name}. You needed to know.",
@@ -110,7 +122,13 @@
       "source": {
         "label": "National Geographic",
         "url": "https://www.nationalgeographic.com/animals/article/wombat-poop-cube-why-is-it-square-shaped"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Wombat poop",
+          "url": "https://www.nationalgeographic.com/animals/article/wombat-poop-cube-why-is-it-square-shaped"
+        }
+      ]
     },
     {
       "named": "An octopus has one central brain and eight more in its arms, {name}.",
@@ -118,7 +136,13 @@
       "source": {
         "label": "Scientific American",
         "url": "https://www.scientificamerican.com/article/the-mind-of-an-octopus/"
-      }
+      },
+      "links": [
+        {
+          "phrase": "octopus",
+          "url": "https://www.scientificamerican.com/article/the-mind-of-an-octopus/"
+        }
+      ]
     },
     {
       "named": "Gentoo penguins propose with a pebble. Anyway, hi {name}.",
@@ -126,7 +150,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Gentoo_penguin"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Gentoo penguins",
+          "url": "https://en.wikipedia.org/wiki/Gentoo_penguin"
+        }
+      ]
     },
     {
       "named": "Sea otters hold hands while they sleep, {name}.",
@@ -134,7 +164,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Sea_otter"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Sea otters",
+          "url": "https://en.wikipedia.org/wiki/Sea_otter"
+        }
+      ]
     },
     {
       "named": "{name}, a day on Venus lasts longer than its year.",
@@ -142,7 +178,13 @@
       "source": {
         "label": "NASA",
         "url": "https://science.nasa.gov/venus/venus-facts/"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Venus",
+          "url": "https://science.nasa.gov/venus/venus-facts/"
+        }
+      ]
     },
     {
       "named": "Arctic ground squirrels can supercool below freezing in hibernation, {name}.",
@@ -150,7 +192,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Arctic_ground_squirrel"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Arctic ground squirrels",
+          "url": "https://en.wikipedia.org/wiki/Arctic_ground_squirrel"
+        }
+      ]
     },
     {
       "named": "Some caterpillars drum a secret beat so ants adopt them, {name}.",
@@ -158,7 +206,13 @@
       "source": {
         "label": "Science News",
         "url": "https://www.sciencenews.org/article/caterpillar-noise-tricks-ants-service"
-      }
+      },
+      "links": [
+        {
+          "phrase": "caterpillars",
+          "url": "https://www.sciencenews.org/article/caterpillar-noise-tricks-ants-service"
+        }
+      ]
     },
     {
       "named": "Crows remember faces for years, {name}. Be nice to crows.",
@@ -166,7 +220,13 @@
       "source": {
         "label": "Univ. of Washington",
         "url": "https://urban.uw.edu/news/crows-hold-grudges-against-individual-humans-for-up-to-17-years/"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Crows",
+          "url": "https://urban.uw.edu/news/crows-hold-grudges-against-individual-humans-for-up-to-17-years/"
+        }
+      ]
     },
     {
       "named": "Bananas are berries, {name}. Strawberries are not berries.",
@@ -174,7 +234,17 @@
       "source": {
         "label": "McGill OSS",
         "url": "https://www.mcgill.ca/oss/article/did-you-know/bananas-are-berries-raspberries-are-not"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Bananas",
+          "url": "https://en.wikipedia.org/wiki/Berry_(botany)"
+        },
+        {
+          "phrase": "Strawberries",
+          "url": "https://en.wikipedia.org/wiki/Aggregate_fruit"
+        }
+      ]
     },
     {
       "named": "Sharks are older than trees, {name}, and older than Saturn's rings.",
@@ -182,7 +252,17 @@
       "source": {
         "label": "Natural History Museum",
         "url": "https://www.nhm.ac.uk/discover/shark-evolution-a-450-million-year-timeline.html"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Sharks",
+          "url": "https://www.nhm.ac.uk/discover/shark-evolution-a-450-million-year-timeline.html"
+        },
+        {
+          "phrase": "Saturn's rings",
+          "url": "https://www.jpl.nasa.gov/news/nasas-cassini-data-show-saturns-rings-relatively-new/"
+        }
+      ]
     },
     {
       "named": "Tooth enamel is the hardest substance your body makes, {name}.",
@@ -190,7 +270,13 @@
       "source": {
         "label": "Cleveland Clinic",
         "url": "https://my.clevelandclinic.org/health/body/24798-tooth-enamel"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Tooth enamel",
+          "url": "https://my.clevelandclinic.org/health/body/24798-tooth-enamel"
+        }
+      ]
     },
     {
       "named": "Honey basically never spoils, {name}.",
@@ -198,7 +284,13 @@
       "source": {
         "label": "Smithsonian",
         "url": "https://www.smithsonianmag.com/science-nature/the-science-behind-honeys-eternal-shelf-life-1218690/"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Honey",
+          "url": "https://www.smithsonianmag.com/science-nature/the-science-behind-honeys-eternal-shelf-life-1218690/"
+        }
+      ]
     },
     {
       "named": "Axolotls can regrow parts of their own brain, {name}.",
@@ -206,7 +298,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Axolotl"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Axolotls",
+          "url": "https://en.wikipedia.org/wiki/Axolotl"
+        }
+      ]
     },
     {
       "named": "Pigeons can sense Earth's magnetic field, {name}.",
@@ -214,7 +312,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Magnetoreception"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Pigeons",
+          "url": "https://en.wikipedia.org/wiki/Magnetoreception"
+        }
+      ]
     },
     {
       "named": "Butterflies taste with their feet, {name}.",
@@ -222,7 +326,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Butterfly#Senses"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Butterflies",
+          "url": "https://en.wikipedia.org/wiki/Butterfly#Senses"
+        }
+      ]
     },
     {
       "named": "{name}, monarchs navigate thousands of miles with a sun compass in their antennae.",
@@ -230,7 +340,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Monarch_butterfly_migration"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Monarchs",
+          "url": "https://en.wikipedia.org/wiki/Monarch_butterfly_migration"
+        }
+      ]
     },
     {
       "named": "Inside the chrysalis a caterpillar mostly dissolves before becoming a butterfly, {name}.",
@@ -238,7 +354,13 @@
       "source": {
         "label": "Scientific American",
         "url": "https://www.scientificamerican.com/article/caterpillar-butterfly-metamorphosis-explainer/"
-      }
+      },
+      "links": [
+        {
+          "phrase": "chrysalis",
+          "url": "https://www.scientificamerican.com/article/caterpillar-butterfly-metamorphosis-explainer/"
+        }
+      ]
     },
     {
       "named": "Some butterflies remember what they learned as caterpillars, {name}.",
@@ -246,7 +368,13 @@
       "source": {
         "label": "PLOS ONE",
         "url": "https://doi.org/10.1371/journal.pone.0001736"
-      }
+      },
+      "links": [
+        {
+          "phrase": "butterflies",
+          "url": "https://doi.org/10.1371/journal.pone.0001736"
+        }
+      ]
     },
     {
       "named": "Morpho wings are not blue pigment, {name}. The color is built from microscopic structure.",
@@ -254,7 +382,13 @@
       "source": {
         "label": "Natural History Museum",
         "url": "https://www.nhm.ac.uk/discover/spotlight-blue-morpho.html"
-      }
+      },
+      "links": [
+        {
+          "phrase": "Morpho",
+          "url": "https://www.nhm.ac.uk/discover/spotlight-blue-morpho.html"
+        }
+      ]
     },
     {
       "named": "Butterflies can see ultraviolet patterns on wings that people cannot, {name}.",
@@ -262,7 +396,13 @@
       "source": {
         "label": "Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Butterfly#Senses"
-      }
+      },
+      "links": [
+        {
+          "phrase": "ultraviolet",
+          "url": "https://en.wikipedia.org/wiki/Butterfly#Senses"
+        }
+      ]
     }
   ]
 }

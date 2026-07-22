@@ -28,6 +28,12 @@ describe("content packs", () => {
     expect(greetings.facts.length).toBeGreaterThan(10);
     for (const fact of greetings.facts) {
       expect(fact.source.url.startsWith("http")).toBe(true);
+      expect(Array.isArray(fact.links)).toBe(true);
+      expect(fact.links.length).toBeGreaterThan(0);
+      for (const link of fact.links) {
+        expect(fact.anonymous).toContain(link.phrase);
+        expect(link.url.startsWith("http")).toBe(true);
+      }
     }
   });
 

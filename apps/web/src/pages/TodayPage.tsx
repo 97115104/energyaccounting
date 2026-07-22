@@ -249,7 +249,7 @@ function MicIcon() {
 
 function LightbulbIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="currentColor"
         d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2Zm-2 18a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h-4v1Z"
