@@ -678,6 +678,8 @@ html[data-weather="thunder"] .sky-layer {
   gap: 1rem;
   margin-top: 1rem;
   align-items: stretch;
+  /* Completing/adding rows changes height; don't let scroll anchoring jolt the page. */
+  overflow-anchor: none;
 }
 
 .day-board > .panel + .panel {
@@ -1823,6 +1825,11 @@ html[data-theme="night"] .weather-chip[data-kind="sun"] .weather-glyph {
   gap: 1rem;
   margin-top: 1rem;
   align-items: stretch;
+  overflow-anchor: none;
+}
+
+.today-root {
+  overflow-anchor: none;
 }
 
 .day-flow.has-guide {

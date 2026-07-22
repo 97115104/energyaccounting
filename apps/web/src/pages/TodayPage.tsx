@@ -154,6 +154,24 @@ async function fetchRecentStats(): Promise<StatPoint[]> {
   return res.series;
 }
 
+/** Hold the viewport still across in-place day refreshes (complete, reorder, soft load). */
+async function withPreservedScroll(run: () => Promise<void>): Promise<void> {
+  const x = window.scrollX;
+  const y = window.scrollY;
+  const restore = () => {
+    if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
+  };
+  try {
+    await run();
+  } finally {
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+    });
+  }
+}
+
 /** One trend line for the card/modal, Apple-Trends style: a recent average
     compared against the average of the closed days before it. */
 type TrendWindow = { recent: number; delta: number | null };
@@ -369,7 +387,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [addingRecentId, setAddingRecentId] = useState<string | null>(null);
   const addingRecentRef = useRef(false);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
+  );
 
   const load = useCallback(async (forcedDayId?: string, opts?: { soft?: boolean }) => {
     const generation = ++loadGenerationRef.current;
@@ -559,7 +579,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             ),
           ).filter((element) => !element.hasAttribute("disabled"))
         : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !deletingDayRef.current) {
         setConfirmingDelete(false);
@@ -572,17 +592,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     document.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [confirmingDelete]);
 
@@ -599,7 +619,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             ),
           ).filter((element) => !element.hasAttribute("disabled"))
         : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus());
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !phaseBusyRef.current) {
         setConfirmingClose(false);
@@ -612,17 +632,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     document.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [confirmingClose]);
 
@@ -643,7 +663,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     // Move focus in after paint so the dialog node exists.
     const focusId = window.requestAnimationFrame(() => {
       const first = focusables()[0];
-      first?.focus();
+      first?.focus({ preventScroll: true });
     });
 
     function onKey(e: KeyboardEvent) {
@@ -658,17 +678,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       window.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [closeCelebration]);
 
@@ -691,7 +711,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     const focusId = window.requestAnimationFrame(() => {
       const list = focusables();
       const firstUseful = list.find((el) => el.getAttribute("aria-disabled") !== "true");
-      (firstUseful ?? list[0])?.focus();
+      (firstUseful ?? list[0])?.focus({ preventScroll: true });
     });
 
     function onKey(e: KeyboardEvent) {
@@ -710,17 +730,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       window.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [draftSide]);
 
@@ -740,7 +760,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
     const focusId = window.requestAnimationFrame(() => {
       const first = focusables()[0];
-      first?.focus();
+      first?.focus({ preventScroll: true });
     });
 
     function onKey(e: KeyboardEvent) {
@@ -756,17 +776,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       window.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [detailLineId, listening]);
 
@@ -786,7 +806,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         : [];
 
     const focusId = window.requestAnimationFrame(() => {
-      focusables()[0]?.focus();
+      focusables()[0]?.focus({ preventScroll: true });
     });
 
     function onKey(e: KeyboardEvent) {
@@ -801,17 +821,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
       const last = list[list.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => {
       window.cancelAnimationFrame(focusId);
       window.removeEventListener("keydown", onKey);
-      previous?.focus?.();
+      previous?.focus?.({ preventScroll: true });
     };
   }, [guideOpen]);
 
@@ -1073,7 +1093,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       setError(e instanceof Error ? e.message : "Could not add the item.");
       return false;
     }
-    await load();
+    await withPreservedScroll(() => load(undefined, { soft: true }));
     return true;
   }
 
@@ -1166,18 +1186,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
       method: "PATCH",
       body: JSON.stringify({ actualCost: actual }),
     });
-    await load();
+    await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
   async function toggleComplete(line: Line) {
     if (!day) return;
     const next = !line.completed;
-    if (next) setJustFreed(line.plannedCost);
-    await api(`/api/days/${day.id}/lines/${line.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ completed: next }),
+    await withPreservedScroll(async () => {
+      if (next) setJustFreed(line.plannedCost);
+      await api(`/api/days/${day.id}/lines/${line.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ completed: next }),
+      });
+      await load(undefined, { soft: true });
     });
-    await load();
   }
 
   async function saveTaskDetails() {
@@ -1201,7 +1223,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         }),
       });
       setDetailLineId(null);
-      await load();
+      await withPreservedScroll(() => load(undefined, { soft: true }));
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : "Could not save task details.");
     }
@@ -1209,7 +1231,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   async function removeLine(id: string) {
     await api(`/api/days/${day!.id}/lines/${id}`, { method: "DELETE" });
-    await load();
+    await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
   async function setPhase(phase: "plan" | "audit" | "closed") {
@@ -1295,7 +1317,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       // Soft refresh keeps the page mounted so scroll position and the
       // stepper stay put while the new phase paints with its transition.
       setDay((prev) => (prev ? { ...prev, phase } : prev));
-      await load(undefined, { soft: true });
+      await withPreservedScroll(() => load(undefined, { soft: true }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update the day phase.");
     } finally {
@@ -1324,7 +1346,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       method: "PATCH",
       body: JSON.stringify({ feelRating: n }),
     });
-    await load();
+    await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
   function stopLiveSpeech() {
@@ -1488,7 +1510,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           ),
         );
       }
-      await load();
+      await withPreservedScroll(() => load(undefined, { soft: true }));
     } finally {
       setDndBusy(false);
     }
@@ -2861,6 +2883,14 @@ function SortableTask(props: {
       className={`task-row day-task${props.line.completed ? " completed" : ""}`}
       {...attributes}
       {...listeners}
+      // Mouse activation can focus the sortable node; undo any scroll jump.
+      onMouseDown={() => {
+        const x = window.scrollX;
+        const y = window.scrollY;
+        requestAnimationFrame(() => {
+          if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
+        });
+      }}
       role="group"
       aria-roledescription="sortable task"
     >
@@ -2881,6 +2911,7 @@ function SortableTask(props: {
       <button
         type="button"
         className="task-main task-detail-trigger"
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={() => {
           if (!isDragging) props.onOpen(props.line);
         }}
