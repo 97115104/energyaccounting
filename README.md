@@ -104,9 +104,11 @@ Codes are 128-bit random values. The database (resolved via `DATA_DIR`, same as 
 
 Sensitive fields are end-to-end encrypted. A data encryption key (DEK) is generated in the browser, wrapped with a password-derived KEK (Argon2id), and stored only as ciphertext. Activity labels, journal text, task details, and the You profile are AES-GCM encrypted on the device before upload. The hosted operators at [https://eaj.97115104.com/](https://eaj.97115104.com/), and any self-host operator, can store and serve that ciphertext and cannot decrypt it without the person's password. Password verification on the server also uses Argon2id and never needs the DEK. Dictation converts speech to text in the browser, so no audio leaves the device. Numeric energy costs and balances stay clear so dashboards can chart without reading activity names. A SHA-256 of the normalized label is stored so recurring suggestions can dedupe without decrypting. Optional TOTP issues one-time recovery codes at enable time. Those codes are accepted on login and on sensitive settings actions when the authenticator is enabled. See [SECURITY.md](SECURITY.md) for reporting and the hosted-versus-self-host boundary.
 
-## Training corpus export
+## Training corpus export and restore
 
-Settings includes a corpus download. After unlock, the client fetches your encrypted days, decrypts labels and journals with the session DEK, and saves a JSON file with schema version, user identity, days, lines, journals, catalog, and decrypted You profile. The format is intended for optional personal model training later.
+Settings can download a decrypted JSON corpus after unlock. It includes schema version, stable record source IDs, profile preferences and identity, days and lifecycle timestamps, tasks and completion timestamps, journals, details, catalog, and the decrypted You profile. The plaintext format remains suitable for optional personal model training on your own machine.
+
+The same v7 corpus can be uploaded later to restore an account. The browser validates it locally, then re-encrypts every current private text field with the destination account’s session DEK before sending it to the server. Restore can either merge only missing days/tasks (safe to repeat) or replace the journal, preferences, identity, and You profile. When both histories contain an active day, the person explicitly chooses which remains active. Email, password, MFA, sessions, and existing share links are never transferred. Existing v6 exports remain importable with established lifecycle timestamp defaults.
 
 ## Scripts
 

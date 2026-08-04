@@ -89,6 +89,9 @@ export const dayTable = sqliteTable(
   "day_table",
   {
     id: text("id").primaryKey(),
+    // The immutable identifier from a corpus export. New imports get a fresh
+    // local id, while this key lets repeat imports merge without duplication.
+    sourceId: text("source_id"),
     userId: text("user_id")
       .notNull()
       .references(() => userTable.id, { onDelete: "cascade" }),
@@ -110,6 +113,7 @@ export const dayTable = sqliteTable(
   },
   (t) => [
     index("day_user_started_at").on(t.userId, t.startedAt),
+    uniqueIndex("day_user_source_id").on(t.userId, t.sourceId),
     // SQLite's partial index is the final guard against concurrent starts.
     uniqueIndex("day_one_active_per_user")
       .on(t.userId)
@@ -119,6 +123,8 @@ export const dayTable = sqliteTable(
 
 export const taskLineTable = sqliteTable("task_line_table", {
   id: text("id").primaryKey(),
+  // Same source-stable identity as days, scoped to the parent day.
+  sourceId: text("source_id"),
   dayId: text("day_id")
     .notNull()
     .references(() => dayTable.id, { onDelete: "cascade" }),
@@ -134,7 +140,7 @@ export const taskLineTable = sqliteTable("task_line_table", {
   difficulty: integer("difficulty"),
   detailsCiphertext: text("details_ciphertext"),
   detailsIv: text("details_iv"),
-});
+}, (t) => [uniqueIndex("task_line_day_source_id").on(t.dayId, t.sourceId)]);
 
 export const taskCatalogTable = sqliteTable("task_catalog_table", {
   id: text("id").primaryKey(),

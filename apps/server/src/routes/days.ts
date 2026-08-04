@@ -13,8 +13,9 @@ import {
 import { and, desc, eq, gte, lt, lte, ne, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "../db/index.ts";
-import { dayTable, taskCatalogTable, taskLineTable, userTable } from "../db/schema.ts";
+import { dayTable, taskCatalogTable, taskLineTable, userTable, youProfileTable } from "../db/schema.ts";
 import { holidayForDate } from "../lib/holidays.ts";
+import { sanitizeIdentity } from "../lib/identity.ts";
 import { assertIsoDate, newId, requireFullUser } from "../lib/session.ts";
 import { fetchDayWeather, calendarDateInTimeZone, weatherNeedsRefresh } from "../lib/weather.ts";
 
@@ -371,6 +372,9 @@ function serializeDay(
   const projected = closingBalance(day.openingBalance, tasks);
   return {
     id: day.id,
+    // A corpus uses this stable key for idempotent restores. Existing rows
+    // predate the column, so their local id is their stable source identity.
+    sourceId: day.sourceId ?? day.id,
     date: day.date,
     startedAt: day.startedAt.toISOString(),
     closedAt: day.closedAt ? day.closedAt.toISOString() : null,
@@ -394,6 +398,7 @@ function serializeDay(
     attwood,
     lines: lines.map((l) => ({
       id: l.id,
+      sourceId: l.sourceId ?? l.id,
       side: l.side,
       sort: l.sort,
       labelCiphertext: l.labelCiphertext,
@@ -408,6 +413,300 @@ function serializeDay(
       detailsIv: l.detailsIv,
     })),
   };
+}
+
+const restoreLineSchema = t.Object({
+  sourceId: t.String({ minLength: 1, maxLength: 200 }),
+  side: t.Union([t.Literal("deposit"), t.Literal("withdrawal")]),
+  sort: t.Number(),
+  labelCiphertext: t.String({ minLength: 1 }),
+  labelIv: t.String({ minLength: 8 }),
+  labelHash: t.String(),
+  plannedCost: t.Number(),
+  actualCost: t.Nullable(t.Number()),
+  completed: t.Boolean(),
+  completedAt: t.Nullable(t.String()),
+  difficulty: t.Nullable(t.Number()),
+  detailsCiphertext: t.Nullable(t.String()),
+  detailsIv: t.Nullable(t.String()),
+});
+
+const restoreDaySchema = t.Object({
+  sourceId: t.String({ minLength: 1, maxLength: 200 }),
+  date: t.String(),
+  startedAt: t.String(),
+  closedAt: t.Nullable(t.String()),
+  openingBalance: t.Number(),
+  phase: t.Union([t.Literal("plan"), t.Literal("audit"), t.Literal("closed")]),
+  feelRating: t.Nullable(t.Number()),
+  weather: t.Nullable(t.Record(t.String(), t.Unknown())),
+  isHoliday: t.Boolean(),
+  journalCiphertext: t.Nullable(t.String()),
+  journalIv: t.Nullable(t.String()),
+  compensateNoteCiphertext: t.Nullable(t.String()),
+  compensateNoteIv: t.Nullable(t.String()),
+  // This field is retired from the interface and its historical AAD is not
+  // recoverable. Keep its opaque bytes for same-key archival restores.
+  legacyQualitative: t.Nullable(
+    t.Object({ ciphertext: t.String({ minLength: 1 }), iv: t.String({ minLength: 8 }) }),
+  ),
+  lines: t.Array(restoreLineSchema),
+});
+
+const restoreUserSchema = t.Object({
+  displayName: t.Nullable(t.String({ maxLength: 80 })),
+  timezone: t.String(),
+  lat: t.Nullable(t.Number()),
+  lon: t.Nullable(t.Number()),
+  country: t.Nullable(t.String()),
+  temperatureUnit: t.Union([t.Literal("C"), t.Literal("F"), t.Null()]),
+  greetingStyle: t.Union([
+    t.Literal("classic"),
+    t.Literal("humor"),
+    t.Literal("facts"),
+    t.Literal("mix"),
+    t.Null(),
+  ]),
+  includePhysicalActivities: t.Boolean(),
+  onboardingCompleted: t.Boolean(),
+  locationPrompted: t.Boolean(),
+  identity: t.Union([t.Record(t.String(), t.Unknown()), t.Null()]),
+});
+
+const restoreCorpusSchema = t.Object({
+  schemaVersion: t.Literal(7),
+  mode: t.Union([t.Literal("merge"), t.Literal("replace")]),
+  activeDayResolution: t.Optional(
+    t.Union([t.Literal("keep-current"), t.Literal("replace-current")]),
+  ),
+  user: restoreUserSchema,
+  youProfile: t.Nullable(
+    t.Object({
+      ciphertext: t.String({ minLength: 1 }),
+      iv: t.String({ minLength: 8 }),
+      updatedAt: t.String(),
+    }),
+  ),
+  days: t.Array(restoreDaySchema),
+});
+
+const restorePreviewSchema = t.Object({
+  days: t.Array(
+    t.Object({
+      sourceId: t.String({ minLength: 1, maxLength: 200 }),
+      phase: t.Union([t.Literal("plan"), t.Literal("audit"), t.Literal("closed")]),
+      lineSourceIds: t.Array(t.String({ minLength: 1, maxLength: 200 })),
+    }),
+  ),
+  hasProfile: t.Boolean(),
+});
+
+type RestoreCorpus = typeof restoreCorpusSchema.static;
+type RestoreDay = typeof restoreDaySchema.static;
+
+function restoreTimestamp(value: string, field: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${field} must be an ISO timestamp.`);
+  return date;
+}
+
+function restorePairsAreValid(day: RestoreDay): boolean {
+  const pairs: Array<[string | null, string | null]> = [
+    [day.journalCiphertext, day.journalIv],
+    [day.compensateNoteCiphertext, day.compensateNoteIv],
+  ];
+  for (const line of day.lines) pairs.push([line.detailsCiphertext, line.detailsIv]);
+  return pairs.every(([ciphertext, iv]) => (ciphertext === null) === (iv === null));
+}
+
+function validateRestoreCorpus(corpus: RestoreCorpus): string | null {
+  if (corpus.youProfile) {
+    if (corpus.youProfile.ciphertext.length > 256 * 1024) {
+      return "Profile is too large to save.";
+    }
+    if (corpus.youProfile.iv.length > 64) return "Invalid encryption IV.";
+    try {
+      restoreTimestamp(corpus.youProfile.updatedAt, "You profile update");
+    } catch (e) {
+      return e instanceof Error ? e.message : "The You profile timestamp is invalid.";
+    }
+  }
+  const sourceDays = new Set<string>();
+  let openDays = 0;
+  for (const day of corpus.days) {
+    if (!day.sourceId.trim() || sourceDays.has(day.sourceId)) return "Each imported day needs a unique source id.";
+    sourceDays.add(day.sourceId);
+    if (!restorePairsAreValid(day)) return "Encrypted journal fields need both ciphertext and IV, or neither.";
+    try {
+      assertIsoDate(day.date);
+      restoreTimestamp(day.startedAt, "Day start");
+      if (day.closedAt) restoreTimestamp(day.closedAt, "Day close");
+      for (const line of day.lines) {
+        if (line.completedAt) restoreTimestamp(line.completedAt, "Task completion");
+        if (!Number.isFinite(line.plannedCost) || !Number.isFinite(line.sort)) {
+          return "Imported task costs and sort order must be finite numbers.";
+        }
+      }
+    } catch (e) {
+      return e instanceof Error ? e.message : "The corpus contains an invalid date.";
+    }
+    const sourceLines = new Set<string>();
+    for (const line of day.lines) {
+      if (!line.sourceId.trim() || sourceLines.has(line.sourceId)) {
+        return "Each imported task needs a unique source id within its day.";
+      }
+      sourceLines.add(line.sourceId);
+    }
+    if (day.phase !== "closed") openDays += 1;
+  }
+  if (openDays > 1) return "A corpus may contain only one active energy day.";
+  return null;
+}
+
+async function importedDayMatch(userId: string, sourceId: string, executor: WriteDb = db) {
+  const bySource = await executor
+    .select()
+    .from(dayTable)
+    .where(and(eq(dayTable.userId, userId), eq(dayTable.sourceId, sourceId)));
+  if (bySource[0]) return bySource[0];
+  const byLegacyId = await executor
+    .select()
+    .from(dayTable)
+    .where(and(eq(dayTable.userId, userId), eq(dayTable.id, sourceId)));
+  return byLegacyId[0];
+}
+
+async function importedLineMatch(dayId: string, sourceId: string, executor: WriteDb = db) {
+  const bySource = await executor
+    .select()
+    .from(taskLineTable)
+    .where(and(eq(taskLineTable.dayId, dayId), eq(taskLineTable.sourceId, sourceId)));
+  if (bySource[0]) return bySource[0];
+  const byLegacyId = await executor
+    .select()
+    .from(taskLineTable)
+    .where(and(eq(taskLineTable.dayId, dayId), eq(taskLineTable.id, sourceId)));
+  return byLegacyId[0];
+}
+
+async function restorePreview(userId: string, preview: typeof restorePreviewSchema.static) {
+  let daysToAdd = 0;
+  let daysExisting = 0;
+  let linesToAdd = 0;
+  let linesExisting = 0;
+  let importedActiveSourceId: string | null = null;
+  for (const sourceDay of preview.days) {
+    const existing = await importedDayMatch(userId, sourceDay.sourceId);
+    if (!existing) {
+      daysToAdd += 1;
+      linesToAdd += sourceDay.lineSourceIds.length;
+      if (sourceDay.phase !== "closed") importedActiveSourceId = sourceDay.sourceId;
+      continue;
+    }
+    daysExisting += 1;
+    for (const sourceLineId of sourceDay.lineSourceIds) {
+      if (await importedLineMatch(existing.id, sourceLineId)) linesExisting += 1;
+      else linesToAdd += 1;
+    }
+  }
+  const active = await db.query.dayTable.findFirst({
+    where: and(eq(dayTable.userId, userId), ne(dayTable.phase, "closed")),
+  });
+  const activeDayConflict = !!(
+    active && importedActiveSourceId && active.id !== importedActiveSourceId && active.sourceId !== importedActiveSourceId
+  );
+  return {
+    daysToAdd,
+    daysExisting,
+    linesToAdd,
+    linesExisting,
+    hasImportedProfile: preview.hasProfile,
+    activeDayConflict,
+    currentActiveSourceId: active ? active.sourceId ?? active.id : null,
+    importedActiveSourceId,
+  };
+}
+
+function importedProfilePatch(userId: string, user: RestoreCorpus["user"]) {
+  const identity = user.identity === null ? null : sanitizeIdentity(user.identity, userId);
+  if (user.identity !== null && !identity) throw new Error("Identity config is invalid.");
+  const identityJson = identity ? JSON.stringify(identity) : null;
+  if (identityJson && identityJson.length > 4 * 1024) throw new Error("Identity config is too large.");
+  return {
+    displayName: user.displayName?.trim() || null,
+    timezone: user.timezone,
+    lat: user.lat,
+    lon: user.lon,
+    country: user.country,
+    temperatureUnit: user.temperatureUnit,
+    greetingStyle: user.greetingStyle,
+    includePhysicalActivities: user.includePhysicalActivities,
+    onboardingCompleted: user.onboardingCompleted,
+    locationPrompted: user.locationPrompted,
+    identityJson,
+  };
+}
+
+function restoredLineValues(line: RestoreDay["lines"][number], dayId: string) {
+  return {
+    id: newId(),
+    sourceId: line.sourceId,
+    dayId,
+    side: line.side,
+    sort: Math.trunc(line.sort),
+    labelCiphertext: line.labelCiphertext,
+    labelIv: line.labelIv,
+    labelHash: line.labelHash,
+    plannedCost: clampCost(line.plannedCost),
+    actualCost: line.actualCost === null ? null : clampCost(line.actualCost),
+    completed: line.completed,
+    completedAt: line.completedAt ? restoreTimestamp(line.completedAt, "Task completion") : null,
+    difficulty: line.difficulty === null ? null : clampDifficulty(line.difficulty),
+    detailsCiphertext: line.detailsCiphertext,
+    detailsIv: line.detailsIv,
+  };
+}
+
+async function insertRestoredDay(
+  userId: string,
+  source: RestoreDay,
+  executor: WriteDb,
+): Promise<typeof dayTable.$inferSelect> {
+  const id = newId();
+  const startedAt = restoreTimestamp(source.startedAt, "Day start");
+  const closedAt = source.closedAt
+    ? restoreTimestamp(source.closedAt, "Day close")
+    : source.phase === "closed"
+      ? startedAt
+      : null;
+  const lines = source.lines.map((line) => restoredLineValues(line, id));
+  const tasks: TaskCosts[] = lines.map((line) => ({
+    side: line.side,
+    planned: line.plannedCost,
+    actual: line.actualCost,
+  }));
+  await executor.insert(dayTable).values({
+    id,
+    sourceId: source.sourceId,
+    userId,
+    date: assertIsoDate(source.date),
+    startedAt,
+    closedAt,
+    openingBalance: source.openingBalance,
+    closingBalance: source.phase === "closed" ? closingBalance(source.openingBalance, tasks) : null,
+    phase: source.phase,
+    feelRating: source.feelRating,
+    journalCiphertext: source.journalCiphertext,
+    journalIv: source.journalIv,
+    weatherJson: source.weather ? JSON.stringify(source.weather) : null,
+    isHoliday: source.isHoliday,
+    qualitativeCiphertext: source.legacyQualitative?.ciphertext ?? null,
+    qualitativeIv: source.legacyQualitative?.iv ?? null,
+    compensateNoteCiphertext: source.compensateNoteCiphertext,
+    compensateNoteIv: source.compensateNoteIv,
+  });
+  if (lines.length > 0) await executor.insert(taskLineTable).values(lines);
+  return (await executor.select().from(dayTable).where(eq(dayTable.id, id)))[0]!;
 }
 
 export const dayRoutes = new Elysia({ prefix: "/api" })
@@ -564,14 +863,20 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
     }
     return {
-      schemaVersion: 6,
+      schemaVersion: 7,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
+        displayName: user.displayName,
         timezone: user.timezone,
         lat: user.lat,
         lon: user.lon,
         country: user.country,
+        temperatureUnit: user.temperatureUnit,
+        greetingStyle: user.greetingStyle,
+        includePhysicalActivities: user.includePhysicalActivities,
+        onboardingCompleted: user.onboardingCompleted,
+        locationPrompted: user.locationPrompted,
         identity,
       },
       days: out,
@@ -591,6 +896,161 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       })),
     };
   })
+  .post(
+    "/import/corpus/preview",
+    async ({ body, request, set }) => {
+      const user = await requireFullUser(request);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const dayIds = new Set<string>();
+      for (const day of body.days) {
+        if (dayIds.has(day.sourceId)) {
+          set.status = 400;
+          return { error: "Each imported day needs a unique source id." };
+        }
+        dayIds.add(day.sourceId);
+        if (new Set(day.lineSourceIds).size !== day.lineSourceIds.length) {
+          set.status = 400;
+          return { error: "Each imported task needs a unique source id within its day." };
+        }
+      }
+      return await restorePreview(user.id, body);
+    },
+    { body: restorePreviewSchema },
+  )
+  .post(
+    "/import/corpus",
+    async ({ body, request, set }) => {
+      const user = await requireFullUser(request);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const invalid = validateRestoreCorpus(body);
+      if (invalid) {
+        set.status = 400;
+        return { error: invalid };
+      }
+      let profilePatch: ReturnType<typeof importedProfilePatch> | null = null;
+      if (body.mode === "replace") {
+        try {
+          profilePatch = importedProfilePatch(user.id, body.user);
+        } catch (e) {
+          set.status = 400;
+          return { error: e instanceof Error ? e.message : "Imported profile is invalid." };
+        }
+      }
+      const before = await restorePreview(user.id, {
+        days: body.days.map((day) => ({
+          sourceId: day.sourceId,
+          phase: day.phase,
+          lineSourceIds: day.lines.map((line) => line.sourceId),
+        })),
+        hasProfile: body.youProfile !== null,
+      });
+      if (body.mode === "merge" && before.activeDayConflict && !body.activeDayResolution) {
+        set.status = 409;
+        return { error: "Choose how to resolve the active energy day.", ...before };
+      }
+
+      const restored = {
+        daysAdded: 0,
+        daysExisting: 0,
+        daysSkippedForActiveConflict: 0,
+        linesAdded: 0,
+        linesExisting: 0,
+      };
+      try {
+        await db.transaction(async (tx) => {
+          if (body.mode === "replace") {
+            await tx.delete(dayTable).where(eq(dayTable.userId, user.id));
+            await tx.delete(taskCatalogTable).where(eq(taskCatalogTable.userId, user.id));
+            await tx.delete(youProfileTable).where(eq(youProfileTable.userId, user.id));
+            await tx.update(userTable).set(profilePatch!).where(eq(userTable.id, user.id));
+          }
+
+          let active: typeof dayTable.$inferSelect | undefined = (
+            await tx
+              .select()
+              .from(dayTable)
+              .where(and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")))
+          )[0];
+          for (const sourceDay of body.days) {
+            let target = body.mode === "merge"
+              ? await importedDayMatch(user.id, sourceDay.sourceId, tx)
+              : undefined;
+            if (!target && sourceDay.phase !== "closed" && active) {
+              if (body.activeDayResolution === "keep-current") {
+                restored.daysSkippedForActiveConflict += 1;
+                continue;
+              }
+              if (body.activeDayResolution === "replace-current") {
+                await tx.delete(dayTable).where(eq(dayTable.id, active.id));
+                active = undefined;
+              } else {
+                throw new Error("Choose how to resolve the active energy day.");
+              }
+            }
+
+            if (!target) {
+              target = await insertRestoredDay(user.id, sourceDay, tx);
+              restored.daysAdded += 1;
+              restored.linesAdded += sourceDay.lines.length;
+              if (target.phase !== "closed") active = target;
+              continue;
+            }
+
+            restored.daysExisting += 1;
+            if (!target.sourceId) {
+              await tx
+                .update(dayTable)
+                .set({ sourceId: sourceDay.sourceId })
+                .where(eq(dayTable.id, target.id));
+            }
+            let addedToClosedDay = false;
+            for (const sourceLine of sourceDay.lines) {
+              const existingLine = await importedLineMatch(target.id, sourceLine.sourceId, tx);
+              if (existingLine) {
+                restored.linesExisting += 1;
+                if (!existingLine.sourceId) {
+                  await tx
+                    .update(taskLineTable)
+                    .set({ sourceId: sourceLine.sourceId })
+                    .where(eq(taskLineTable.id, existingLine.id));
+                }
+                continue;
+              }
+              await tx.insert(taskLineTable).values(restoredLineValues(sourceLine, target.id));
+              restored.linesAdded += 1;
+              addedToClosedDay ||= target.phase === "closed";
+            }
+            if (addedToClosedDay) await refreshClosedBalance(target, tx);
+          }
+
+          if (body.mode === "replace" && body.youProfile) {
+            await tx.insert(youProfileTable).values({
+              userId: user.id,
+              ciphertext: body.youProfile.ciphertext,
+              iv: body.youProfile.iv,
+              updatedAt: restoreTimestamp(body.youProfile.updatedAt, "You profile update"),
+            });
+          }
+          await rebuildCatalog(user.id, tx);
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.includes("day_one_active_per_user") || message.includes("UNIQUE constraint")) {
+          set.status = 409;
+          return { error: "The account changed while the restore was in progress. Review and try again." };
+        }
+        throw e;
+      }
+      return { ok: true, profileRestored: body.mode === "replace", ...restored };
+    },
+    { body: restoreCorpusSchema },
+  )
   .post(
     "/days/:dayId/lines",
     async ({ params, body, request, set }) => {

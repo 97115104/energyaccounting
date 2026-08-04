@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { ModalCloseButton } from "../components/ModalCloseButton";
-import { api } from "../lib/api";
-import { downloadTrainingCorpus } from "../lib/exportCorpus";
+import { api, DAY_CHANGED_EVENT } from "../lib/api";
+import {
+  downloadTrainingCorpus,
+  previewTrainingCorpus,
+  readTrainingCorpus,
+  restoreTrainingCorpus,
+  type ActiveDayResolution,
+  type CorpusPreview,
+  type RestoreMode,
+  type TrainingCorpus,
+} from "../lib/exportCorpus";
 import { GREETING_STYLES, type GreetingStyle } from "../lib/greeting";
 import { reverseGeocodeCity } from "../lib/reverseGeocode";
 import { deviceTimezone } from "../lib/timezone";
@@ -46,6 +55,13 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [disablePw, setDisablePw] = useState("");
   const [disableCode, setDisableCode] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [readingCorpus, setReadingCorpus] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreCorpus, setRestoreCorpus] = useState<TrainingCorpus | null>(null);
+  const [restorePreview, setRestorePreview] = useState<CorpusPreview | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreMode, setRestoreMode] = useState<RestoreMode>("merge");
+  const [activeDayResolution, setActiveDayResolution] = useState<ActiveDayResolution>("keep-current");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePw, setDeletePw] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -58,6 +74,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [savingEmail, setSavingEmail] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const deletingRef = useRef(false);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEmail(user.email);
@@ -297,6 +314,80 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
       setExporting(false);
+    }
+  }
+
+  function resetRestore(force = false) {
+    if (restoring && !force) return;
+    setRestoreOpen(false);
+    setRestoreCorpus(null);
+    setRestorePreview(null);
+    if (restoreFileRef.current) restoreFileRef.current.value = "";
+  }
+
+  async function selectRestoreCorpus(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setMsg(null);
+    setReadingCorpus(true);
+    try {
+      const corpus = await readTrainingCorpus(file);
+      const preview = await previewTrainingCorpus(corpus);
+      if (preview.daysToAdd === 0 && preview.linesToAdd === 0) {
+        setMsg("This corpus already matches your days and tasks. Nothing to add.");
+        if (restoreFileRef.current) restoreFileRef.current.value = "";
+        return;
+      }
+      setRestoreCorpus(corpus);
+      setRestorePreview(preview);
+      setRestoreMode("merge");
+      setActiveDayResolution("keep-current");
+      setRestoreOpen(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read that corpus.");
+      if (restoreFileRef.current) restoreFileRef.current.value = "";
+    } finally {
+      setReadingCorpus(false);
+    }
+  }
+
+  function applyRestoredUser(next: UserProfile) {
+    onUser(next);
+    setDisplayName(next.displayName ?? "");
+    setLat(next.lat ?? null);
+    setLon(next.lon ?? null);
+    setCountry(next.country ?? "US");
+    setTempUnit(next.temperatureUnit ?? defaultTemperatureUnit(next.country));
+    setTimezone(next.timezone || deviceTimezone() || "UTC");
+    setGreetingStyle(next.greetingStyle ?? "mix");
+    setIncludePhysicalActivities(next.includePhysicalActivities !== false);
+  }
+
+  async function restoreSelectedCorpus() {
+    if (!restoreCorpus || !restorePreview) return;
+    setError(null);
+    setRestoring(true);
+    try {
+      const resolution =
+        restoreMode === "merge" && restorePreview.activeDayConflict
+          ? activeDayResolution
+          : undefined;
+      const result = await restoreTrainingCorpus(restoreCorpus, restoreMode, resolution);
+      if (result.profileRestored) {
+        const refreshed = await api<{ user: UserProfile }>("/api/auth/me");
+        applyRestoredUser(refreshed.user);
+      }
+      window.dispatchEvent(new Event(DAY_CHANGED_EVENT));
+      setMsg(
+        restoreMode === "replace"
+          ? `Corpus restored: ${result.daysAdded} days and ${result.linesAdded} tasks replaced your journal history.`
+          : `Corpus merged: added ${result.daysAdded} days and ${result.linesAdded} tasks; kept ${result.daysExisting} existing days and ${result.linesExisting} tasks.`,
+      );
+      resetRestore(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -572,19 +663,38 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       </div>
 
       <div className="panel" style={{ marginTop: "1rem" }}>
-        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Export</h2>
+        <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Export and restore</h2>
         <p className="muted">
           Download a decrypted JSON corpus of your days, task details, journals, and catalog. The
           file is sensitive and formatted for optional future model training on your own machine.
+          You can also restore it later; private text is re-encrypted with this account’s journal key
+          before it is saved.
         </p>
-        <button
-          type="button"
-          className="btn secondary"
-          disabled={exporting}
-          onClick={() => void exportCorpus()}
-        >
-          {exporting ? "Preparing…" : "Download corpus"}
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={exporting || readingCorpus || restoring}
+            onClick={() => void exportCorpus()}
+          >
+            {exporting ? "Preparing…" : "Download corpus"}
+          </button>
+          <input
+            ref={restoreFileRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(event) => void selectRestoreCorpus(event.currentTarget.files?.[0])}
+          />
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={exporting || readingCorpus || restoring}
+            onClick={() => restoreFileRef.current?.click()}
+          >
+            {readingCorpus ? "Checking corpus…" : "Restore corpus…"}
+          </button>
+        </div>
       </div>
 
       {msg && <p className="muted">{msg}</p>}
@@ -625,6 +735,120 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
           Delete profile…
         </button>
       </div>
+
+      {restoreOpen && restoreCorpus && restorePreview && (
+        <div
+          className="insight-scrim"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) resetRestore();
+          }}
+        >
+          <div
+            id="restore-corpus-modal"
+            className="panel insight-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="restore-corpus-title"
+            aria-describedby="restore-corpus-description"
+          >
+            <ModalCloseButton label="Cancel corpus restore" disabled={restoring} onClick={() => resetRestore()} />
+            <h2 id="restore-corpus-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Restore corpus?
+            </h2>
+            <p id="restore-corpus-description" className="muted">
+              This {restoreCorpus.schemaVersion === 6 ? "v6" : "v7"} corpus contains {restoreCorpus.days.length} days and{" "}
+              {restoreCorpus.days.reduce((total, day) => total + day.lines.length, 0)} tasks. Your private text is
+              re-encrypted to this account before it is saved.
+            </p>
+            <p className="muted">
+              <strong>{restorePreview.daysToAdd}</strong> days and <strong>{restorePreview.linesToAdd}</strong> tasks will be added;{" "}
+              <strong>{restorePreview.daysExisting}</strong> days and <strong>{restorePreview.linesExisting}</strong> tasks already match this account.
+            </p>
+
+            <fieldset className="field" style={{ border: "none", padding: 0, margin: "1rem 0" }}>
+              <legend className="field-legend">How should this restore work?</legend>
+              <label className="check-row" htmlFor="restore-merge">
+                <input
+                  id="restore-merge"
+                  type="radio"
+                  name="restore-mode"
+                  checked={restoreMode === "merge"}
+                  disabled={restoring}
+                  onChange={() => setRestoreMode("merge")}
+                />
+                <span>Merge without duplicates</span>
+              </label>
+              <p className="muted" style={{ margin: "0.15rem 0 0.65rem 1.7rem" }}>
+                Adds only missing days and tasks. Matching records and this account’s current profile settings stay as they are.
+              </p>
+              <label className="check-row" htmlFor="restore-replace">
+                <input
+                  id="restore-replace"
+                  type="radio"
+                  name="restore-mode"
+                  checked={restoreMode === "replace"}
+                  disabled={restoring}
+                  onChange={() => setRestoreMode("replace")}
+                />
+                <span>Replace journal with this corpus</span>
+              </label>
+              <p className="muted" style={{ margin: "0.15rem 0 0 1.7rem" }}>
+                Replaces days, activity history, preferences, butterfly, and You profile. Email, password, authenticator, sessions, and share links stay untouched.
+              </p>
+            </fieldset>
+
+            {restoreMode === "merge" && restorePreview.activeDayConflict && (
+              <fieldset className="field" style={{ border: "none", padding: 0, margin: "1rem 0" }}>
+                <legend className="field-legend">Both have an active energy day</legend>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  The journal permits one active day. Choose which one remains active; no day will be silently closed.
+                </p>
+                <label className="check-row" htmlFor="keep-current-active">
+                  <input
+                    id="keep-current-active"
+                    type="radio"
+                    name="active-day-resolution"
+                    checked={activeDayResolution === "keep-current"}
+                    disabled={restoring}
+                    onChange={() => setActiveDayResolution("keep-current")}
+                  />
+                  <span>Keep this account’s active day and skip the imported one</span>
+                </label>
+                <label className="check-row" htmlFor="replace-current-active" style={{ marginTop: "0.5rem" }}>
+                  <input
+                    id="replace-current-active"
+                    type="radio"
+                    name="active-day-resolution"
+                    checked={activeDayResolution === "replace-current"}
+                    disabled={restoring}
+                    onChange={() => setActiveDayResolution("replace-current")}
+                  />
+                  <span>Replace this account’s active day with the imported one</span>
+                </label>
+              </fieldset>
+            )}
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", marginTop: "1.25rem" }}>
+              <button type="button" className="btn secondary" disabled={restoring} onClick={() => resetRestore()}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`btn ${restoreMode === "replace" ? "danger" : "accent"}`}
+                disabled={restoring}
+                onClick={() => void restoreSelectedCorpus()}
+              >
+                {restoring
+                  ? "Restoring…"
+                  : restoreMode === "replace"
+                    ? "Replace with corpus"
+                    : "Merge corpus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteOpen && (
         <div className="insight-scrim" role="presentation">

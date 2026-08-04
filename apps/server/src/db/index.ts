@@ -48,6 +48,16 @@ try {
   /* column exists */
 }
 try {
+  sqlite.exec("ALTER TABLE day_table ADD COLUMN source_id TEXT");
+} catch {
+  /* column exists */
+}
+try {
+  sqlite.exec("ALTER TABLE task_line_table ADD COLUMN source_id TEXT");
+} catch {
+  /* column exists */
+}
+try {
   sqlite.exec("ALTER TABLE task_catalog_table ADD COLUMN difficulty_total INTEGER NOT NULL DEFAULT 0");
 } catch {
   /* column exists */
@@ -160,6 +170,7 @@ CREATE TABLE IF NOT EXISTS session_table (
 
 CREATE TABLE IF NOT EXISTS day_table (
   id TEXT PRIMARY KEY,
+  source_id TEXT,
   user_id TEXT NOT NULL REFERENCES user_table(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
   started_at INTEGER NOT NULL,
@@ -180,6 +191,7 @@ CREATE TABLE IF NOT EXISTS day_table (
 
 CREATE TABLE IF NOT EXISTS task_line_table (
   id TEXT PRIMARY KEY,
+  source_id TEXT,
   day_id TEXT NOT NULL REFERENCES day_table(id) ON DELETE CASCADE,
   side TEXT NOT NULL,
   sort INTEGER NOT NULL DEFAULT 0,
@@ -339,6 +351,10 @@ WHERE phase = 'closed';
 
 CREATE INDEX IF NOT EXISTS day_user_started_at
   ON day_table(user_id, started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS day_user_source_id
+  ON day_table(user_id, source_id);
+CREATE UNIQUE INDEX IF NOT EXISTS task_line_day_source_id
+  ON task_line_table(day_id, source_id);
 CREATE UNIQUE INDEX IF NOT EXISTS day_one_active_per_user
   ON day_table(user_id)
   WHERE phase <> 'closed';

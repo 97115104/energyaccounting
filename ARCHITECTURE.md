@@ -54,7 +54,7 @@ The root `package.json` defines the workspace scripts. `bun run dev` starts the 
 | `/` | `TodayPage` | Active energy day |
 | `/dashboard` | `DashboardPage` | Trends and previous days |
 | `/you` | `YouPage` | Butterfly, traits, encrypted profile, shares |
-| `/settings` | `SettingsPage` | Account, TOTP, export, delete |
+| `/settings` | `SettingsPage` | Account, TOTP, corpus export/restore, delete |
 | `/share/:token` | `SharePage` | Public snapshot view |
 
 Authenticated app routes other than settings redirect through onboarding when the profile is incomplete.
@@ -69,13 +69,13 @@ Signup is invite-gated. `POST /api/auth/invite/check` validates a code, and `POS
 
 Auth (`prefix /api/auth`): `POST /invite/check`, `/register`, `/login`, `/totp/verify-login`, `/logout`; `GET /me`, `/touch-icon`; `POST /totp/setup`, `/totp/enable`, `/totp/disable`, `/password`, `/email`, `/delete-account`; `PATCH /profile`.
 
-Days and related (`prefix /api`): `GET /days/active`, `POST /days/start`, `GET /days`, `GET /days/:dayId`, `PATCH /days/:dayId`, `POST /days/:dayId/close`, `DELETE /days/:dayId`; line create/update/delete under `/days/:dayId/lines`; `GET /suggestions/:dayId`, `GET /stats`, `GET /export/days`; `GET /api/health`.
+Days and related (`prefix /api`): `GET /days/active`, `POST /days/start`, `GET /days`, `GET /days/:dayId`, `PATCH /days/:dayId`, `POST /days/:dayId/close`, `DELETE /days/:dayId`; line create/update/delete under `/days/:dayId/lines`; `GET /suggestions/:dayId`, `GET /stats`, `GET /export/days`, `POST /import/corpus/preview`, and `POST /import/corpus`; `GET /api/health`.
 
 You and share (`prefix /api`): `GET|PUT /you/profile`, `GET|POST /you/shares`, `DELETE /you/shares/:shareId`, `GET /share/:token`.
 
 ## Schema notes
 
-Primary tables include `user_table`, `session_table`, `day_table`, `task_line_table`, `task_catalog_table`, `you_profile_table`, `share_snapshot_table`, `invite_code_table`, and `weather_cache_table`. User preferences such as `displayName`, `greetingStyle`, `temperatureUnit`, and `includePhysicalActivities` live as plaintext on the user row. Day rows may carry `weatherJson`, `isHoliday`, and legacy `qualitative_*` plus compensate-note ciphertext columns. The UI no longer writes qualitative blobs or free-text compensate notes. Recovery recommendations replace the old compensate prompt, and the legacy columns remain for old exports and migrations.
+Primary tables include `user_table`, `session_table`, `day_table`, `task_line_table`, `task_catalog_table`, `you_profile_table`, `share_snapshot_table`, `invite_code_table`, and `weather_cache_table`. User preferences such as `displayName`, `greetingStyle`, `temperatureUnit`, and `includePhysicalActivities` live as plaintext on the user row. Days and task lines retain nullable per-parent `source_id` values so corpus merges are additive and idempotent even when local primary IDs differ. Day rows may carry `weatherJson`, `isHoliday`, and legacy `qualitative_*` plus compensate-note ciphertext columns. The UI no longer writes qualitative blobs or free-text compensate notes. Recovery recommendations replace the old compensate prompt, and the legacy columns remain for old exports and migrations.
 
 ## The encryption boundary
 

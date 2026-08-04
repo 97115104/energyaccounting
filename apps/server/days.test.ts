@@ -17,7 +17,7 @@ const [{ dayRoutes }, { db }, schema, session] = await Promise.all([
   import("./src/lib/session.ts"),
 ]);
 
-const { dayTable, taskCatalogTable, taskLineTable, userTable } = schema;
+const { dayTable, taskCatalogTable, taskLineTable, userTable, youProfileTable } = schema;
 const { createSession } = session;
 
 function userRow(id: string, email: string) {
@@ -152,6 +152,83 @@ function apiRequest(path: string, token: string, init: RequestInit = {}) {
 
 function deleteRequest(dayId: string, token: string) {
   return apiRequest(`/days/${dayId}`, token, { method: "DELETE" });
+}
+
+function restoreUser(displayName = "Imported person") {
+  return {
+    displayName,
+    timezone: "America/Los_Angeles",
+    lat: 37.77,
+    lon: -122.42,
+    country: "US",
+    temperatureUnit: "F" as const,
+    greetingStyle: "facts" as const,
+    includePhysicalActivities: false,
+    onboardingCompleted: true,
+    locationPrompted: true,
+    identity: null,
+  };
+}
+
+function restoredLine(sourceId: string, side: "deposit" | "withdrawal" = "deposit") {
+  return {
+    sourceId,
+    side,
+    sort: 0,
+    labelCiphertext: `cipher-${sourceId}`,
+    labelIv: `iv-${sourceId}`,
+    labelHash: `hash-${sourceId}`,
+    plannedCost: side === "deposit" ? 25 : 5,
+    actualCost: side === "deposit" ? 25 : 5,
+    completed: true,
+    completedAt: "2026-07-01T17:00:00.000Z",
+    difficulty: 3,
+    detailsCiphertext: `details-${sourceId}`,
+    detailsIv: `details-iv-${sourceId}`,
+  };
+}
+
+function restoredDay(
+  sourceId: string,
+  phase: "plan" | "audit" | "closed" = "closed",
+  lines = [restoredLine(`${sourceId}-line`)],
+) {
+  return {
+    sourceId,
+    date: "2026-07-01",
+    startedAt: "2026-07-01T08:00:00.000Z",
+    closedAt: phase === "closed" ? "2026-07-01T18:00:00.000Z" : null,
+    openingBalance: 100,
+    phase,
+    feelRating: 7,
+    weather: { v: 3, timezone: "America/Los_Angeles" },
+    isHoliday: false,
+    journalCiphertext: `journal-${sourceId}`,
+    journalIv: `journal-iv-${sourceId}`,
+    compensateNoteCiphertext: null,
+    compensateNoteIv: null,
+    legacyQualitative: null,
+    lines,
+  };
+}
+
+function restorePayload(
+  mode: "merge" | "replace",
+  days = [restoredDay("imported-day")],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    schemaVersion: 7,
+    mode,
+    user: restoreUser(),
+    youProfile: {
+      ciphertext: "profile-cipher",
+      iv: "profile-iv",
+      updatedAt: "2026-07-01T19:00:00.000Z",
+    },
+    days,
+    ...overrides,
+  };
 }
 
 describe("day lifecycle", () => {
@@ -530,6 +607,171 @@ describe("DELETE /api/days/:dayId", () => {
       where: (entry, { eq }) => eq(entry.userId, "owner"),
     });
     expect(catalog.map((entry) => entry.labelHash)).toEqual(["active-hash"]);
+  });
+});
+
+describe("corpus restore", () => {
+  test("rejects unauthenticated previews and malformed restore payloads", async () => {
+    const { userId, token } = await makeAuthedUser("restore-malformed");
+    const unauthenticated = await dayRoutes.handle(
+      new Request("http://localhost/api/import/corpus/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ days: [], hasProfile: false }),
+      }),
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const malformed = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...restorePayload("merge"), schemaVersion: 6 }),
+    });
+    expect(malformed.status).toBeGreaterThanOrEqual(400);
+    expect(await db.query.dayTable.findMany({
+      where: (day, { eq }) => eq(day.userId, userId),
+    })).toHaveLength(0);
+  });
+
+  test("replace restores timestamps, profile data, derived catalog, and source ids", async () => {
+    const { userId, token } = await makeAuthedUser("restore-replace");
+    const sourceDay = restoredDay("replace-day", "closed", [
+      restoredLine("replace-add", "deposit"),
+      restoredLine("replace-use", "withdrawal"),
+    ]);
+    const response = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("replace", [sourceDay])),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, daysAdded: 1, linesAdded: 2, profileRestored: true });
+
+    const imported = await db.query.dayTable.findFirst({
+      where: (day, { eq }) => eq(day.userId, userId),
+    });
+    expect(imported?.sourceId).toBe("replace-day");
+    expect(imported?.startedAt.toISOString()).toBe(sourceDay.startedAt);
+    expect(imported?.closedAt?.toISOString()).toBe(sourceDay.closedAt);
+    expect(imported?.closingBalance).toBe(120);
+    const lines = await db.query.taskLineTable.findMany({
+      where: (line, { eq }) => eq(line.dayId, imported!.id),
+    });
+    expect(lines.map((line) => line.sourceId).sort()).toEqual(["replace-add", "replace-use"]);
+    expect(lines.every((line) => line.completedAt?.toISOString() === "2026-07-01T17:00:00.000Z")).toBe(true);
+    const profile = await db.query.youProfileTable.findFirst({
+      where: (row, { eq }) => eq(row.userId, userId),
+    });
+    expect(profile?.updatedAt.toISOString()).toBe("2026-07-01T19:00:00.000Z");
+    const user = await db.query.userTable.findFirst({ where: (row, { eq }) => eq(row.id, userId) });
+    expect(user?.displayName).toBe("Imported person");
+    expect(user?.includePhysicalActivities).toBe(false);
+    const catalog = await db.query.taskCatalogTable.findMany({
+      where: (entry, { eq }) => eq(entry.userId, userId),
+    });
+    expect(catalog).toHaveLength(2);
+
+    const exported = await apiRequest("/export/days", token);
+    const exportedJson = (await exported.json()) as { schemaVersion: number; days: Array<{ sourceId: string }> };
+    expect(exportedJson.schemaVersion).toBe(7);
+    expect(exportedJson.days[0]?.sourceId).toBe("replace-day");
+  });
+
+  test("merge is idempotent and adds only new lines inside an existing day", async () => {
+    const { userId, token } = await makeAuthedUser("restore-merge");
+    const source = restoredDay("merge-day", "closed", [restoredLine("merge-first")]);
+    const first = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [source])),
+    });
+    expect(first.status).toBe(200);
+
+    const repeated = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [source])),
+    });
+    expect(await repeated.json()).toMatchObject({ daysAdded: 0, daysExisting: 1, linesAdded: 0, linesExisting: 1 });
+
+    const withExtraLine = restoredDay("merge-day", "closed", [
+      restoredLine("merge-first"),
+      restoredLine("merge-second", "withdrawal"),
+    ]);
+    const partial = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [withExtraLine])),
+    });
+    expect(await partial.json()).toMatchObject({ daysAdded: 0, daysExisting: 1, linesAdded: 1, linesExisting: 1 });
+    const day = await db.query.dayTable.findFirst({
+      where: (row, { and, eq }) => and(eq(row.userId, userId), eq(row.sourceId, "merge-day")),
+    });
+    const lines = await db.query.taskLineTable.findMany({
+      where: (line, { eq }) => eq(line.dayId, day!.id),
+    });
+    expect(lines).toHaveLength(2);
+    expect(day?.closingBalance).toBe(120);
+  });
+
+  test("merge makes an explicit choice when source and destination both have active days", async () => {
+    const { userId, token } = await makeAuthedUser("restore-active");
+    await db.insert(dayTable).values(dayRow("destination-active", userId, "plan", -1));
+    const incoming = restoredDay("source-active", "plan");
+
+    const preview = await apiRequest("/import/corpus/preview", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        days: [{ sourceId: incoming.sourceId, phase: incoming.phase, lineSourceIds: incoming.lines.map((line) => line.sourceId) }],
+        hasProfile: true,
+      }),
+    });
+    expect((await preview.json() as { activeDayConflict: boolean }).activeDayConflict).toBe(true);
+
+    const needsChoice = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [incoming])),
+    });
+    expect(needsChoice.status).toBe(409);
+
+    const keep = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [incoming], { activeDayResolution: "keep-current" })),
+    });
+    expect(await keep.json()).toMatchObject({ daysSkippedForActiveConflict: 1 });
+    expect((await db.query.dayTable.findFirst({ where: (row, { eq }) => eq(row.id, "destination-active") }))?.phase).toBe("plan");
+
+    const replace = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("merge", [incoming], { activeDayResolution: "replace-current" })),
+    });
+    expect(replace.status).toBe(200);
+    const active = await db.query.dayTable.findFirst({
+      where: (row, { and, eq, ne }) => and(eq(row.userId, userId), ne(row.phase, "closed")),
+    });
+    expect(active?.sourceId).toBe("source-active");
+  });
+
+  test("an invalid restored timestamp rolls back without adding partial data", async () => {
+    const { userId, token } = await makeAuthedUser("restore-atomic");
+    const invalid = restoredDay("bad-day");
+    invalid.startedAt = "not-a-date";
+    const response = await apiRequest("/import/corpus", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(restorePayload("replace", [invalid])),
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(await db.query.dayTable.findMany({
+      where: (day, { eq }) => eq(day.userId, userId),
+    })).toHaveLength(0);
+    expect(await db.query.youProfileTable.findFirst({
+      where: (profile, { eq }) => eq(profile.userId, userId),
+    })).toBeUndefined();
   });
 });
 
