@@ -69,6 +69,7 @@ type Line = {
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
+  completedAt: string | null;
   difficulty: number | null;
   detailsCiphertext: string | null;
   detailsIv: string | null;
@@ -107,6 +108,8 @@ type DayPayload = {
   id: string;
   date: string;
   startedAt: string;
+  closedAt: string | null;
+  durationMinutes: number | null;
   openingBalance: number;
   closingBalance: number | null;
   projectedClosing: number;
@@ -219,6 +222,21 @@ function TrendArrow({ delta, tone = "signed" }: { delta: number; tone?: "signed"
   );
 }
 
+function timeLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function durationLabel(minutes: number | null | undefined): string | null {
+  if (minutes == null) return null;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins ? `${hours} hr ${mins} min` : `${hours} hr`;
+}
+
 function guideDismissKey(dayId: string): string {
   return `eaj-guide-dismissed:${dayId}`;
 }
@@ -293,15 +311,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const phaseBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
+  const [journalDirty, setJournalDirty] = useState(false);
+  const [journalSaveState, setJournalSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [journalClosePrompt, setJournalClosePrompt] = useState(false);
   // Which surface the microphone is feeding, or null when idle.
   const [listening, setListening] = useState<SpeechTarget | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [detailLineId, setDetailLineId] = useState<string | null>(null);
+  const [detailSide, setDetailSide] = useState<"deposit" | "withdrawal">("withdrawal");
   const [detailLabel, setDetailLabel] = useState("");
   const [detailPlannedCost, setDetailPlannedCost] = useState("20");
   const [detailActualCost, setDetailActualCost] = useState("");
   const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
   const [detailText, setDetailText] = useState("");
+  const [detailTextDirty, setDetailTextDirty] = useState(false);
+  const [detailSaveState, setDetailSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
   // Non-error status for the details dialog, e.g. dictation hit the cap.
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
@@ -341,6 +365,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // Confirm before the irreversible close-day transition from the stepper.
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [overBudgetAdd, setOverBudgetAdd] = useState<{
+    side: "deposit" | "withdrawal";
+    label: string;
+    cost: number;
+    hash?: string;
+    dayId?: string;
+    targetDayId: string;
+    available: number;
+    reload?: boolean;
+    closeDraftOnSuccess: boolean;
+  } | null>(null);
+  const [overBudgetBusy, setOverBudgetBusy] = useState(false);
   // End-of-day insights modal, populated when the day closes.
   const [closeCelebration, setCloseCelebration] = useState<{
     closingBalance: number;
@@ -362,11 +398,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
   // Text committed before/while dictating, per active target; interim results render on top of it.
   const speechBaseRef = useRef("");
   const journalRef = useRef("");
+  const journalDirtyRef = useRef(false);
+  const journalLoadedDayRef = useRef<string | null>(null);
+  const journalSaveSeqRef = useRef(0);
+  const detailTextRef = useRef("");
+  const detailTextDirtyRef = useRef(false);
+  const detailSaveSeqRef = useRef(0);
   const loadGenerationRef = useRef(0);
 
   useEffect(() => {
     journalRef.current = journal;
   }, [journal]);
+
+  useEffect(() => {
+    detailTextRef.current = detailText;
+  }, [detailText]);
 
   useEffect(() => {
     deletingDayRef.current = deletingDay;
@@ -382,6 +428,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setCompletingIds(new Set());
     completingIdsRef.current = new Set();
     setCompletionBurst(null);
+    journalDirtyRef.current = false;
+    setJournalDirty(false);
+    setJournalSaveState("idle");
+    setJournalClosePrompt(false);
+    detailTextDirtyRef.current = false;
+    setDetailTextDirty(false);
+    setDetailSaveState("idle");
+    setOverBudgetAdd(null);
+    setOverBudgetBusy(false);
     if (burstTimerRef.current != null) {
       window.clearTimeout(burstTimerRef.current);
       burstTimerRef.current = null;
@@ -511,7 +566,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
     }
     if (generation !== loadGenerationRef.current) return;
-    setJournal(decryptedJournal);
+    if (!journalDirtyRef.current || journalLoadedDayRef.current !== d.id) {
+      journalLoadedDayRef.current = d.id;
+      setJournal(decryptedJournal);
+      journalRef.current = decryptedJournal;
+      journalDirtyRef.current = false;
+      setJournalDirty(false);
+      setJournalSaveState("idle");
+      setJournalClosePrompt(false);
+    }
 
     const sug = await api<{ suggestions: Suggestion[]; recent?: RecentActivity[] }>(
       `/api/suggestions/${d.id}`,
@@ -555,6 +618,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [load]);
 
   const dayPhase = day?.phase;
+  const readOnly = !!day && day.phase === "closed" && !amending;
   // Numeric history feeds the planning hint during plan and the Trends card
   // in every phase, so it loads once per day view.
   useEffect(() => {
@@ -690,6 +754,46 @@ export function TodayPage({ user }: { user: UserProfile }) {
       previous?.focus?.({ preventScroll: true });
     };
   }, [confirmingClose]);
+
+  // Keep keyboard focus inside the over-budget confirmation.
+  useEffect(() => {
+    if (!overBudgetAdd) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = document.getElementById("over-budget-modal");
+    const focusables = () =>
+      modal
+        ? Array.from(
+            modal.querySelectorAll<HTMLElement>(
+              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((element) => !element.hasAttribute("disabled"))
+        : [];
+    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !overBudgetBusy) {
+        setOverBudgetAdd(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("keydown", onKey);
+      previous?.focus?.({ preventScroll: true });
+    };
+  }, [overBudgetAdd, overBudgetBusy]);
 
   // Escape closes the celebration modal; Tab stays inside it.
   useEffect(() => {
@@ -1088,14 +1192,50 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const detailLine = day?.lines.find((line) => line.id === detailLineId) ?? null;
 
+  useEffect(() => {
+    if (!day || readOnly || !journalDirty) return;
+    const timer = window.setTimeout(() => {
+      void saveJournal({ quiet: true }).catch(() => undefined);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [journal, journalDirty, day?.id, readOnly]);
+
+  useEffect(() => {
+    if (!day || readOnly || !detailLine || !detailTextDirty) return;
+    const timer = window.setTimeout(() => {
+      void saveDetailTextOnly();
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [detailText, detailTextDirty, detailLine?.id, day?.id, readOnly]);
+
+  function updateJournalDraft(next: string) {
+    journalDirtyRef.current = true;
+    setJournalDirty(true);
+    setJournalSaveState("idle");
+    setJournalClosePrompt(false);
+    setJournal(next);
+  }
+
+  function updateDetailTextDraft(next: string) {
+    detailTextDirtyRef.current = true;
+    setDetailTextDirty(true);
+    setDetailSaveState("idle");
+    setDetailText(next);
+  }
+
   function openTaskDetails(line: Line) {
     stopLiveSpeech();
     setDetailLineId(line.id);
+    setDetailSide(line.side);
     setDetailLabel(line.label ?? "");
     setDetailPlannedCost(String(line.plannedCost));
     setDetailActualCost(String(line.actualCost ?? line.plannedCost));
     setDetailDifficulty(line.difficulty);
     setDetailText(line.details ?? "");
+    detailTextRef.current = line.details ?? "";
+    detailTextDirtyRef.current = false;
+    setDetailTextDirty(false);
+    setDetailSaveState("idle");
     setDetailError(null);
     setDetailNotice(null);
     setGuideOpen(false);
@@ -1136,7 +1276,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     cost: number,
     hash?: string,
     dayId?: string,
-    opts?: { availableOverride?: number; reload?: boolean },
+    opts?: { availableOverride?: number; reload?: boolean; allowOverCapacity?: boolean },
   ): Promise<boolean> {
     const dek = getSessionDek();
     const targetDayId = dayId ?? day?.id;
@@ -1150,11 +1290,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
       day &&
       day.phase !== "closed" &&
       side === "withdrawal" &&
-      cost > available
+      cost > available &&
+      opts?.allowOverCapacity !== true
     ) {
-      setError(
-        `That uses ${cost} points, and only ${available} remain available to allocate.`,
-      );
+      setOverBudgetAdd({
+        side,
+        label,
+        cost,
+        hash,
+        dayId,
+        targetDayId,
+        available,
+        reload: opts?.reload,
+        closeDraftOnSuccess: !!draftSide,
+      });
       return false;
     }
     const { ciphertext, iv } = await encryptText(dek, label.trim(), "eaj-label");
@@ -1168,6 +1317,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           labelIv: iv,
           labelHash: lh,
           plannedCost: cost,
+          allowOverCapacity: opts?.allowOverCapacity === true,
         }),
       });
     } catch (e) {
@@ -1178,6 +1328,32 @@ export function TodayPage({ user }: { user: UserProfile }) {
       await withPreservedScroll(() => load(undefined, { soft: true }));
     }
     return true;
+  }
+
+  async function confirmOverBudgetAdd() {
+    if (!overBudgetAdd || overBudgetBusy) return;
+    const pending = overBudgetAdd;
+    setOverBudgetBusy(true);
+    setError(null);
+    try {
+      const ok = await addLine(
+        pending.side,
+        pending.label,
+        pending.cost,
+        pending.hash,
+        pending.dayId,
+        {
+          reload: pending.reload,
+          allowOverCapacity: true,
+        },
+      );
+      if (ok) {
+        setOverBudgetAdd(null);
+        if (pending.closeDraftOnSuccess) closeDraft();
+      }
+    } finally {
+      setOverBudgetBusy(false);
+    }
   }
 
   async function startNewDay(): Promise<string | null> {
@@ -1216,7 +1392,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   /** Apply a guide action (primary or lower-impact alternative); returns whether the line was added. */
-  async function applyGuideAction(item: GuideItem, useAlt = false): Promise<boolean> {
+  async function applyGuideAction(
+    item: GuideItem,
+    useAlt = false,
+    sideOverride?: "deposit" | "withdrawal",
+  ): Promise<boolean> {
     const action = useAlt ? item.altAction : item.action;
     if (!action) return false;
     let targetDayId = day?.id;
@@ -1228,7 +1408,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
       targetDayId = (await startNewDay()) ?? undefined;
       if (!targetDayId) return false;
     }
-    const ok = await addLine(action.side, action.label, action.cost, undefined, targetDayId);
+    const ok = await addLine(
+      sideOverride ?? action.side,
+      action.label,
+      action.cost,
+      undefined,
+      targetDayId,
+    );
     if (ok) dismissGuideItem(item.id);
     return ok;
   }
@@ -1244,8 +1430,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   async function submitDraft() {
     if (!draftSide || !draftLabel.trim() || addingRecentRef.current) return;
     const cost = Math.max(0, Math.min(100, Number(draftCost) || 20));
-    await addLine(draftSide, draftLabel, cost);
-    closeDraft();
+    const ok = await addLine(draftSide, draftLabel, cost);
+    if (ok) closeDraft();
   }
 
   /** One-tap add from a Recent row (column or add sheet). Closes the sheet
@@ -1298,6 +1484,32 @@ export function TodayPage({ user }: { user: UserProfile }) {
       body: JSON.stringify({ actualCost: actual }),
     });
     await withPreservedScroll(() => load(undefined, { soft: true }));
+  }
+
+  async function moveLine(line: Line, direction: "up" | "down") {
+    if (!day || readOnly) return;
+    const ordered = day.lines
+      .filter((l) => l.side === line.side)
+      .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
+    const index = ordered.findIndex((l) => l.id === line.id);
+    const swapWith = direction === "up" ? ordered[index - 1] : ordered[index + 1];
+    if (index < 0 || !swapWith) return;
+    setDetailError(null);
+    try {
+      await Promise.all([
+        api(`/api/days/${day.id}/lines/${line.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ sort: swapWith.sort }),
+        }),
+        api(`/api/days/${day.id}/lines/${swapWith.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ sort: line.sort }),
+        }),
+      ]);
+      await withPreservedScroll(() => load(undefined, { soft: true }));
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : "Could not move this item.");
+    }
   }
 
   async function toggleComplete(line: Line, anchorEl?: HTMLElement | null) {
@@ -1450,6 +1662,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
         detailsIv: encrypted.iv,
       };
       if (nextActual !== undefined) patch.actualCost = nextActual;
+      if (detailSide !== detailLine.side) {
+        patch.side = detailSide;
+        patch.sort =
+          day.lines
+            .filter((line) => line.side === detailSide)
+            .reduce((max, line) => Math.max(max, line.sort), -1) + 1;
+      }
       // Relabel only when the wording changed; server needs ciphertext + IV + hash together.
       if (nextLabel !== (detailLine.label ?? "")) {
         const { ciphertext, iv } = await encryptText(dek, nextLabel, "eaj-label");
@@ -1461,10 +1680,46 @@ export function TodayPage({ user }: { user: UserProfile }) {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
+      detailTextDirtyRef.current = false;
+      setDetailTextDirty(false);
+      setDetailSaveState("saved");
       setDetailLineId(null);
       await withPreservedScroll(() => load(undefined, { soft: true }));
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : "Could not save task details.");
+      setDetailSaveState("error");
+    }
+  }
+
+  async function saveDetailTextOnly() {
+    if (!detailLine || !day || readOnly) return;
+    const dek = getSessionDek();
+    if (!dek) return;
+    const seq = ++detailSaveSeqRef.current;
+    const snapshot = detailTextRef.current;
+    setDetailSaveState("saving");
+    try {
+      const text = snapshot.trim();
+      const encrypted = text
+        ? await encryptText(dek, text, "eaj-task-details")
+        : { ciphertext: null, iv: null };
+      await api(`/api/days/${day.id}/lines/${detailLine.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          detailsCiphertext: encrypted.ciphertext,
+          detailsIv: encrypted.iv,
+        }),
+      });
+      if (seq === detailSaveSeqRef.current && detailTextRef.current === snapshot) {
+        detailTextDirtyRef.current = false;
+        setDetailTextDirty(false);
+        setDetailSaveState("saved");
+      }
+    } catch (e) {
+      if (seq === detailSaveSeqRef.current) {
+        setDetailSaveState("error");
+        setDetailError(e instanceof Error ? e.message : "Could not autosave task details.");
+      }
     }
   }
 
@@ -1485,7 +1740,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
       if (leavingAudit || phase === "closed") await saveJournal();
 
       if (phase === "closed") {
-        const res = await api<{ closingBalance: number }>(`/api/days/${day.id}/close`, {
+        const res = await api<{ closingBalance: number; closedAt: string }>(`/api/days/${day.id}/close`, {
           method: "POST",
         });
         const recoveryId = `recovery:${day.id}`;
@@ -1518,6 +1773,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
               ? {
                   ...prev,
                   phase: "closed",
+                  closedAt: res.closedAt,
+                  durationMinutes: Math.max(
+                    0,
+                    Math.round(
+                      (Date.parse(res.closedAt) - Date.parse(day.startedAt)) / 60_000,
+                    ),
+                  ),
                   closingBalance: res.closingBalance,
                   projectedClosing: res.closingBalance,
                 }
@@ -1535,6 +1797,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
               ? {
                   ...prev,
                   phase: "closed",
+                  closedAt: res.closedAt,
+                  durationMinutes: Math.max(
+                    0,
+                    Math.round(
+                      (Date.parse(res.closedAt) - Date.parse(day.startedAt)) / 60_000,
+                    ),
+                  ),
                   closingBalance: res.closingBalance,
                   projectedClosing: res.closingBalance,
                 }
@@ -1565,27 +1834,50 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
   }
 
-  async function saveJournal() {
+  async function saveJournal(opts: { quiet?: boolean; promptClose?: boolean } = {}) {
     const dek = getSessionDek();
     if (!dek || !day) return;
-    const j = await encryptText(dek, journalRef.current, "eaj-journal");
-    await api(`/api/days/${day.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        journalCiphertext: j.ciphertext,
-        journalIv: j.iv,
-        feelRating: day?.feelRating ?? null,
-      }),
-    });
+    const seq = ++journalSaveSeqRef.current;
+    const snapshot = journalRef.current;
+    setJournalSaveState("saving");
+    try {
+      const j = await encryptText(dek, snapshot, "eaj-journal");
+      await api(`/api/days/${day.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          journalCiphertext: j.ciphertext,
+          journalIv: j.iv,
+          feelRating: day?.feelRating ?? null,
+        }),
+      });
+      if (seq === journalSaveSeqRef.current && journalRef.current === snapshot) {
+        journalDirtyRef.current = false;
+        setJournalDirty(false);
+        setJournalSaveState("saved");
+        setJournalClosePrompt(Boolean(opts.promptClose && day.phase === "audit"));
+      }
+    } catch (e) {
+      if (!opts.quiet) {
+        setError(e instanceof Error ? e.message : "Could not save your journal.");
+      }
+      if (seq === journalSaveSeqRef.current) setJournalSaveState("error");
+      throw e;
+    }
   }
 
   async function setFeel(n: number) {
     if (!day) return;
-    await api(`/api/days/${day.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ feelRating: n }),
-    });
-    await withPreservedScroll(() => load(undefined, { soft: true }));
+    try {
+      if (journalDirtyRef.current) await saveJournal({ quiet: true });
+      await api(`/api/days/${day.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ feelRating: n }),
+      });
+      setDay((prev) => (prev && prev.id === day.id ? { ...prev, feelRating: n } : prev));
+      await withPreservedScroll(() => load(undefined, { soft: true }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not rate the day.");
+    }
   }
 
   function stopLiveSpeech() {
@@ -1639,13 +1931,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
       }
       const next = (speechBaseRef.current + (interim ? " " + interim : "")).trim();
       if (target === "journal") {
-        setJournal(next);
+        updateJournalDraft(next);
         return;
       }
       if (next.length >= DETAILS_MAX) {
         const capped = next.slice(0, DETAILS_MAX);
         speechBaseRef.current = capped;
-        setDetailText(capped);
+        updateDetailTextDraft(capped);
         setDetailNotice("Character limit reached, dictation stopped.");
         speechGenerationRef.current += 1;
         rec.onresult = null;
@@ -1656,7 +1948,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         setListening(null);
         return;
       }
-      setDetailText(next);
+      updateDetailTextDraft(next);
     };
     rec.onerror = () => {
       if (generation !== speechGenerationRef.current) return;
@@ -1790,7 +2082,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   const closed = day?.phase === "closed";
-  const readOnly = !!day && day.phase === "closed" && !amending;
 
   return (
     <div className="today-root">
@@ -1799,6 +2090,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
           closeCelebration ||
           confirmingDelete ||
           confirmingClose ||
+          overBudgetAdd ||
           detailLineId ||
           guideOpen ||
           (draftSide && !readOnly)
@@ -1808,7 +2100,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
       >
       <div className="panel">
         <p className="ob-eyebrow">
-          Energy day · started {dayDate}
+          Energy day · opened {day.date}
+          {timeLabel(day.startedAt) ? ` ${timeLabel(day.startedAt)}` : ""}
+          {day.closedAt && timeLabel(day.closedAt)
+            ? ` · closed ${timeLabel(day.closedAt)}`
+            : ""}
+          {durationLabel(day.durationMinutes) ? ` · ${durationLabel(day.durationMinutes)}` : ""}
           {day?.isHoliday ? " · Holiday" : ""}
         </p>
         {isHistoryView && closed && (
@@ -2166,11 +2463,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
               id="journal"
               value={journal}
               disabled={readOnly}
-              onChange={(e) => setJournal(e.target.value)}
+              onChange={(e) => updateJournalDraft(e.target.value)}
               placeholder="What shaped your energy today?"
             />
             {listening === "journal" && (
               <p className="listening-pill">Listening · your words appear as you talk</p>
+            )}
+            {journalSaveState !== "idle" && (
+              <p className={journalSaveState === "error" ? "error" : "muted"} role="status">
+                {journalSaveState === "saving"
+                  ? "Saving journal…"
+                  : journalSaveState === "saved"
+                    ? "Journal saved."
+                    : "Journal autosave failed. Use Save journal to retry."}
+              </p>
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
@@ -2197,11 +2503,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
             )}
             <button
               type="button"
-              className="btn secondary"
+              className={`btn ${journalClosePrompt ? "accent" : "secondary"}`}
               disabled={readOnly}
-              onClick={() => void saveJournal()}
+              onClick={() => {
+                if (journalClosePrompt) {
+                  setConfirmingClose(true);
+                  return;
+                }
+                void saveJournal({ promptClose: true });
+              }}
             >
-              Save journal
+              {journalClosePrompt
+                ? "Close day?"
+                : journalSaveState === "saving"
+                  ? "Saving…"
+                  : "Save journal"}
             </button>
           </div>
         </div>
@@ -2456,6 +2772,48 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 onChange={(e) => setDetailLabel(e.target.value)}
               />
             </div>
+            <fieldset className="task-detail-side" disabled={readOnly}>
+              <legend>Column</legend>
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`btn ${detailSide === "withdrawal" ? "accent" : "secondary"}`}
+                  aria-pressed={detailSide === "withdrawal"}
+                  onClick={() => setDetailSide("withdrawal")}
+                >
+                  Use energy
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${detailSide === "deposit" ? "accent" : "secondary"}`}
+                  aria-pressed={detailSide === "deposit"}
+                  onClick={() => setDetailSide("deposit")}
+                >
+                  Add energy
+                </button>
+              </div>
+            </fieldset>
+            <div className="task-detail-reorder">
+              <span className="muted">Position in this column</span>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={readOnly}
+                  onClick={() => void moveLine(detailLine, "up")}
+                >
+                  Move earlier
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={readOnly}
+                  onClick={() => void moveLine(detailLine, "down")}
+                >
+                  Move later
+                </button>
+              </div>
+            </div>
             <div className="task-detail-costs">
               <div className="field">
                 <label htmlFor="task-detail-planned">
@@ -2522,7 +2880,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 maxLength={DETAILS_MAX}
                 placeholder="What made this easier or harder? Add any context worth remembering."
                 onChange={(e) => {
-                  setDetailText(e.target.value);
+                  updateDetailTextDraft(e.target.value);
                   if (e.target.value.length < DETAILS_MAX) setDetailNotice(null);
                 }}
               />
@@ -2539,6 +2897,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
               {detailNotice && (
                 <p className="dictation-notice" role="status">
                   {detailNotice}
+                </p>
+              )}
+              {detailSaveState !== "idle" && (
+                <p className={detailSaveState === "error" ? "error" : "muted"} role="status">
+                  {detailSaveState === "saving"
+                    ? "Saving details…"
+                    : detailSaveState === "saved"
+                      ? "Details saved."
+                      : "Details autosave failed. Use Save task details to retry."}
                 </p>
               )}
               {!readOnly && (
@@ -2668,6 +3035,49 @@ export function TodayPage({ user }: { user: UserProfile }) {
         </div>
       )}
 
+      {overBudgetAdd && (
+        <div
+          className="insight-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !overBudgetBusy) setOverBudgetAdd(null);
+          }}
+        >
+          <div
+            id="over-budget-modal"
+            className="panel insight-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="over-budget-title"
+            aria-describedby="over-budget-body"
+          >
+            <ModalCloseButton
+              label="Keep editing"
+              disabled={overBudgetBusy}
+              onClick={() => setOverBudgetAdd(null)}
+            />
+            <h2 id="over-budget-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
+              Add over available energy?
+            </h2>
+            <p id="over-budget-body" className="muted">
+              “{overBudgetAdd.label.trim()}” uses {overBudgetAdd.cost} points, and only{" "}
+              {overBudgetAdd.available} are currently available. Add it anyway and let the day
+              show the overage?
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn accent"
+                disabled={overBudgetBusy}
+                aria-busy={overBudgetBusy || undefined}
+                onClick={() => void confirmOverBudgetAdd()}
+              >
+                {overBudgetBusy ? "Adding…" : "Add anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {weatherOpen && parsedWeather && (
         <WeatherDetailModal
           weather={parsedWeather}
@@ -2768,7 +3178,11 @@ function GuideCard(props: {
   inSheet?: boolean;
   actionLabel?: string;
   dismissLabel?: string;
-  onAction: (item: GuideItem, useAlt?: boolean) => void;
+  onAction: (
+    item: GuideItem,
+    useAlt?: boolean,
+    sideOverride?: "deposit" | "withdrawal",
+  ) => void;
   onDismiss: (id: string) => void;
 }) {
   const { item } = props;
@@ -2786,6 +3200,12 @@ function GuideCard(props: {
         <span aria-hidden="true"> ↗</span>
       </a>
     ) : null;
+  const oppositeSide = (side: "deposit" | "withdrawal") =>
+    side === "deposit" ? "withdrawal" : "deposit";
+  const sideVerb = (side: "deposit" | "withdrawal") =>
+    side === "deposit" ? "Add energy" : "Use energy";
+  const sideCost = (side: "deposit" | "withdrawal", cost: number) =>
+    side === "deposit" ? `+${cost}` : `−${cost}`;
 
   return (
     <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
@@ -2796,69 +3216,113 @@ function GuideCard(props: {
       {(item.action || item.altAction) && (
         <div className="guide-card-actions">
           {item.action && (
-            <button
-              type="button"
-              className="guide-suggest-btn"
-              disabled={props.closed}
-              aria-label={
-                props.actionLabel
-                  ? `${props.actionLabel}: ${item.action.label}, ${item.action.cost} points`
-                  : item.action.requiresStart
-                    ? `Start new day and add energy: ${item.action.label}, ${item.action.cost} points`
-                    : item.action.side === "withdrawal"
-                      ? `Use energy: ${item.action.label}, ${item.action.cost} points`
-                      : `Add energy: ${item.action.label}, ${item.action.cost} points`
-              }
-              onClick={() => props.onAction(item)}
-            >
-              <span className="guide-suggest-main">
-                <span className="guide-suggest-sparkle" aria-hidden="true">
-                  ✦
-                </span>
-                <span className="guide-suggest-label">
-                  {props.actionLabel ??
-                    (item.action.requiresStart
-                      ? `Start day · ${item.action.label}`
-                      : item.action.label)}
-                </span>
-              </span>
-              <span
-                className={`guide-suggest-cost guide-suggest-cost-${item.action.side}`}
-                aria-hidden="true"
+            <>
+              <button
+                type="button"
+                className="guide-suggest-btn"
+                disabled={props.closed}
+                aria-label={
+                  props.actionLabel
+                    ? `${props.actionLabel}: ${item.action.label}, ${item.action.cost} points`
+                    : item.action.requiresStart
+                      ? `Start new day and add energy: ${item.action.label}, ${item.action.cost} points`
+                      : item.action.side === "withdrawal"
+                        ? `Use energy: ${item.action.label}, ${item.action.cost} points`
+                        : `Add energy: ${item.action.label}, ${item.action.cost} points`
+                }
+                onClick={() => props.onAction(item)}
               >
-                {item.action.side === "deposit" ? `+${item.action.cost}` : `−${item.action.cost}`}
-              </span>
-            </button>
+                <span className="guide-suggest-main">
+                  <span className="guide-suggest-sparkle" aria-hidden="true">
+                    ✦
+                  </span>
+                  <span className="guide-suggest-label">
+                    {props.actionLabel ??
+                      (item.action.requiresStart
+                        ? `Start day · ${item.action.label}`
+                        : item.action.label)}
+                  </span>
+                </span>
+                <span
+                  className={`guide-suggest-cost guide-suggest-cost-${item.action.side}`}
+                  aria-hidden="true"
+                >
+                  {item.action.side === "deposit" ? `+${item.action.cost}` : `−${item.action.cost}`}
+                </span>
+              </button>
+              {!item.action.requiresStart && (
+                <button
+                  type="button"
+                  className="guide-suggest-btn guide-suggest-btn-secondary"
+                  disabled={props.closed}
+                  aria-label={`${sideVerb(oppositeSide(item.action.side))}: ${item.action.label}, ${item.action.cost} points`}
+                  onClick={() => props.onAction(item, false, oppositeSide(item.action!.side))}
+                >
+                  <span className="guide-suggest-main">
+                    <span className="guide-suggest-label">
+                      {sideVerb(oppositeSide(item.action.side))}
+                    </span>
+                  </span>
+                  <span
+                    className={`guide-suggest-cost guide-suggest-cost-${oppositeSide(item.action.side)}`}
+                    aria-hidden="true"
+                  >
+                    {sideCost(oppositeSide(item.action.side), item.action.cost)}
+                  </span>
+                </button>
+              )}
+            </>
           )}
           {item.altAction && (
             /* Same styling as the primary action: the lower-impact dose is an
                equal choice, not a fallback. */
-            <button
-              type="button"
-              className="guide-suggest-btn"
-              disabled={props.closed}
-              aria-label={
-                item.altAction.side === "withdrawal"
-                  ? `Use energy: ${item.altAction.label}, ${item.altAction.cost} points`
-                  : `Add energy: ${item.altAction.label}, ${item.altAction.cost} points`
-              }
-              onClick={() => props.onAction(item, true)}
-            >
-              <span className="guide-suggest-main">
-                <span className="guide-suggest-sparkle" aria-hidden="true">
-                  ✦
-                </span>
-                <span className="guide-suggest-label">{item.altAction.label}</span>
-              </span>
-              <span
-                className={`guide-suggest-cost guide-suggest-cost-${item.altAction.side}`}
-                aria-hidden="true"
+            <>
+              <button
+                type="button"
+                className="guide-suggest-btn"
+                disabled={props.closed}
+                aria-label={
+                  item.altAction.side === "withdrawal"
+                    ? `Use energy: ${item.altAction.label}, ${item.altAction.cost} points`
+                    : `Add energy: ${item.altAction.label}, ${item.altAction.cost} points`
+                }
+                onClick={() => props.onAction(item, true)}
               >
-                {item.altAction.side === "deposit"
-                  ? `+${item.altAction.cost}`
-                  : `−${item.altAction.cost}`}
-              </span>
-            </button>
+                <span className="guide-suggest-main">
+                  <span className="guide-suggest-sparkle" aria-hidden="true">
+                    ✦
+                  </span>
+                  <span className="guide-suggest-label">{item.altAction.label}</span>
+                </span>
+                <span
+                  className={`guide-suggest-cost guide-suggest-cost-${item.altAction.side}`}
+                  aria-hidden="true"
+                >
+                  {item.altAction.side === "deposit"
+                    ? `+${item.altAction.cost}`
+                    : `−${item.altAction.cost}`}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="guide-suggest-btn guide-suggest-btn-secondary"
+                disabled={props.closed}
+                aria-label={`${sideVerb(oppositeSide(item.altAction.side))}: ${item.altAction.label}, ${item.altAction.cost} points`}
+                onClick={() => props.onAction(item, true, oppositeSide(item.altAction!.side))}
+              >
+                <span className="guide-suggest-main">
+                  <span className="guide-suggest-label">
+                    {sideVerb(oppositeSide(item.altAction.side))}
+                  </span>
+                </span>
+                <span
+                  className={`guide-suggest-cost guide-suggest-cost-${oppositeSide(item.altAction.side)}`}
+                  aria-hidden="true"
+                >
+                  {sideCost(oppositeSide(item.altAction.side), item.altAction.cost)}
+                </span>
+              </button>
+            </>
           )}
         </div>
       )}
@@ -3231,7 +3695,7 @@ function TaskRow(props: {
           {props.audit || props.closed
             ? ` · Actual ${props.line.actualCost ?? props.line.plannedCost}`
             : ""}
-          {checked ? " · Done" : ""}
+          {checked ? ` · Done${timeLabel(props.line.completedAt) ? ` ${timeLabel(props.line.completedAt)}` : ""}` : ""}
         </div>
       </button>
       {!props.closed && (

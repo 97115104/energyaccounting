@@ -29,6 +29,7 @@ type ExportLine = {
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
+  completedAt?: string | null;
   difficulty: number | null;
   detailsCiphertext: string | null;
   detailsIv: string | null;
@@ -38,6 +39,8 @@ type ExportDay = {
   id: string;
   date: string;
   startedAt: string;
+  closedAt?: string | null;
+  durationMinutes?: number | null;
   openingBalance: number;
   closingBalance: number | null;
   projectedClosing: number;
@@ -83,6 +86,7 @@ export type PersonalTask = {
   plannedCost: number;
   actualCost: number | null;
   completed: boolean;
+  completedAt: string | null;
   difficulty: number | null;
   details: string | null;
 };
@@ -92,6 +96,9 @@ export type PersonalDay = {
   id: string;
   date: string;
   phase: string;
+  startedAt: string;
+  closedAt: string | null;
+  durationMinutes: number | null;
   feelRating: number | null;
   openingBalance: number;
   closingBalance: number | null;
@@ -170,6 +177,7 @@ export async function loadPersonalData(): Promise<PersonalData> {
         plannedCost: l.plannedCost,
         actualCost: l.actualCost,
         completed: l.completed,
+        completedAt: l.completedAt ?? null,
         difficulty: l.difficulty,
         details,
       });
@@ -179,6 +187,9 @@ export async function loadPersonalData(): Promise<PersonalData> {
       id: d.id,
       date: d.date,
       phase: d.phase,
+      startedAt: d.startedAt,
+      closedAt: d.closedAt ?? null,
+      durationMinutes: d.durationMinutes ?? null,
       feelRating: d.feelRating,
       openingBalance: d.openingBalance,
       closingBalance: d.closingBalance,

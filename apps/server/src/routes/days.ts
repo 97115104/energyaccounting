@@ -244,6 +244,10 @@ async function statPointForDay(d: typeof dayTable.$inferSelect) {
     id: d.id,
     date: d.date,
     startedAt: d.startedAt.toISOString(),
+    closedAt: d.closedAt ? d.closedAt.toISOString() : null,
+    durationMinutes: d.closedAt
+      ? Math.max(0, Math.round((d.closedAt.getTime() - d.startedAt.getTime()) / 60_000))
+      : null,
     openingBalance: d.openingBalance,
     closingBalance: d.closingBalance ?? closingBalance(d.openingBalance, tasks),
     attwoodNet: attwood.attwoodNet,
@@ -359,6 +363,10 @@ function serializeDay(
     id: day.id,
     date: day.date,
     startedAt: day.startedAt.toISOString(),
+    closedAt: day.closedAt ? day.closedAt.toISOString() : null,
+    durationMinutes: day.closedAt
+      ? Math.max(0, Math.round((day.closedAt.getTime() - day.startedAt.getTime()) / 60_000))
+      : null,
     openingBalance: day.openingBalance,
     closingBalance: day.closingBalance,
     projectedClosing: projected,
@@ -384,6 +392,7 @@ function serializeDay(
       plannedCost: l.plannedCost,
       actualCost: l.actualCost,
       completed: l.completed,
+      completedAt: l.completedAt ? l.completedAt.toISOString() : null,
       difficulty: l.difficulty,
       detailsCiphertext: l.detailsCiphertext,
       detailsIv: l.detailsIv,
@@ -478,6 +487,10 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           id: d.id,
           date: d.date,
           startedAt: d.startedAt.toISOString(),
+          closedAt: d.closedAt ? d.closedAt.toISOString() : null,
+          durationMinutes: d.closedAt
+            ? Math.max(0, Math.round((d.closedAt.getTime() - d.startedAt.getTime()) / 60_000))
+            : null,
           openingBalance: d.openingBalance,
           closingBalance: d.closingBalance,
           phase: d.phase,
@@ -541,7 +554,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
     }
     return {
-      schemaVersion: 5,
+      schemaVersion: 6,
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -601,7 +614,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       // live capacity guard does not apply to them. Deposits restore energy
       // and never compete for the finite use-energy supply.
       const avail = availableCapacity(day.openingBalance, allocatable);
-      if (day.phase !== "closed" && body.side === "withdrawal" && planned > avail) {
+      if (
+        day.phase !== "closed" &&
+        body.side === "withdrawal" &&
+        planned > avail &&
+        body.allowOverCapacity !== true
+      ) {
         set.status = 400;
         return {
           error: `That uses ${planned} points, and only ${avail} remain available to allocate.`,
@@ -624,6 +642,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         plannedCost: planned,
         actualCost: actual,
         completed: false,
+        completedAt: null,
         difficulty,
         detailsCiphertext: details.ciphertext,
         detailsIv: details.iv,
@@ -659,6 +678,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         difficulty: t.Optional(t.Nullable(t.Number())),
         detailsCiphertext: t.Optional(t.Nullable(t.String())),
         detailsIv: t.Optional(t.Nullable(t.String())),
+        allowOverCapacity: t.Optional(t.Boolean()),
       }),
     },
   )
@@ -684,6 +704,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
 
       const nextCompleted = body.completed === undefined ? line.completed : body.completed;
+      let nextCompletedAt = line.completedAt;
+      if (body.completed === true && (!line.completed || line.completedAt === null)) {
+        nextCompletedAt = new Date();
+      } else if (body.completed === false) {
+        nextCompletedAt = null;
+      }
       let nextActual =
         body.actualCost === undefined
           ? line.actualCost
@@ -729,6 +755,14 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         .select()
         .from(taskLineTable)
         .where(eq(taskLineTable.dayId, day.id));
+      const currentReserved = reservedCapacity(
+        siblings.map((l) => ({
+          side: l.side as TaskCosts["side"],
+          planned: l.plannedCost,
+          actual: l.actualCost,
+          completed: l.completed,
+        })),
+      );
       const projected: AllocatableTask[] = siblings.map((l) => {
         if (l.id !== line.id) {
           return {
@@ -745,7 +779,13 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
           completed: nextCompleted,
         };
       });
-      if (day.phase !== "closed" && reservedCapacity(projected) > day.openingBalance) {
+      const nextReserved = reservedCapacity(projected);
+      if (
+        day.phase !== "closed" &&
+        nextReserved > day.openingBalance &&
+        nextReserved > currentReserved &&
+        body.allowOverCapacity !== true
+      ) {
         set.status = 400;
         return { error: "That change would reserve more points than remain available." };
       }
@@ -781,6 +821,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         labelIv: body.labelIv ?? line.labelIv,
         labelHash: nextLabelHash,
         completed: nextCompleted,
+        completedAt: nextCompletedAt,
         difficulty: nextDifficulty,
         detailsCiphertext: nextDetailsCiphertext,
         detailsIv: nextDetailsIv,
@@ -811,6 +852,7 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         detailsIv: t.Optional(t.Nullable(t.String())),
         side: t.Optional(t.Union([t.Literal("deposit"), t.Literal("withdrawal")])),
         sort: t.Optional(t.Number()),
+        allowOverCapacity: t.Optional(t.Boolean()),
       }),
     },
   )
@@ -942,11 +984,17 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     }));
     const opening = DAILY_ENERGY;
     const closing = closingBalance(opening, tasks);
+    const closedAt = new Date();
     await db
       .update(dayTable)
-      .set({ phase: "closed", openingBalance: opening, closingBalance: closing })
+      .set({ phase: "closed", closedAt, openingBalance: opening, closingBalance: closing })
       .where(eq(dayTable.id, day.id));
-    return { closingBalance: closing, openingBalance: opening, attwood: attwoodTotals(tasks) };
+    return {
+      closingBalance: closing,
+      openingBalance: opening,
+      closedAt: closedAt.toISOString(),
+      attwood: attwoodTotals(tasks),
+    };
   })
   .get("/suggestions/:dayId", async ({ params, request, set }) => {
     const user = await requireFullUser(request);
@@ -961,14 +1009,13 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
     }
     const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, day.id));
     const existingHashes = new Set(lines.map((l) => l.labelHash).filter(Boolean));
-    const bit = weekdayBit(day.date);
     const catalog = await db
       .select()
       .from(taskCatalogTable)
       .where(eq(taskCatalogTable.userId, user.id))
       .orderBy(desc(taskCatalogTable.useCount));
     const suggestions = catalog
-      .filter((c) => (c.weekdayMask & bit) !== 0 || c.useCount >= 2)
+      .filter((c) => c.useCount >= 3)
       .filter((c) => !existingHashes.has(c.labelHash))
       .slice(0, 12)
       .map((c) => ({
@@ -1038,17 +1085,17 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
       const fromAt = query.from ? new Date(`${query.from}T00:00:00.000Z`) : undefined;
       const toAt = query.to ? new Date(`${query.to}T23:59:59.999Z`) : undefined;
-      let days = await db
+      const rows = await db
         .select()
         .from(dayTable)
-        .where(
-          and(
-            eq(dayTable.userId, user.id),
-            fromAt ? gte(dayTable.startedAt, fromAt) : undefined,
-            toAt ? lte(dayTable.startedAt, toAt) : undefined,
-          ),
-        )
+        .where(eq(dayTable.userId, user.id))
         .orderBy(dayTable.startedAt, dayTable.id);
+      let days = rows.filter((d) => {
+        const metricAt = d.phase === "closed" ? (d.closedAt ?? d.startedAt) : d.startedAt;
+        if (fromAt && metricAt < fromAt) return false;
+        if (toAt && metricAt > toAt) return false;
+        return true;
+      });
 
       // Spanning days can start before the visible range but still be the live sheet.
       const active = await db.query.dayTable.findFirst({

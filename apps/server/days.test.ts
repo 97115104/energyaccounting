@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,9 @@ import { join } from "node:path";
 
 const dataDir = mkdtempSync(join(tmpdir(), "eaj-days-test-"));
 process.env.DATA_DIR = dataDir;
+process.on("exit", () => {
+  rmSync(dataDir, { recursive: true, force: true });
+});
 
 const [{ dayRoutes }, { db }, schema, session] = await Promise.all([
   import("./src/routes/days.ts"),
@@ -62,6 +65,12 @@ let ownerToken = "";
 let otherToken = "";
 let emptyToken = "";
 let amendToken = "";
+
+async function makeAuthedUser(prefix: string): Promise<{ userId: string; token: string }> {
+  const userId = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.insert(userTable).values(userRow(userId, `${userId}@example.com`));
+  return { userId, token: (await createSession(userId, false)).token };
+}
 
 beforeAll(async () => {
   await db.insert(userTable).values([
@@ -128,10 +137,6 @@ beforeAll(async () => {
       lastUsed: "2026-07-21",
     },
   ]);
-});
-
-afterAll(() => {
-  rmSync(dataDir, { recursive: true, force: true });
 });
 
 function apiRequest(path: string, token: string, init: RequestInit = {}) {
@@ -261,6 +266,198 @@ describe("day lifecycle", () => {
       where: (entry, { eq }) => eq(entry.labelHash, "new-hash"),
     }))?.useCount).toBe(1);
   });
+
+  test("closing a day records the actual close instant and stats range by it", async () => {
+    const { userId, token } = await makeAuthedUser("closer");
+    await db.insert(dayTable).values({
+      id: "close-range-day",
+      userId,
+      date: "2026-07-01",
+      startedAt: new Date(Date.now() - 2 * 86_400_000),
+      openingBalance: 100,
+      closingBalance: null,
+      phase: "plan",
+    });
+
+    const closed = await apiRequest("/days/close-range-day/close", token, { method: "POST" });
+    expect(closed.status).toBe(200);
+    const closeBody = (await closed.json()) as { closedAt: string };
+    expect(Date.parse(closeBody.closedAt)).toBeGreaterThan(0);
+    const row = await db.query.dayTable.findFirst({
+      where: (day, { eq }) => eq(day.id, "close-range-day"),
+    });
+    expect(row?.closedAt).toBeInstanceOf(Date);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stats = await apiRequest(`/stats?from=${today}&to=${today}`, token);
+    expect(stats.status).toBe(200);
+    const statsBody = (await stats.json()) as {
+      series: Array<{ id: string; closedAt: string | null; durationMinutes: number | null }>;
+    };
+    expect(statsBody.series.some((point) => point.id === "close-range-day")).toBe(true);
+    const point = statsBody.series.find((p) => p.id === "close-range-day")!;
+    expect(point.closedAt).toBe(closeBody.closedAt);
+    expect(point.durationMinutes).toBeGreaterThan(0);
+  });
+
+  test("completion toggles store and clear completion timestamps", async () => {
+    const { userId, token } = await makeAuthedUser("completer");
+    await db.insert(dayTable).values({
+      id: "completion-day",
+      userId,
+      date: "2026-07-22",
+      startedAt: new Date(),
+      openingBalance: 100,
+      closingBalance: null,
+      phase: "plan",
+    });
+    await db.insert(taskLineTable).values({
+      id: "completion-line",
+      dayId: "completion-day",
+      side: "withdrawal",
+      sort: 0,
+      labelCiphertext: "cipher-completion",
+      labelIv: "iv-completion",
+      labelHash: "completion-hash",
+      plannedCost: 20,
+      actualCost: null,
+      completed: false,
+    });
+
+    const done = await apiRequest("/days/completion-day/lines/completion-line", token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(done.status).toBe(200);
+    const completed = await db.query.taskLineTable.findFirst({
+      where: (line, { eq }) => eq(line.id, "completion-line"),
+    });
+    expect(completed?.completed).toBe(true);
+    expect(completed?.completedAt).toBeInstanceOf(Date);
+
+    const undone = await apiRequest("/days/completion-day/lines/completion-line", token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: false }),
+    });
+    expect(undone.status).toBe(200);
+    const reopened = await db.query.taskLineTable.findFirst({
+      where: (line, { eq }) => eq(line.id, "completion-line"),
+    });
+    expect(reopened?.completed).toBe(false);
+    expect(reopened?.completedAt).toBeNull();
+  });
+
+  test("over-capacity withdrawal adds require an explicit confirmation flag", async () => {
+    const { userId, token } = await makeAuthedUser("overbudget");
+    await db.insert(dayTable).values({
+      id: "overbudget-day",
+      userId,
+      date: "2026-07-23",
+      startedAt: new Date(),
+      openingBalance: 100,
+      closingBalance: null,
+      phase: "plan",
+    });
+    await db.insert(taskLineTable).values({
+      id: "large-line",
+      dayId: "overbudget-day",
+      side: "withdrawal",
+      sort: 0,
+      labelCiphertext: "cipher-large",
+      labelIv: "iv-large",
+      labelHash: "large-hash",
+      plannedCost: 90,
+      actualCost: null,
+      completed: false,
+    });
+    const body = {
+      side: "withdrawal",
+      labelCiphertext: "cipher-extra",
+      labelIv: "iv-extra",
+      labelHash: "extra-hash",
+      plannedCost: 20,
+    };
+    const blocked = await apiRequest("/days/overbudget-day/lines", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(blocked.status).toBe(400);
+
+    const confirmed = await apiRequest("/days/overbudget-day/lines", token, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...body, labelHash: "extra-confirmed", allowOverCapacity: true }),
+    });
+    expect(confirmed.status).toBe(200);
+    const confirmedBody = (await confirmed.json()) as { id: string };
+
+    const detailsOnly = await apiRequest(`/days/overbudget-day/lines/${confirmedBody.id}`, token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ detailsCiphertext: "notes-cipher", detailsIv: "notes-iv" }),
+    });
+    expect(detailsOnly.status).toBe(200);
+
+    const movedToDeposit = await apiRequest(`/days/overbudget-day/lines/${confirmedBody.id}`, token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ side: "deposit", sort: 0 }),
+    });
+    expect(movedToDeposit.status).toBe(200);
+    expect((await db.query.taskLineTable.findFirst({
+      where: (line, { eq }) => eq(line.id, confirmedBody.id),
+    }))?.side).toBe("deposit");
+  });
+
+  test("catalog suggestions wait for at least three prior uses", async () => {
+    const { userId, token } = await makeAuthedUser("suggestions");
+    await db.insert(dayTable).values({
+      id: "suggestion-day",
+      userId,
+      date: "2026-07-24",
+      startedAt: new Date(),
+      openingBalance: 100,
+      closingBalance: null,
+      phase: "plan",
+    });
+    await db.insert(taskCatalogTable).values([
+      {
+        id: "one-off",
+        userId,
+        side: "deposit",
+        labelCiphertext: "cipher-one",
+        labelIv: "iv-one",
+        labelHash: "one-hash",
+        typicalCost: 10,
+        weekdayMask: 127,
+        useCount: 2,
+        difficultyTotal: 0,
+        difficultyCount: 0,
+        lastUsed: "2026-07-20",
+      },
+      {
+        id: "repeated",
+        userId,
+        side: "deposit",
+        labelCiphertext: "cipher-repeated",
+        labelIv: "iv-repeated",
+        labelHash: "repeated-hash",
+        typicalCost: 10,
+        weekdayMask: 127,
+        useCount: 3,
+        difficultyTotal: 0,
+        difficultyCount: 0,
+        lastUsed: "2026-07-22",
+      },
+    ]);
+    const response = await apiRequest("/suggestions/suggestion-day", token);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { suggestions: Array<{ id: string }> };
+    expect(body.suggestions.map((entry) => entry.id)).toEqual(["repeated"]);
+  });
 });
 
 describe("DELETE /api/days/:dayId", () => {
@@ -359,13 +556,21 @@ test("legacy migration closes duplicate open days with balances computed from th
 
   const migrated = new Database(join(legacyDir, "eaj.sqlite"));
   const older = migrated
-    .query("SELECT opening_balance, closing_balance, phase FROM day_table WHERE id = 'older'")
-    .get() as { opening_balance: number; closing_balance: number; phase: string };
+    .query("SELECT opening_balance, closing_balance, phase, closed_at FROM day_table WHERE id = 'older'")
+    .get() as { opening_balance: number; closing_balance: number; phase: string; closed_at: number | null };
   const newer = migrated
-    .query("SELECT opening_balance, closing_balance, phase FROM day_table WHERE id = 'newer'")
-    .get() as { opening_balance: number; closing_balance: number | null; phase: string };
-  expect(older).toEqual({ opening_balance: 100, closing_balance: 70, phase: "closed" });
-  expect(newer).toEqual({ opening_balance: 100, closing_balance: null, phase: "plan" });
+    .query("SELECT opening_balance, closing_balance, phase, closed_at FROM day_table WHERE id = 'newer'")
+    .get() as { opening_balance: number; closing_balance: number | null; phase: string; closed_at: number | null };
+  expect(older.opening_balance).toBe(100);
+  expect(older.closing_balance).toBe(70);
+  expect(older.phase).toBe("closed");
+  expect(older.closed_at).not.toBeNull();
+  expect(newer).toEqual({
+    opening_balance: 100,
+    closing_balance: null,
+    phase: "plan",
+    closed_at: null,
+  });
   migrated.close();
   rmSync(legacyDir, { recursive: true, force: true });
 });

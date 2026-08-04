@@ -28,6 +28,11 @@ try {
   /* column exists */
 }
 try {
+  sqlite.exec("ALTER TABLE task_line_table ADD COLUMN completed_at INTEGER");
+} catch {
+  /* column exists */
+}
+try {
   sqlite.exec("ALTER TABLE task_line_table ADD COLUMN difficulty INTEGER");
 } catch {
   /* column exists */
@@ -158,6 +163,7 @@ CREATE TABLE IF NOT EXISTS day_table (
   user_id TEXT NOT NULL REFERENCES user_table(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
   started_at INTEGER NOT NULL,
+  closed_at INTEGER,
   opening_balance REAL NOT NULL,
   closing_balance REAL,
   phase TEXT NOT NULL DEFAULT 'plan',
@@ -183,6 +189,7 @@ CREATE TABLE IF NOT EXISTS task_line_table (
   planned_cost INTEGER NOT NULL,
   actual_cost INTEGER,
   completed INTEGER NOT NULL DEFAULT 0,
+  completed_at INTEGER,
   difficulty INTEGER,
   details_ciphertext TEXT,
   details_iv TEXT
@@ -249,6 +256,12 @@ try {
   const msg = e instanceof Error ? e.message : String(e);
   if (!msg.includes("duplicate column name")) throw e;
 }
+try {
+  sqlite.exec("ALTER TABLE day_table ADD COLUMN closed_at INTEGER");
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (!msg.includes("duplicate column name")) throw e;
+}
 sqlite.exec(`
 UPDATE day_table
 SET started_at =
@@ -260,6 +273,7 @@ WHERE started_at IS NULL;
 UPDATE day_table AS day
 SET
   phase = 'closed',
+  closed_at = COALESCE(closed_at, started_at),
   opening_balance = 100,
   closing_balance = 100 + COALESCE((
     SELECT SUM(
@@ -287,6 +301,24 @@ WHERE phase <> 'closed'
 UPDATE day_table
 SET opening_balance = 100
 WHERE phase <> 'closed' AND opening_balance <> 100;
+
+-- Old rows never recorded close/completion instants. Preserve loadability by
+-- stamping them at the best historical boundary we have.
+UPDATE day_table
+SET closed_at = started_at
+WHERE phase = 'closed' AND closed_at IS NULL;
+
+UPDATE task_line_table AS line
+SET completed_at = COALESCE((
+  SELECT day.closed_at
+  FROM day_table AS day
+  WHERE day.id = line.day_id
+), (
+  SELECT day.started_at
+  FROM day_table AS day
+  WHERE day.id = line.day_id
+))
+WHERE line.completed = 1 AND line.completed_at IS NULL;
 
 -- Recompute every closed row once per startup. This repairs rows force-closed
 -- by an earlier migration and consistently applies the fresh-100 model.

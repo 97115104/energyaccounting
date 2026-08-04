@@ -71,9 +71,24 @@ function bucketSeries(series: Point[]): Point[] {
 }
 
 function dayLabel(p: Pick<Point, "date" | "startedAt">): string {
-  const start = new Date(p.startedAt);
-  const time = start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `${p.date} · ${time}`;
+  const when = "closedAt" in p && typeof p.closedAt === "string" && p.closedAt
+    ? new Date(p.closedAt)
+    : new Date(p.startedAt);
+  const time = when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const date = when.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return `${date} · ${time}`;
+}
+
+function durationLabel(minutes: number | null | undefined): string | null {
+  if (minutes == null) return null;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins ? `${hours} hr ${mins} min` : `${hours} hr`;
 }
 
 function rangeBounds(kind: Range): { from: string; to: string } {
@@ -293,6 +308,17 @@ export function DashboardPage({ user }: { user: UserProfile }) {
                   ? `${formatTemp(p.weather.tempMax, tempUnit)}${p.weather.precip != null ? `, ${p.weather.precip}mm` : ""}`
                   : null;
               const holiday = p.isHoliday ? p.weather?.holidayName || "Holiday" : null;
+              const opened = new Date(p.startedAt).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              });
+              const closed = p.closedAt
+                ? new Date(p.closedAt).toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : null;
+              const duration = durationLabel(p.durationMinutes);
               return (
                 <li key={p.id}>
                   <button
@@ -312,6 +338,19 @@ export function DashboardPage({ user }: { user: UserProfile }) {
                       <span>
                         <em>Feel</em> {p.feelRating ?? "—"}
                       </span>
+                      <span>
+                        <em>Opened</em> {opened}
+                      </span>
+                      {closed && (
+                        <span>
+                          <em>Closed</em> {closed}
+                        </span>
+                      )}
+                      {duration && (
+                        <span>
+                          <em>Duration</em> {duration}
+                        </span>
+                      )}
                       {weather && (
                         <span>
                           <em>Weather</em> {weather}

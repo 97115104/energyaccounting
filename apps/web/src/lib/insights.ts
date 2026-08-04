@@ -13,6 +13,8 @@ export type StatPoint = {
   id: string;
   date: string;
   startedAt: string;
+  closedAt?: string | null;
+  durationMinutes?: number | null;
   openingBalance: number;
   closingBalance: number;
   attwoodNet: number;

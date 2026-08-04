@@ -14,6 +14,15 @@ export { identityFaviconSvg, identityFaviconDataUrl } from "./identityFaviconSvg
 
 let appleIconVersion: string | null = null;
 
+function hashVersion(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
 function touchIconHref(version: string): string {
   return `/api/auth/touch-icon?v=${encodeURIComponent(version)}`;
 }
@@ -30,7 +39,8 @@ export function applyIdentityIcons(identity: IdentityConfig, background: string)
     'link[rel="apple-touch-icon"]',
   ) as HTMLLinkElement | null;
   if (!apple) return;
-  const version = `${identity.symbol}-${identity.seed}-${identity.wing.family}-${identity.palette.primary}`;
+  apple.setAttribute("sizes", "180x180");
+  const version = hashVersion(JSON.stringify(identity) + background);
   if (appleIconVersion === version && apple.href.includes("/api/auth/touch-icon")) return;
   appleIconVersion = version;
   apple.href = touchIconHref(version);
@@ -48,6 +58,7 @@ export function applyBrandFavicon(theme: "day" | "night"): void {
   ) as HTMLLinkElement | null;
   if (apple) {
     appleIconVersion = null;
+    apple.setAttribute("sizes", "180x180");
     apple.href = "/apple-touch-icon.png";
   }
 }
