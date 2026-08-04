@@ -3206,7 +3206,8 @@ html[data-theme="night"] .tips-fab {
   position: fixed;
   right: calc(1rem + var(--sar));
   bottom: calc(5rem + var(--sab));
-  z-index: 43;
+  /* Keep confirmations visible while an action leaves its dialog open. */
+  z-index: 61;
   max-width: min(320px, calc(100vw - 2rem - var(--sal) - var(--sar)));
   padding: 0.7rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));

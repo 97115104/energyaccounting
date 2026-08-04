@@ -393,6 +393,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [detailTextDirty, setDetailTextDirty] = useState(false);
   const [detailSaveState, setDetailSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [switchingDetailColumn, setSwitchingDetailColumn] = useState(false);
   // Non-error status for the details dialog, e.g. dictation hit the cap.
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [dismissedGuideIds, setDismissedGuideIds] = useState<Set<string>>(() => new Set());
@@ -1338,10 +1339,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
     await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
-  async function moveLineTo(line: Line, targetSide: "deposit" | "withdrawal", targetIndex: number) {
-    if (!day || readOnly) return;
+  async function moveLineTo(
+    line: Line,
+    targetSide: "deposit" | "withdrawal",
+    targetIndex: number,
+  ): Promise<boolean> {
+    if (!day || readOnly) return false;
     const updates = deriveLineReorder(day.lines, line.id, targetSide, targetIndex);
-    if (!updates.length) return;
+    if (!updates.length) return true;
     const optimisticLines = applyLinePositions(day.lines, updates);
 
     setError(null);
@@ -1355,6 +1360,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         body: JSON.stringify({ positions: updates }),
       });
       await withPreservedScroll(() => load(undefined, { soft: true }));
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not move this item.");
       setDetailError(e instanceof Error ? e.message : "Could not move this item.");
@@ -1363,11 +1369,33 @@ export function TodayPage({ user }: { user: UserProfile }) {
       } catch {
         // Best effort after a failed reorder.
       }
+      return false;
     }
   }
 
-  async function moveLineToOtherSide(line: Line) {
-    await moveLineTo(line, line.side === "deposit" ? "withdrawal" : "deposit", Number.MAX_SAFE_INTEGER);
+  async function moveLineToOtherSide(line: Line): Promise<boolean> {
+    return moveLineTo(
+      line,
+      line.side === "deposit" ? "withdrawal" : "deposit",
+      Number.MAX_SAFE_INTEGER,
+    );
+  }
+
+  async function switchDetailLineColumn() {
+    if (!detailLine || readOnly || switchingDetailColumn) return;
+    const nextSide = detailLine.side === "deposit" ? "withdrawal" : "deposit";
+    setSwitchingDetailColumn(true);
+    try {
+      if (await moveLineToOtherSide(detailLine)) {
+        setDetailSide(nextSide);
+        setGuideToast({
+          key: Date.now(),
+          text: `Switched to ${nextSide === "deposit" ? "Add energy" : "Use energy"}.`,
+        });
+      }
+    } finally {
+      setSwitchingDetailColumn(false);
+    }
   }
 
   async function toggleComplete(line: Line, anchorEl?: HTMLElement | null) {
@@ -2682,12 +2710,13 @@ export function TodayPage({ user }: { user: UserProfile }) {
               <button
                 type="button"
                 className="btn secondary task-detail-switch"
-                disabled={readOnly}
-                aria-label={`Switch to ${detailSide === "deposit" ? "Use energy" : "Add energy"}`}
-                onClick={() => setDetailSide((side) => (side === "deposit" ? "withdrawal" : "deposit"))}
+                disabled={readOnly || switchingDetailColumn}
+                aria-busy={switchingDetailColumn || undefined}
+                aria-label={`Switch to ${detailLine.side === "deposit" ? "Use energy" : "Add energy"}`}
+                onClick={() => void switchDetailLineColumn()}
               >
                 <SwapColumnIcon />
-                <span>Switch column</span>
+                <span>{switchingDetailColumn ? "Switching…" : "Switch column"}</span>
               </button>
             </div>
             <div className="task-detail-costs">
