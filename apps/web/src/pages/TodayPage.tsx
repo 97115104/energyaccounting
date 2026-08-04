@@ -1,5 +1,7 @@
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
@@ -294,6 +296,55 @@ function LightbulbIcon() {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="m4 16.9-.8 3.9 3.9-.8L18.8 8.3l-3.1-3.1L4 16.9Zm16.2-11.5a1.7 1.7 0 0 0 0-2.4l-.1-.1a1.7 1.7 0 0 0-2.4 0l-.9.9 3.1 3.1.3-.3Z"
+      />
+    </svg>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M8 5.5A1.5 1.5 0 1 1 5 5.5a1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm11-13A1.5 1.5 0 1 1 16 5.5a1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"
+      />
+    </svg>
+  );
+}
+
+function ChevronUpIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="m12 8 7 7-1.4 1.4L12 10.8l-5.6 5.6L5 15l7-7Z" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="m12 16-7-7 1.4-1.4 5.6 5.6 5.6-5.6L19 9l-7 7Z" />
+    </svg>
+  );
+}
+
+function SwapColumnIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M7.4 6H18v2H7.4l3.3 3.3L9.3 12.7 3.6 7l5.7-5.7 1.4 1.4L7.4 6Zm9.2 12H6v-2h10.6l-3.3-3.3 1.4-1.4 5.7 5.7-5.7 5.7-1.4-1.4 3.3-3.3Z"
+      />
+    </svg>
+  );
+}
+
 export function TodayPage({ user }: { user: UserProfile }) {
   const [params, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -340,6 +391,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   });
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
+  const [editingSide, setEditingSide] = useState<"deposit" | "withdrawal" | null>(null);
+  const [draggingLineId, setDraggingLineId] = useState<string | null>(null);
   const [justFreed, setJustFreed] = useState<number | undefined>();
   // Rows mid exit-animation before they join the hidden/completed pool.
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
@@ -619,6 +672,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const dayPhase = day?.phase;
   const readOnly = !!day && day.phase === "closed" && !amending;
+  useEffect(() => {
+    if (readOnly) {
+      setEditingSide(null);
+      setDraggingLineId(null);
+    }
+  }, [day?.id, readOnly]);
   // Numeric history feeds the planning hint during plan and the Trends card
   // in every phase, so it loads once per day view.
   useEffect(() => {
@@ -1486,30 +1545,80 @@ export function TodayPage({ user }: { user: UserProfile }) {
     await withPreservedScroll(() => load(undefined, { soft: true }));
   }
 
+  async function moveLineTo(line: Line, targetSide: "deposit" | "withdrawal", targetIndex: number) {
+    if (!day || readOnly) return;
+    const sourceSide = line.side;
+    const ordered = (side: "deposit" | "withdrawal") =>
+      day.lines
+        .filter((l) => l.side === side)
+        .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
+    const desired = new Map<string, { side: "deposit" | "withdrawal"; sort: number }>();
+
+    if (sourceSide !== targetSide) {
+      ordered(sourceSide)
+        .filter((l) => l.id !== line.id)
+        .forEach((l, index) => desired.set(l.id, { side: sourceSide, sort: index }));
+    }
+
+    const targetOrdered = ordered(targetSide);
+    const sourceIndex = targetSide === sourceSide
+      ? targetOrdered.findIndex((l) => l.id === line.id)
+      : -1;
+    const adjustedTargetIndex =
+      sourceIndex >= 0 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const targetWithoutLine = targetOrdered.filter((l) => l.id !== line.id);
+    const clampedIndex = Math.max(0, Math.min(adjustedTargetIndex, targetWithoutLine.length));
+    const targetWithLine = [...targetWithoutLine];
+    targetWithLine.splice(clampedIndex, 0, { ...line, side: targetSide });
+    targetWithLine.forEach((l, index) => desired.set(l.id, { side: targetSide, sort: index }));
+
+    const existing = new Map(day.lines.map((l) => [l.id, l]));
+    const updates = [...desired.entries()].filter(([id, next]) => {
+      const current = existing.get(id);
+      return current && (current.sort !== next.sort || current.side !== next.side);
+    });
+    if (!updates.length) return;
+
+    setError(null);
+    setDetailError(null);
+    try {
+      await Promise.all(
+        updates.map(([id, next]) =>
+          api(`/api/days/${day.id}/lines/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              sort: next.sort,
+              side: next.side,
+              allowOverCapacity: next.side === "withdrawal",
+            }),
+          }),
+        ),
+      );
+      await withPreservedScroll(() => load(undefined, { soft: true }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not move this item.");
+      setDetailError(e instanceof Error ? e.message : "Could not move this item.");
+      try {
+        await load(undefined, { soft: true });
+      } catch {
+        // Best effort after a failed reorder.
+      }
+    }
+  }
+
   async function moveLine(line: Line, direction: "up" | "down") {
     if (!day || readOnly) return;
     const ordered = day.lines
       .filter((l) => l.side === line.side)
       .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
     const index = ordered.findIndex((l) => l.id === line.id);
-    const swapWith = direction === "up" ? ordered[index - 1] : ordered[index + 1];
-    if (index < 0 || !swapWith) return;
-    setDetailError(null);
-    try {
-      await Promise.all([
-        api(`/api/days/${day.id}/lines/${line.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ sort: swapWith.sort }),
-        }),
-        api(`/api/days/${day.id}/lines/${swapWith.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ sort: line.sort }),
-        }),
-      ]);
-      await withPreservedScroll(() => load(undefined, { soft: true }));
-    } catch (e) {
-      setDetailError(e instanceof Error ? e.message : "Could not move this item.");
-    }
+    if (index < 0) return;
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    await moveLineTo(line, line.side, targetIndex);
+  }
+
+  async function moveLineToOtherSide(line: Line) {
+    await moveLineTo(line, line.side === "deposit" ? "withdrawal" : "deposit", Number.MAX_SAFE_INTEGER);
   }
 
   async function toggleComplete(line: Line, anchorEl?: HTMLElement | null) {
@@ -1999,8 +2108,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
               item={closeCelebration.recovery}
               closed={false}
               actionLabel="Start new day · Add energy"
-              onAction={(item) => {
-                void applyGuideAction(item).then((ok) => {
+              onAction={(item, useAlt, sideOverride) => {
+                void applyGuideAction(item, useAlt, sideOverride).then((ok) => {
                   if (ok) {
                     setCloseCelebration((c) => (c ? { ...c, recovery: null } : c));
                   }
@@ -2370,7 +2479,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <GuideCard
               item={guide.primary}
               closed={readOnly}
-              onAction={(item, useAlt) => void applyGuideAction(item, useAlt)}
+              onAction={(item, useAlt, sideOverride) => void applyGuideAction(item, useAlt, sideOverride)}
               onDismiss={dismissGuideItem}
             />
           </div>
@@ -2407,13 +2516,25 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
+            editing={editingSide === "withdrawal"}
+            dragActive={editingSide !== null}
+            draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("withdrawal")}
+            onToggleEdit={() => setEditingSide(editingSide === "withdrawal" ? null : "withdrawal")}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
+            onMove={(line, direction) => void moveLine(line, direction)}
+            onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
+            onDragStart={(line) => setDraggingLineId(line.id)}
+            onDragEnd={() => setDraggingLineId(null)}
+            onDropLine={(lineId, targetSide, targetIndex) => {
+              const line = day.lines.find((l) => l.id === lineId);
+              if (line) void moveLineTo(line, targetSide, targetIndex);
+            }}
             exitingIds={exitingIds}
             completingIds={completingIds}
           />
@@ -2428,13 +2549,25 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
+            editing={editingSide === "deposit"}
+            dragActive={editingSide !== null}
+            draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("deposit")}
+            onToggleEdit={() => setEditingSide(editingSide === "deposit" ? null : "deposit")}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
+            onMove={(line, direction) => void moveLine(line, direction)}
+            onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
+            onDragStart={(line) => setDraggingLineId(line.id)}
+            onDragEnd={() => setDraggingLineId(null)}
+            onDropLine={(lineId, targetSide, targetIndex) => {
+              const line = day.lines.find((l) => l.id === lineId);
+              if (line) void moveLineTo(line, targetSide, targetIndex);
+            }}
             exitingIds={exitingIds}
             completingIds={completingIds}
           />
@@ -2459,13 +2592,37 @@ export function TodayPage({ user }: { user: UserProfile }) {
           </div>
           <div className="field">
             <label htmlFor="journal">Journal</label>
-            <textarea
-              id="journal"
-              value={journal}
-              disabled={readOnly}
-              onChange={(e) => updateJournalDraft(e.target.value)}
-              placeholder="What shaped your energy today?"
-            />
+            <div className="dictatable-field">
+              <textarea
+                id="journal"
+                className="dictation-textarea"
+                value={journal}
+                disabled={readOnly}
+                onChange={(e) => updateJournalDraft(e.target.value)}
+                placeholder="What shaped your energy today?"
+              />
+              {!readOnly && (
+                <button
+                  type="button"
+                  className={`dictate-field-button${listening === "journal" ? " recording" : ""}`}
+                  title={listening === "journal" ? "Stop dictating" : "Dictate journal"}
+                  aria-label={listening === "journal" ? "Stop dictating journal" : "Dictate journal"}
+                  onClick={() => {
+                    if (listening === "journal") {
+                      stopLiveSpeech();
+                      return;
+                    }
+                    startLiveSpeech("journal");
+                  }}
+                >
+                  {listening === "journal" ? (
+                    <span className="rec-dot" aria-hidden="true" />
+                  ) : (
+                    <MicIcon />
+                  )}
+                </button>
+              )}
+            </div>
             {listening === "journal" && (
               <p className="listening-pill">Listening · your words appear as you talk</p>
             )}
@@ -2480,27 +2637,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-            {listening !== "journal" ? (
-              <button
-                type="button"
-                className="btn secondary mic-btn"
-                disabled={readOnly}
-                title="Typing is hard sometimes. Talk instead."
-                aria-label="Dictate journal"
-                onClick={() => startLiveSpeech("journal")}
-              >
-                <MicIcon /> Dictate
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn danger mic-btn"
-                aria-label="Stop dictating journal"
-                onClick={stopLiveSpeech}
-              >
-                <span className="rec-dot" aria-hidden="true" /> Stop dictating
-              </button>
-            )}
             <button
               type="button"
               className={`btn ${journalClosePrompt ? "accent" : "secondary"}`}
@@ -2597,8 +2733,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 item={item}
                 closed={readOnly}
                 inSheet
-                onAction={(entry, useAlt) => {
-                  void applyGuideAction(entry, useAlt).then((ok) => {
+                onAction={(entry, useAlt, sideOverride) => {
+                  void applyGuideAction(entry, useAlt, sideOverride).then((ok) => {
                     if (ok) setGuideOpen(false);
                   });
                 }}
@@ -2793,27 +2929,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 </button>
               </div>
             </fieldset>
-            <div className="task-detail-reorder">
-              <span className="muted">Position in this column</span>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={readOnly}
-                  onClick={() => void moveLine(detailLine, "up")}
-                >
-                  Move earlier
-                </button>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={readOnly}
-                  onClick={() => void moveLine(detailLine, "down")}
-                >
-                  Move later
-                </button>
-              </div>
-            </div>
             <div className="task-detail-costs">
               <div className="field">
                 <label htmlFor="task-detail-planned">
@@ -2873,17 +2988,44 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   it is reached.
                 </HelpTip>
               </label>
-              <textarea
-                id="task-details"
-                value={detailText}
-                disabled={readOnly}
-                maxLength={DETAILS_MAX}
-                placeholder="What made this easier or harder? Add any context worth remembering."
-                onChange={(e) => {
-                  updateDetailTextDraft(e.target.value);
-                  if (e.target.value.length < DETAILS_MAX) setDetailNotice(null);
-                }}
-              />
+              <div className="dictatable-field">
+                <textarea
+                  id="task-details"
+                  className="dictation-textarea"
+                  value={detailText}
+                  disabled={readOnly}
+                  maxLength={DETAILS_MAX}
+                  placeholder="What made this easier or harder? Add any context worth remembering."
+                  onChange={(e) => {
+                    updateDetailTextDraft(e.target.value);
+                    if (e.target.value.length < DETAILS_MAX) setDetailNotice(null);
+                  }}
+                />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className={`dictate-field-button${listening === "details" ? " recording" : ""}`}
+                    disabled={listening !== "details" && detailText.length >= DETAILS_MAX}
+                    title={listening === "details" ? "Stop dictating" : "Dictate task details"}
+                    aria-label={
+                      listening === "details" ? "Stop dictating task details" : "Dictate task details"
+                    }
+                    onClick={() => {
+                      if (listening === "details") {
+                        stopLiveSpeech();
+                        return;
+                      }
+                      startLiveSpeech("details");
+                    }}
+                  >
+                    {listening === "details" ? (
+                      <span className="rec-dot" aria-hidden="true" />
+                    ) : (
+                      <MicIcon />
+                    )}
+                  </button>
+                )}
+              </div>
               {listening === "details" && (
                 <p className="listening-pill">Listening · your words appear as you talk</p>
               )}
@@ -2907,31 +3049,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
                       ? "Details saved."
                       : "Details autosave failed. Use Save task details to retry."}
                 </p>
-              )}
-              {!readOnly && (
-                <div className="detail-dictate-row">
-                  {listening !== "details" ? (
-                    <button
-                      type="button"
-                      className="btn secondary mic-btn"
-                      disabled={detailText.length >= DETAILS_MAX}
-                      title="Typing is hard sometimes. Talk instead."
-                      aria-label="Dictate task details"
-                      onClick={() => startLiveSpeech("details")}
-                    >
-                      <MicIcon /> Dictate
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn danger mic-btn"
-                      aria-label="Stop dictating task details"
-                      onClick={stopLiveSpeech}
-                    >
-                      <span className="rec-dot" aria-hidden="true" /> Stop dictating
-                    </button>
-                  )}
-                </div>
               )}
               <p className="muted">
                 This text is encrypted before it leaves your browser.
@@ -3200,12 +3317,72 @@ function GuideCard(props: {
         <span aria-hidden="true"> ↗</span>
       </a>
     ) : null;
-  const oppositeSide = (side: "deposit" | "withdrawal") =>
-    side === "deposit" ? "withdrawal" : "deposit";
   const sideVerb = (side: "deposit" | "withdrawal") =>
     side === "deposit" ? "Add energy" : "Use energy";
   const sideCost = (side: "deposit" | "withdrawal", cost: number) =>
     side === "deposit" ? `+${cost}` : `−${cost}`;
+  const renderAction = (
+    action: NonNullable<GuideItem["action"]>,
+    useAlt: boolean,
+  ) => {
+    if (action.requiresStart) {
+      return (
+        <button
+          type="button"
+          className="guide-suggest-btn"
+          disabled={props.closed}
+          aria-label={`${props.actionLabel ?? "Start new day and add energy"}: ${action.label}, ${action.cost} points`}
+          onClick={() => props.onAction(item, useAlt)}
+        >
+          <span className="guide-suggest-main">
+            <span className="guide-suggest-sparkle" aria-hidden="true">
+              ✦
+            </span>
+            <span className="guide-suggest-label">
+              {props.actionLabel ? `${props.actionLabel} · ${action.label}` : action.label}
+            </span>
+          </span>
+          <span
+            className={`guide-suggest-cost guide-suggest-cost-${action.side}`}
+            aria-hidden="true"
+          >
+            {sideCost(action.side, action.cost)}
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <div className="guide-split-action" role="group" aria-label={`Choose energy column for ${action.label}`}>
+        <span className="guide-suggest-main guide-split-label">
+          <span className="guide-suggest-sparkle" aria-hidden="true">
+            ✦
+          </span>
+          <span className="guide-suggest-label">{action.label}</span>
+        </span>
+        <span className="guide-split-buttons">
+          <button
+            type="button"
+            className="guide-split-btn guide-split-btn-deposit"
+            disabled={props.closed}
+            aria-label={`${sideVerb("deposit")}: ${action.label}, ${action.cost} points`}
+            onClick={() => props.onAction(item, useAlt, "deposit")}
+          >
+            {sideCost("deposit", action.cost)}
+          </button>
+          <button
+            type="button"
+            className="guide-split-btn guide-split-btn-withdrawal"
+            disabled={props.closed}
+            aria-label={`${sideVerb("withdrawal")}: ${action.label}, ${action.cost} points`}
+            onClick={() => props.onAction(item, useAlt, "withdrawal")}
+          >
+            {sideCost("withdrawal", action.cost)}
+          </button>
+        </span>
+      </div>
+    );
+  };
 
   return (
     <article className={`guide-card${props.inSheet ? " in-sheet" : ""}`} data-kind={item.kind}>
@@ -3215,115 +3392,8 @@ function GuideCard(props: {
       <p className="guide-card-body">{item.body}</p>
       {(item.action || item.altAction) && (
         <div className="guide-card-actions">
-          {item.action && (
-            <>
-              <button
-                type="button"
-                className="guide-suggest-btn"
-                disabled={props.closed}
-                aria-label={
-                  props.actionLabel
-                    ? `${props.actionLabel}: ${item.action.label}, ${item.action.cost} points`
-                    : item.action.requiresStart
-                      ? `Start new day and add energy: ${item.action.label}, ${item.action.cost} points`
-                      : item.action.side === "withdrawal"
-                        ? `Use energy: ${item.action.label}, ${item.action.cost} points`
-                        : `Add energy: ${item.action.label}, ${item.action.cost} points`
-                }
-                onClick={() => props.onAction(item)}
-              >
-                <span className="guide-suggest-main">
-                  <span className="guide-suggest-sparkle" aria-hidden="true">
-                    ✦
-                  </span>
-                  <span className="guide-suggest-label">
-                    {props.actionLabel ??
-                      (item.action.requiresStart
-                        ? `Start day · ${item.action.label}`
-                        : item.action.label)}
-                  </span>
-                </span>
-                <span
-                  className={`guide-suggest-cost guide-suggest-cost-${item.action.side}`}
-                  aria-hidden="true"
-                >
-                  {item.action.side === "deposit" ? `+${item.action.cost}` : `−${item.action.cost}`}
-                </span>
-              </button>
-              {!item.action.requiresStart && (
-                <button
-                  type="button"
-                  className="guide-suggest-btn guide-suggest-btn-secondary"
-                  disabled={props.closed}
-                  aria-label={`${sideVerb(oppositeSide(item.action.side))}: ${item.action.label}, ${item.action.cost} points`}
-                  onClick={() => props.onAction(item, false, oppositeSide(item.action!.side))}
-                >
-                  <span className="guide-suggest-main">
-                    <span className="guide-suggest-label">
-                      {sideVerb(oppositeSide(item.action.side))}
-                    </span>
-                  </span>
-                  <span
-                    className={`guide-suggest-cost guide-suggest-cost-${oppositeSide(item.action.side)}`}
-                    aria-hidden="true"
-                  >
-                    {sideCost(oppositeSide(item.action.side), item.action.cost)}
-                  </span>
-                </button>
-              )}
-            </>
-          )}
-          {item.altAction && (
-            /* Same styling as the primary action: the lower-impact dose is an
-               equal choice, not a fallback. */
-            <>
-              <button
-                type="button"
-                className="guide-suggest-btn"
-                disabled={props.closed}
-                aria-label={
-                  item.altAction.side === "withdrawal"
-                    ? `Use energy: ${item.altAction.label}, ${item.altAction.cost} points`
-                    : `Add energy: ${item.altAction.label}, ${item.altAction.cost} points`
-                }
-                onClick={() => props.onAction(item, true)}
-              >
-                <span className="guide-suggest-main">
-                  <span className="guide-suggest-sparkle" aria-hidden="true">
-                    ✦
-                  </span>
-                  <span className="guide-suggest-label">{item.altAction.label}</span>
-                </span>
-                <span
-                  className={`guide-suggest-cost guide-suggest-cost-${item.altAction.side}`}
-                  aria-hidden="true"
-                >
-                  {item.altAction.side === "deposit"
-                    ? `+${item.altAction.cost}`
-                    : `−${item.altAction.cost}`}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="guide-suggest-btn guide-suggest-btn-secondary"
-                disabled={props.closed}
-                aria-label={`${sideVerb(oppositeSide(item.altAction.side))}: ${item.altAction.label}, ${item.altAction.cost} points`}
-                onClick={() => props.onAction(item, true, oppositeSide(item.altAction!.side))}
-              >
-                <span className="guide-suggest-main">
-                  <span className="guide-suggest-label">
-                    {sideVerb(oppositeSide(item.altAction.side))}
-                  </span>
-                </span>
-                <span
-                  className={`guide-suggest-cost guide-suggest-cost-${oppositeSide(item.altAction.side)}`}
-                  aria-hidden="true"
-                >
-                  {sideCost(oppositeSide(item.altAction.side), item.altAction.cost)}
-                </span>
-              </button>
-            </>
-          )}
+          {item.action && renderAction(item.action, false)}
+          {item.altAction && renderAction(item.altAction, true)}
         </div>
       )}
       <div className="guide-card-meta">
@@ -3391,15 +3461,24 @@ function Column(props: {
   phase: string;
   availableCapacity: number;
   addingRecentId: string | null;
+  editing: boolean;
+  dragActive: boolean;
+  draggingLineId: string | null;
   exitingIds: Set<string>;
   completingIds: Set<string>;
   onAdd: () => void;
+  onToggleEdit: () => void;
   onAddRecent: (s: RecentActivity) => void;
   onAddAllRecent: (items: RecentActivity[]) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
+  onMove: (line: Line, direction: "up" | "down") => void;
+  onMoveOtherSide: (line: Line) => void;
+  onDragStart: (line: Line) => void;
+  onDragEnd: () => void;
+  onDropLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
 }) {
   const columnId = `col-${props.side}`;
   const completedListId = `${columnId}-completed`;
@@ -3480,38 +3559,89 @@ function Column(props: {
     });
   }
 
+  function draggedLineId(e: DragEvent<HTMLElement>) {
+    return e.dataTransfer.getData("application/x-eaj-line-id") || props.draggingLineId;
+  }
+
+  function onColumnDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!props.dragActive || props.closed) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+
+  function onColumnDrop(e: DragEvent<HTMLDivElement>) {
+    if (!props.dragActive || props.closed) return;
+    const lineId = draggedLineId(e);
+    if (!lineId) return;
+    e.preventDefault();
+    const targetIndex = props.lines.filter((l) => l.id !== lineId).length;
+    props.onDropLine(lineId, props.side, targetIndex);
+  }
+
   return (
-    <div className={`panel column-panel ${props.className}`}>
+    <div
+      className={`panel column-panel ${props.className}${props.editing ? " column-editing" : ""}${props.dragActive ? " column-drop-active" : ""}`}
+      data-column-side={props.side}
+      onDragOver={onColumnDragOver}
+      onDrop={onColumnDrop}
+    >
       <div className="col-head">
         <h2>{props.title}</h2>
-        <button
-          type="button"
-          className="btn plus"
-          disabled={props.closed || addingBusy}
-          aria-label={
-            props.side === "deposit"
-              ? "Add energy"
-              : "Use energy"
-          }
-          onClick={props.onAdd}
-        >
-          +
-        </button>
+        <div className="col-head-actions">
+          {!props.closed && (
+            <button
+              type="button"
+              className={`column-edit-btn${props.editing ? " active" : ""}`}
+              aria-pressed={props.editing}
+              aria-label={`${props.editing ? "Finish editing" : "Edit"} ${props.title}`}
+              title={`${props.editing ? "Finish editing" : "Edit"} ${props.title}`}
+              onClick={props.onToggleEdit}
+            >
+              {props.editing ? "Done" : <PencilIcon />}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn plus"
+            disabled={props.closed || addingBusy || props.editing}
+            aria-label={
+              props.side === "deposit"
+                ? "Add energy"
+                : "Use energy"
+            }
+            onClick={props.onAdd}
+          >
+            +
+          </button>
+        </div>
       </div>
-      {incomplete.map((l) => (
+      {incomplete.map((l) => {
+        const index = props.lines.findIndex((line) => line.id === l.id);
+        return (
         <TaskRow
           key={l.id}
           line={l}
           closed={props.closed}
           audit={props.audit}
+          editing={props.editing}
+          dragActive={props.dragActive}
+          dragging={props.draggingLineId === l.id}
+          index={index}
+          count={props.lines.length}
           exiting={props.exitingIds.has(l.id)}
           busy={props.completingIds.has(l.id)}
           onActual={props.onActual}
           onComplete={props.onComplete}
           onRemove={props.onRemove}
           onOpen={props.onOpen}
+          onMove={props.onMove}
+          onMoveOtherSide={props.onMoveOtherSide}
+          onDragStart={props.onDragStart}
+          onDragEnd={props.onDragEnd}
+          onDropLine={props.onDropLine}
         />
-      ))}
+        );
+      })}
       {completedCount > 0 && praise.lead && (
         <div className="col-completed">
           <button
@@ -3541,20 +3671,33 @@ function Column(props: {
           </button>
           {showCompleted && (
             <div className="col-completed-list" id={completedListId}>
-              {completed.map((l) => (
+              {completed.map((l) => {
+                const index = props.lines.findIndex((line) => line.id === l.id);
+                return (
                 <TaskRow
                   key={l.id}
                   line={l}
                   closed={props.closed}
                   audit={props.audit}
+                  editing={props.editing}
+                  dragActive={props.dragActive}
+                  dragging={props.draggingLineId === l.id}
+                  index={index}
+                  count={props.lines.length}
                   exiting={false}
                   busy={props.completingIds.has(l.id)}
                   onActual={props.onActual}
                   onComplete={props.onComplete}
                   onRemove={props.onRemove}
                   onOpen={props.onOpen}
+                  onMove={props.onMove}
+                  onMoveOtherSide={props.onMoveOtherSide}
+                  onDragStart={props.onDragStart}
+                  onDragEnd={props.onDragEnd}
+                  onDropLine={props.onDropLine}
                 />
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -3658,25 +3801,144 @@ function TaskRow(props: {
   line: Line;
   closed: boolean;
   audit: boolean;
+  editing: boolean;
+  dragActive: boolean;
+  dragging: boolean;
+  index: number;
+  count: number;
   exiting?: boolean;
   busy?: boolean;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
+  onMove: (line: Line, direction: "up" | "down") => void;
+  onMoveOtherSide: (line: Line) => void;
+  onDragStart: (line: Line) => void;
+  onDragEnd: () => void;
+  onDropLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
 }) {
   const checked = props.line.completed || !!props.exiting;
+  const canArrange = props.editing && !props.closed && !props.busy && !props.exiting;
+  const otherSideLabel = props.line.side === "deposit" ? "Use energy" : "Add energy";
+
+  function onDragStart(e: DragEvent<HTMLElement>) {
+    if (!canArrange) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/x-eaj-line-id", props.line.id);
+    props.onDragStart(props.line);
+  }
+
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!props.dragActive || props.closed || props.dragging) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    if (!props.dragActive || props.closed) return;
+    const lineId = e.dataTransfer.getData("application/x-eaj-line-id");
+    if (!lineId || lineId === props.line.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    props.onDropLine(lineId, props.line.side, props.index + (before ? 0 : 1));
+  }
+
+  function resolvePointerDrop(clientX: number, clientY: number) {
+    if (!canArrange) return;
+    const target = document.elementFromPoint(clientX, clientY);
+    const targetRow = target instanceof Element
+      ? target.closest<HTMLElement>("[data-line-id][data-line-side]")
+      : null;
+    if (targetRow && targetRow.dataset.lineId !== props.line.id) {
+      const targetSide = targetRow.dataset.lineSide;
+      if (targetSide === "deposit" || targetSide === "withdrawal") {
+        const rows = [...document.querySelectorAll<HTMLElement>(`[data-line-side="${targetSide}"]`)];
+        const targetIndex = rows.findIndex((row) => row.dataset.lineId === targetRow.dataset.lineId);
+        if (targetIndex >= 0) {
+          const rect = targetRow.getBoundingClientRect();
+          const before = clientY < rect.top + rect.height / 2;
+          props.onDropLine(props.line.id, targetSide, targetIndex + (before ? 0 : 1));
+        }
+      }
+      return;
+    }
+
+    const targetColumn = target instanceof Element
+      ? target.closest<HTMLElement>("[data-column-side]")
+      : null;
+    const targetSide = targetColumn?.dataset.columnSide;
+    if (targetSide === "deposit" || targetSide === "withdrawal") {
+      props.onDropLine(props.line.id, targetSide, Number.MAX_SAFE_INTEGER);
+    }
+  }
+
+  function onHandlePointerDown(e: ReactPointerEvent<HTMLSpanElement>) {
+    if (!canArrange || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.preventDefault();
+    const pointerId = e.pointerId;
+    props.onDragStart(props.line);
+
+    const stopListening = () => {
+      document.removeEventListener("pointerup", onPointerUp, true);
+      document.removeEventListener("pointercancel", onPointerCancel, true);
+    };
+    const finish = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      event.preventDefault();
+      resolvePointerDrop(event.clientX, event.clientY);
+      props.onDragEnd();
+      stopListening();
+    };
+    const cancel = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      props.onDragEnd();
+      stopListening();
+    };
+    const onPointerUp = (event: PointerEvent) => finish(event);
+    const onPointerCancel = (event: PointerEvent) => cancel(event);
+    document.addEventListener("pointerup", onPointerUp, true);
+    document.addEventListener("pointercancel", onPointerCancel, true);
+  }
+
   return (
     <div
-      className={`task-row day-task${checked ? " completed" : ""}${props.exiting ? " task-row-exiting" : ""}`}
+      className={`task-row day-task${checked ? " completed" : ""}${props.editing ? " task-row-editing" : ""}${props.dragging ? " task-row-dragging" : ""}${props.exiting ? " task-row-exiting" : ""}`}
       role="group"
+      data-line-id={props.line.id}
+      data-line-side={props.line.side}
+      draggable={canArrange}
+      aria-label={props.editing ? `Arrange ${props.line.label}` : undefined}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={props.onDragEnd}
+      onDrop={onDrop}
     >
+      {props.editing && !props.closed && (
+        <span
+          className="task-drag-handle"
+          aria-hidden="true"
+          draggable={canArrange}
+          title="Drag to rearrange"
+          onDragStart={onDragStart}
+          onDragEnd={props.onDragEnd}
+          onPointerDown={onHandlePointerDown}
+          onPointerCancel={props.onDragEnd}
+        >
+          <GripIcon />
+        </span>
+      )}
       <button
         type="button"
         className={`task-status${checked ? " checked" : ""}`}
         aria-label={checked ? "Mark incomplete" : "Mark complete"}
         aria-pressed={checked}
-        disabled={props.closed || props.exiting || props.busy}
+        disabled={props.closed || props.exiting || props.busy || props.editing}
         onClick={(e) => props.onComplete(props.line, e.currentTarget)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -3687,6 +3949,7 @@ function TaskRow(props: {
       <button
         type="button"
         className="task-main task-detail-trigger"
+        disabled={props.editing}
         onClick={() => props.onOpen(props.line)}
       >
         <div className={checked ? "task-done-label" : undefined}>{props.line.label}</div>
@@ -3724,6 +3987,41 @@ function TaskRow(props: {
             onClick={() => props.onRemove(props.line.id)}
           >
             ×
+          </button>
+        </div>
+      )}
+      {props.editing && !props.closed && (
+        <div className="task-edit-controls" aria-label={`Arrange ${props.line.label}`}>
+          <button
+            type="button"
+            className="task-edit-control"
+            disabled={!canArrange || props.index <= 0}
+            aria-label={`Move ${props.line.label} earlier`}
+            title="Move earlier"
+            onClick={() => props.onMove(props.line, "up")}
+          >
+            <ChevronUpIcon />
+          </button>
+          <button
+            type="button"
+            className="task-edit-control"
+            disabled={!canArrange || props.index >= props.count - 1}
+            aria-label={`Move ${props.line.label} later`}
+            title="Move later"
+            onClick={() => props.onMove(props.line, "down")}
+          >
+            <ChevronDownIcon />
+          </button>
+          <button
+            type="button"
+            className="task-edit-control task-edit-control-wide"
+            disabled={!canArrange}
+            aria-label={`Move ${props.line.label} to ${otherSideLabel}`}
+            title={`Move to ${otherSideLabel}`}
+            onClick={() => props.onMoveOtherSide(props.line)}
+          >
+            <SwapColumnIcon />
+            <span>{otherSideLabel}</span>
           </button>
         </div>
       )}

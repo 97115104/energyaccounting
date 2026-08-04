@@ -12,7 +12,7 @@ import type { UserProfile } from "../App";
 import { Butterfly } from "../components/Butterfly";
 import { BecauseList } from "../components/BecauseList";
 import { DictatableField } from "../components/DictatableField";
-import { DictationControl } from "../components/DictationControl";
+import { MicIcon } from "../components/DictationControl";
 import { IdentityMark } from "../components/IdentityMark";
 import { IntelligenceOverview, type IntelligenceStatus } from "../components/IntelligenceOverview";
 import { ProfileSections } from "../components/ProfileSections";
@@ -1004,18 +1004,55 @@ function ColorMeaningInput({
       <label className="sr-only" htmlFor={`you-meaning-${slot}`}>
         {label} meaning
       </label>
-      <input
-        id={`you-meaning-${slot}`}
-        type="text"
-        className="you-color-meaning"
-        placeholder="What this color means to you"
-        maxLength={120}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onLocalChange(e.target.value)}
-        onBlur={(e) => onCommit(e.target.value)}
-      />
-      <DictationControl dictation={dictation} label={`${label} meaning`} disabled={disabled} hidePill />
+      <div className="dictatable-field single-line you-color-meaning-field">
+        <input
+          id={`you-meaning-${slot}`}
+          type="text"
+          className="you-color-meaning dictation-input"
+          placeholder="What this color means to you"
+          maxLength={120}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onLocalChange(e.target.value)}
+          onBlur={(e) => onCommit(e.target.value)}
+        />
+        {dictation.supported && (
+          <button
+            type="button"
+            className={`dictate-field-button${dictation.listening ? " recording" : ""}`}
+            disabled={disabled || (!dictation.listening && value.length >= 120)}
+            title={dictation.listening ? "Stop dictating" : `Dictate ${label} meaning`}
+            aria-label={
+              dictation.listening
+                ? `Stop dictating ${label} meaning`
+                : `Dictate ${label} meaning`
+            }
+            onClick={() => {
+              if (dictation.listening) {
+                dictation.stop();
+                return;
+              }
+              dictation.start();
+            }}
+          >
+            {dictation.listening ? (
+              <span className="rec-dot" aria-hidden="true" />
+            ) : (
+              <MicIcon />
+            )}
+          </button>
+        )}
+      </div>
+      {dictation.notice && (
+        <p className="dictation-status" role="status">
+          {dictation.notice}
+        </p>
+      )}
+      {dictation.error && (
+        <p className="dictation-notice" role="status">
+          {dictation.error}
+        </p>
+      )}
     </div>
   );
 }

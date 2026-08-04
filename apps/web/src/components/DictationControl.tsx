@@ -1,7 +1,6 @@
 /**
- * DictationControl: the Dictate / Stop button pair plus status, driven entirely
- * by a useDictation instance. It renders no field of its own, so it can sit
- * under any input or textarea.
+ * DictationControl: compact icon-only dictation control plus status, driven
+ * entirely by a useDictation instance.
  */
 
 import type { UseDictation } from "../lib/useDictation";
@@ -34,22 +33,23 @@ export function DictationControl({ dictation, label, disabled, hidePill }: Props
       {!listening ? (
         <button
           type="button"
-          className="btn secondary mic-btn"
+          className="btn secondary mic-btn mic-btn-icon"
           disabled={disabled}
           title="Typing is hard sometimes. Talk instead."
           aria-label={`Dictate ${label}`}
           onClick={start}
         >
-          <MicIcon /> Dictate
+          <MicIcon />
         </button>
       ) : (
         <button
           type="button"
-          className="btn danger mic-btn"
+          className="btn danger mic-btn mic-btn-icon"
+          title={`Stop dictating ${label}`}
           aria-label={`Stop dictating ${label}`}
           onClick={stop}
         >
-          <span className="rec-dot" aria-hidden="true" /> Stop dictating
+          <span className="rec-dot" aria-hidden="true" />
         </button>
       )}
       {listening && !hidePill && (

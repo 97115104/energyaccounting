@@ -940,10 +940,57 @@ html[data-weather="thunder"] .sky-layer {
   margin-bottom: 0.75rem;
 }
 
+.col-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .col-head h2 {
   margin: 0;
   font-family: var(--display);
   font-size: 1.35rem;
+}
+
+.column-edit-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.column-edit-btn:hover,
+.column-edit-btn:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.column-edit-btn:active {
+  transform: scale(0.96);
+}
+
+.column-edit-btn.active {
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.column-editing {
+  outline: 2px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  outline-offset: 2px;
+}
+
+.column-drop-active {
+  border-style: dashed;
 }
 
 .deposit-col {
@@ -1140,9 +1187,38 @@ html[data-theme="night"] .btn.secondary {
   gap: 0.35rem;
 }
 
+.task-row.day-task.task-row-editing {
+  grid-template-columns: 44px 44px minmax(0, 1fr) auto;
+  border: 1px dashed color-mix(in srgb, var(--accent) 36%, var(--line));
+}
+
+.task-row.day-task.task-row-dragging {
+  opacity: 0.55;
+  transform: scale(0.99);
+}
+
 .task-row.completed {
   border: 1px solid color-mix(in srgb, var(--deposit) 32%, var(--line));
   background: color-mix(in srgb, var(--deposit) 8%, var(--surface));
+}
+
+.task-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.task-row[draggable="true"] {
+  cursor: grab;
+}
+
+.task-row[draggable="true"]:active,
+.task-row[draggable="true"]:active .task-drag-handle {
+  cursor: grabbing;
 }
 
 .task-done-label {
@@ -1168,6 +1244,16 @@ html[data-theme="night"] .btn.secondary {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
+.task-detail-trigger:disabled {
+  color: inherit;
+  cursor: default;
+  opacity: 1;
+}
+
+.task-detail-trigger:disabled:hover {
+  background: transparent;
+}
+
 .task-detail-trigger:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 1px;
@@ -1177,6 +1263,53 @@ html[data-theme="night"] .btn.secondary {
   display: flex;
   gap: 0.35rem;
   align-items: center;
+}
+
+.task-edit-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.task-edit-control {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.task-edit-control:hover:not(:disabled),
+.task-edit-control:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+.task-edit-control:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.task-edit-control:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.task-edit-control-wide {
+  min-width: 0;
 }
 
 /* Flat remove control: red ×, no filled brick (matches header icon-btn). */
@@ -3084,6 +3217,66 @@ html[data-theme="night"] .guide-card {
   font-size: 0.92rem;
 }
 
+.guide-split-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-height: 48px;
+  border: 1.5px dotted color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  overflow: hidden;
+}
+
+.guide-split-label {
+  padding: 0.55rem 0.75rem;
+  align-self: center;
+}
+
+.guide-split-buttons {
+  display: flex;
+  align-self: stretch;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.guide-split-btn {
+  appearance: none;
+  min-width: 58px;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.guide-split-btn:first-child {
+  border-left: 0;
+}
+
+.guide-split-btn:hover:not(:disabled),
+.guide-split-btn:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.guide-split-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.guide-split-btn-deposit {
+  color: var(--deposit);
+}
+
+.guide-split-btn-withdrawal {
+  color: var(--withdraw);
+}
+
 .guide-suggest-main {
   display: flex;
   align-items: center;
@@ -3371,8 +3564,7 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   border: 0;
 }
 
-.task-detail-side legend,
-.task-detail-reorder > span {
+.task-detail-side legend {
   display: block;
   margin-bottom: 0.45rem;
   font-weight: 700;
@@ -3382,10 +3574,6 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-}
-
-.task-detail-reorder {
-  margin-bottom: 0.9rem;
 }
 
 .difficulty-field {
@@ -3540,11 +3728,74 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   color: var(--muted);
 }
 
-.detail-dictate-row {
-  margin-top: 0.5rem;
+.dictatable-field {
+  position: relative;
 }
 
-/* Reusable dictation row under any DictatableField. */
+.dictation-textarea {
+  width: 100%;
+  padding-right: 3.8rem;
+  padding-bottom: 3.1rem;
+}
+
+.dictation-input {
+  padding-right: 3.5rem;
+}
+
+.dictate-field-button {
+  appearance: none;
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 50% !important;
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  color: var(--ink);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--ink) 8%, transparent);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.dictatable-field.single-line .dictate-field-button {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.dictate-field-button:hover:not(:disabled),
+.dictate-field-button:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.dictate-field-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.dictatable-field.single-line .dictate-field-button:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.94);
+}
+
+.dictate-field-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dictate-field-button.recording {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--panel);
+}
+
+/* Standalone DictationControl remains available for compact inline editors. */
 .dictate-row {
   margin-top: 0.5rem;
   display: flex;
@@ -3553,11 +3804,18 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   gap: 0.5rem;
 }
 
-/* Dictation control. */
 .mic-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+}
+
+.mic-btn-icon {
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
 }
 
 .rec-dot {
@@ -4967,9 +5225,9 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   min-width: 160px;
 }
 
-/* The inline color-meaning dictate button stays compact next to the input. */
-.you-color-meaning-wrap .dictate-row {
-  margin-top: 0;
+.you-color-meaning-field {
+  flex: 1;
+  min-width: 200px;
 }
 
 .you-suggestions,
