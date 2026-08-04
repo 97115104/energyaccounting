@@ -940,6 +940,13 @@ html[data-weather="thunder"] .sky-layer {
   margin-bottom: 0.75rem;
 }
 
+.col-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
 .col-head-actions {
   display: inline-flex;
   align-items: center;
@@ -950,46 +957,6 @@ html[data-weather="thunder"] .sky-layer {
   margin: 0;
   font-family: var(--display);
   font-size: 1.35rem;
-}
-
-.column-edit-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 1.05rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
-}
-
-.column-edit-btn:hover,
-.column-edit-btn:focus-visible {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-.column-edit-btn:active {
-  transform: scale(0.96);
-}
-
-.column-edit-btn.active {
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-
-.column-editing {
-  outline: 2px solid color-mix(in srgb, var(--accent) 34%, transparent);
-  outline-offset: 2px;
 }
 
 .column-drop-active {
@@ -1182,7 +1149,13 @@ html[data-theme="night"] .btn.secondary {
   padding: 0.65rem 0.75rem;
   margin-bottom: 0.5rem;
   min-height: 52px;
-  transition: background 1.2s ease, color 1.2s ease, border-color 1.2s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.18s ease,
+    box-shadow 0.18s ease,
+    background 1.2s ease,
+    color 1.2s ease,
+    border-color 1.2s ease;
 }
 
 .task-row.day-task {
@@ -1190,14 +1163,34 @@ html[data-theme="night"] .btn.secondary {
   gap: 0.35rem;
 }
 
-.task-row.day-task.task-row-editing {
-  grid-template-columns: 44px 44px minmax(0, 1fr) auto;
-  border: 1px dashed color-mix(in srgb, var(--accent) 36%, var(--line));
+.task-row.day-task.task-row-arrangeable {
+  cursor: grab;
+}
+
+.task-row.day-task.task-row-arrangeable .task-detail-trigger {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .task-row.day-task.task-row-dragging {
-  opacity: 0.55;
-  transform: scale(0.99);
+  opacity: 0.62;
+  transform: scale(0.985);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-group(*) {
+    animation-duration: 0.22s;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
 }
 
 .task-row.completed {
@@ -1205,37 +1198,71 @@ html[data-theme="night"] .btn.secondary {
   background: color-mix(in srgb, var(--deposit) 8%, var(--surface));
 }
 
-.task-drag-handle {
+.task-switch-side {
   appearance: none;
+  position: relative;
   display: inline-grid;
   place-items: center;
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--muted);
-  cursor: grab;
-  touch-action: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 
-.task-drag-handle:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.task-drag-handle:hover:not(:disabled),
-.task-drag-handle:focus-visible:not(:disabled) {
+.task-switch-side:hover:not(:disabled),
+.task-switch-side:focus-visible:not(:disabled) {
   color: var(--ink);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.task-row[draggable="true"] {
-  cursor: grab;
+.task-switch-side:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
-.task-row[draggable="true"]:active,
-.task-row[draggable="true"]:active .task-drag-handle {
+.task-switch-side:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.task-switch-side::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 0.5rem);
+  top: 50%;
+  z-index: 6;
+  width: max-content;
+  max-width: 15rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, var(--ink) 6%);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(0.25rem, -50%);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.task-switch-side:hover:not(:disabled)::after,
+.task-switch-side:focus-visible:not(:disabled)::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.task-row.day-task.task-row-arrangeable:active {
+  cursor: grabbing;
+}
+
+.task-row.day-task.task-row-arrangeable:active .task-detail-trigger {
   cursor: grabbing;
 }
 
@@ -1256,6 +1283,7 @@ html[data-theme="night"] .btn.secondary {
   background: transparent;
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .task-detail-trigger:hover {
@@ -1283,51 +1311,18 @@ html[data-theme="night"] .btn.secondary {
   align-items: center;
 }
 
-.task-edit-controls {
-  grid-column: 3 / -1;
-  display: flex;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-}
-
-.task-edit-control {
-  appearance: none;
+.task-action-pair {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  background: color-mix(in srgb, var(--panel) 68%, transparent);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  align-items: stretch;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  overflow: visible;
 }
 
-.task-edit-control:hover:not(:disabled),
-.task-edit-control:focus-visible:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
-}
-
-.task-edit-control:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.task-edit-control:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-.task-edit-control-wide {
-  min-width: 8rem;
+.task-action-pair .task-switch-side {
+  border-radius: 9px 0 0 9px;
 }
 
 /* Flat remove control: red ×, no filled brick (matches header icon-btn). */
@@ -1349,6 +1344,11 @@ html[data-theme="night"] .btn.secondary {
   line-height: 1;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.task-action-pair .task-remove {
+  border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 0 9px 9px 0;
 }
 
 .task-remove:hover,
@@ -3601,6 +3601,12 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   display: block;
   margin-bottom: 0.45rem;
   font-weight: 700;
+}
+
+.task-detail-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .segmented-control {

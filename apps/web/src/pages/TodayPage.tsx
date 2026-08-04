@@ -1,8 +1,9 @@
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
@@ -86,6 +87,15 @@ type LineMovePreview = {
   targetIndex: number;
 } | null;
 
+type DocumentWithViewTransition = Document & {
+  startViewTransition?: (callback: () => void) => {
+    finished: Promise<void>;
+    ready: Promise<void>;
+    updateCallbackDone: Promise<void>;
+    skipTransition: () => void;
+  };
+};
+
 type Suggestion = {
   id: string;
   side: "deposit" | "withdrawal";
@@ -139,6 +149,7 @@ type DayPayload = {
 // warning threshold surfaces the counter before typing or dictation hits it.
 const DETAILS_MAX = 5000;
 const DETAILS_WARN_AT = 4500;
+const TOUCH_REORDER_HOLD_MS = 850;
 
 type SpeechTarget = "journal" | "details";
 
@@ -303,28 +314,6 @@ function LightbulbIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="m4 16.9-.8 3.9 3.9-.8L18.8 8.3l-3.1-3.1L4 16.9Zm16.2-11.5a1.7 1.7 0 0 0 0-2.4l-.1-.1a1.7 1.7 0 0 0-2.4 0l-.9.9 3.1 3.1.3-.3Z"
-      />
-    </svg>
-  );
-}
-
-function GripIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M8 5.5A1.5 1.5 0 1 1 5 5.5a1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm11-13A1.5 1.5 0 1 1 16 5.5a1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"
-      />
-    </svg>
-  );
-}
-
 function SwapColumnIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -378,6 +367,12 @@ function previewLineMove(lines: Line[], preview: LineMovePreview): Line[] {
   });
 }
 
+function sameLineMovePreview(a: LineMovePreview, b: LineMovePreview) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.lineId === b.lineId && a.targetSide === b.targetSide && a.targetIndex === b.targetIndex;
+}
+
 export function TodayPage({ user }: { user: UserProfile }) {
   const [params, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -424,9 +419,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
   });
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
-  const [boardEditing, setBoardEditing] = useState(false);
   const [draggingLineId, setDraggingLineId] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<LineMovePreview>(null);
+  const dragPreviewRef = useRef<LineMovePreview>(null);
   const [guideToast, setGuideToast] = useState<{ key: number; text: string } | null>(null);
   const [justFreed, setJustFreed] = useState<number | undefined>();
   // Rows mid exit-animation before they join the hidden/completed pool.
@@ -493,6 +488,25 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const detailTextDirtyRef = useRef(false);
   const detailSaveSeqRef = useRef(0);
   const loadGenerationRef = useRef(0);
+
+  function setDragPreviewNow(next: LineMovePreview) {
+    dragPreviewRef.current = next;
+    setDragPreview(next);
+  }
+
+  function previewLine(lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) {
+    const next = { lineId, targetSide, targetIndex };
+    if (sameLineMovePreview(dragPreviewRef.current, next)) return;
+    const doc = document as DocumentWithViewTransition;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (doc.startViewTransition && !reducedMotion) {
+      doc.startViewTransition(() => {
+        flushSync(() => setDragPreviewNow(next));
+      });
+      return;
+    }
+    setDragPreviewNow(next);
+  }
 
   useEffect(() => {
     journalRef.current = journal;
@@ -709,9 +723,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const readOnly = !!day && day.phase === "closed" && !amending;
   useEffect(() => {
     if (readOnly) {
-      setBoardEditing(false);
       setDraggingLineId(null);
-      setDragPreview(null);
+      setDragPreviewNow(null);
     }
   }, [day?.id, readOnly]);
 
@@ -1636,7 +1649,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
     setError(null);
     setDetailError(null);
-    setDragPreview(null);
+    setDragPreviewNow(null);
     setDraggingLineId(null);
     setDay((prev) => (prev?.id === day.id ? { ...prev, lines: optimisticLines } : prev));
     try {
@@ -1662,17 +1675,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
         // Best effort after a failed reorder.
       }
     }
-  }
-
-  async function moveLine(line: Line, direction: "up" | "down") {
-    if (!day || readOnly) return;
-    const ordered = day.lines
-      .filter((l) => l.side === line.side)
-      .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
-    const index = ordered.findIndex((l) => l.id === line.id);
-    if (index < 0) return;
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    await moveLineTo(line, line.side, targetIndex);
   }
 
   async function moveLineToOtherSide(line: Line) {
@@ -2574,31 +2576,28 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
-            editing={boardEditing}
-            dragActive={boardEditing}
+            dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("withdrawal")}
-            onToggleEdit={() => setBoardEditing((editing) => !editing)}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
-            onMove={(line, direction) => void moveLine(line, direction)}
             onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
             onDragStart={(line) => setDraggingLineId(line.id)}
             onDragEnd={() => {
               setDraggingLineId(null);
-              setDragPreview(null);
+              setDragPreviewNow(null);
             }}
             onPreviewLine={(lineId, targetSide, targetIndex) => {
-              setDragPreview({ lineId, targetSide, targetIndex });
+              previewLine(lineId, targetSide, targetIndex);
             }}
             onDropLine={(lineId, targetSide, targetIndex) => {
               const line = day.lines.find((l) => l.id === lineId);
               setDraggingLineId(null);
-              setDragPreview(null);
+              setDragPreviewNow(null);
               if (line) void moveLineTo(line, targetSide, targetIndex);
             }}
             exitingIds={exitingIds}
@@ -2615,31 +2614,28 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
-            editing={boardEditing}
-            dragActive={boardEditing}
+            dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("deposit")}
-            onToggleEdit={() => setBoardEditing((editing) => !editing)}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
             onComplete={(l, el) => void toggleComplete(l, el)}
             onRemove={(id) => void removeLine(id)}
             onOpen={openTaskDetails}
-            onMove={(line, direction) => void moveLine(line, direction)}
             onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
             onDragStart={(line) => setDraggingLineId(line.id)}
             onDragEnd={() => {
               setDraggingLineId(null);
-              setDragPreview(null);
+              setDragPreviewNow(null);
             }}
             onPreviewLine={(lineId, targetSide, targetIndex) => {
-              setDragPreview({ lineId, targetSide, targetIndex });
+              previewLine(lineId, targetSide, targetIndex);
             }}
             onDropLine={(lineId, targetSide, targetIndex) => {
               const line = day.lines.find((l) => l.id === lineId);
               setDraggingLineId(null);
-              setDragPreview(null);
+              setDragPreviewNow(null);
               if (line) void moveLineTo(line, targetSide, targetIndex);
             }}
             exitingIds={exitingIds}
@@ -2971,7 +2967,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               }}
             />
             <p className="ob-eyebrow">
-              {detailLine.side === "deposit" ? "Add energy" : "Use energy"}
+              {detailSide === "deposit" ? "Add energy" : "Use energy"}
               {detailLine.completed ? " · Done" : " · Pending"}
             </p>
             <h2 id="task-detail-title" className="sr-only">
@@ -2986,27 +2982,19 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 onChange={(e) => setDetailLabel(e.target.value)}
               />
             </div>
-            <fieldset className="task-detail-side" disabled={readOnly}>
-              <legend>Column</legend>
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={`btn ${detailSide === "withdrawal" ? "accent" : "secondary"}`}
-                  aria-pressed={detailSide === "withdrawal"}
-                  onClick={() => setDetailSide("withdrawal")}
-                >
-                  Use energy
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${detailSide === "deposit" ? "accent" : "secondary"}`}
-                  aria-pressed={detailSide === "deposit"}
-                  onClick={() => setDetailSide("deposit")}
-                >
-                  Add energy
-                </button>
-              </div>
-            </fieldset>
+            <div className="task-detail-side">
+              <span className="field-legend">Column</span>
+              <button
+                type="button"
+                className="btn secondary task-detail-switch"
+                disabled={readOnly}
+                aria-label={`Switch to ${detailSide === "deposit" ? "Use energy" : "Add energy"}`}
+                onClick={() => setDetailSide((side) => (side === "deposit" ? "withdrawal" : "deposit"))}
+              >
+                <SwapColumnIcon />
+                <span>Switch column</span>
+              </button>
+            </div>
             <div className="task-detail-costs">
               <div className="field">
                 <label htmlFor="task-detail-planned">
@@ -3539,20 +3527,17 @@ function Column(props: {
   phase: string;
   availableCapacity: number;
   addingRecentId: string | null;
-  editing: boolean;
   dragActive: boolean;
   draggingLineId: string | null;
   exitingIds: Set<string>;
   completingIds: Set<string>;
   onAdd: () => void;
-  onToggleEdit: () => void;
   onAddRecent: (s: RecentActivity) => void;
   onAddAllRecent: (items: RecentActivity[]) => void;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
-  onMove: (line: Line, direction: "up" | "down") => void;
   onMoveOtherSide: (line: Line) => void;
   onDragStart: (line: Line) => void;
   onDragEnd: () => void;
@@ -3643,8 +3628,9 @@ function Column(props: {
   }
 
   function onColumnDragOver(e: DragEvent<HTMLDivElement>) {
-    if (!props.dragActive || props.closed) return;
+    if (props.closed) return;
     const lineId = draggedLineId(e);
+    if (!lineId) return;
     if (lineId) {
       const targetIndex = props.lines.filter((l) => l.id !== lineId).length;
       props.onPreviewLine(lineId, props.side, targetIndex);
@@ -3654,7 +3640,7 @@ function Column(props: {
   }
 
   function onColumnDrop(e: DragEvent<HTMLDivElement>) {
-    if (!props.dragActive || props.closed) return;
+    if (props.closed) return;
     const lineId = draggedLineId(e);
     if (!lineId) return;
     e.preventDefault();
@@ -3664,30 +3650,25 @@ function Column(props: {
 
   return (
     <div
-      className={`panel column-panel ${props.className}${props.editing ? " column-editing" : ""}${props.dragActive ? " column-drop-active" : ""}`}
+      className={`panel column-panel ${props.className}${props.dragActive ? " column-drop-active" : ""}`}
       data-column-side={props.side}
       onDragOver={onColumnDragOver}
       onDrop={onColumnDrop}
     >
       <div className="col-head">
-        <h2>{props.title}</h2>
+        <div className="col-title">
+          <h2>{props.title}</h2>
+          <HelpTip label={`${props.title} column`}>
+            {props.side === "deposit"
+              ? "Add energy is for experiences, supports, and activities that restore energy. These entries add back to projected remaining."
+              : "Use energy is for demands, tasks, and experiences that spend energy. Planned entries reserve points until you complete or audit them."}
+          </HelpTip>
+        </div>
         <div className="col-head-actions">
-          {!props.closed && (
-            <button
-              type="button"
-              className={`column-edit-btn${props.editing ? " active" : ""}`}
-              aria-pressed={props.editing}
-              aria-label={`${props.editing ? "Finish editing" : "Edit"} ${props.title}`}
-              title={`${props.editing ? "Finish editing" : "Edit"} ${props.title}`}
-              onClick={props.onToggleEdit}
-            >
-              {props.editing ? <span aria-hidden="true">✓</span> : <PencilIcon />}
-            </button>
-          )}
           <button
             type="button"
             className="btn plus"
-            disabled={props.closed || addingBusy || props.editing}
+            disabled={props.closed || addingBusy}
             aria-label={
               props.side === "deposit"
                 ? "Add energy"
@@ -3707,18 +3688,16 @@ function Column(props: {
           line={l}
           closed={props.closed}
           audit={props.audit}
-          editing={props.editing}
           dragActive={props.dragActive}
+          draggingLineId={props.draggingLineId}
           dragging={props.draggingLineId === l.id}
           index={index}
-          count={props.lines.length}
           exiting={props.exitingIds.has(l.id)}
           busy={props.completingIds.has(l.id)}
           onActual={props.onActual}
           onComplete={props.onComplete}
           onRemove={props.onRemove}
           onOpen={props.onOpen}
-          onMove={props.onMove}
           onMoveOtherSide={props.onMoveOtherSide}
           onDragStart={props.onDragStart}
           onDragEnd={props.onDragEnd}
@@ -3764,18 +3743,16 @@ function Column(props: {
                   line={l}
                   closed={props.closed}
                   audit={props.audit}
-                  editing={props.editing}
                   dragActive={props.dragActive}
+                  draggingLineId={props.draggingLineId}
                   dragging={props.draggingLineId === l.id}
                   index={index}
-                  count={props.lines.length}
                   exiting={false}
                   busy={props.completingIds.has(l.id)}
                   onActual={props.onActual}
                   onComplete={props.onComplete}
                   onRemove={props.onRemove}
                   onOpen={props.onOpen}
-                  onMove={props.onMove}
                   onMoveOtherSide={props.onMoveOtherSide}
                   onDragStart={props.onDragStart}
                   onDragEnd={props.onDragEnd}
@@ -3887,18 +3864,16 @@ function TaskRow(props: {
   line: Line;
   closed: boolean;
   audit: boolean;
-  editing: boolean;
   dragActive: boolean;
+  draggingLineId: string | null;
   dragging: boolean;
   index: number;
-  count: number;
   exiting?: boolean;
   busy?: boolean;
   onActual: (line: Line, actual: number | null) => Promise<void>;
   onComplete: (line: Line, anchorEl?: HTMLElement | null) => void;
   onRemove: (id: string) => void;
   onOpen: (line: Line) => void;
-  onMove: (line: Line, direction: "up" | "down") => void;
   onMoveOtherSide: (line: Line) => void;
   onDragStart: (line: Line) => void;
   onDragEnd: () => void;
@@ -3906,8 +3881,10 @@ function TaskRow(props: {
   onDropLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
 }) {
   const checked = props.line.completed || !!props.exiting;
-  const canArrange = props.editing && !props.closed && !props.busy && !props.exiting;
+  const canArrange = !props.closed && !props.busy && !props.exiting;
   const otherSideLabel = props.line.side === "deposit" ? "Use energy" : "Add energy";
+  const suppressOpenRef = useRef(false);
+  const lastPointerStartRef = useRef(0);
 
   function onDragStart(e: DragEvent<HTMLElement>) {
     if (!canArrange) {
@@ -3920,8 +3897,15 @@ function TaskRow(props: {
   }
 
   function onDragOver(e: DragEvent<HTMLDivElement>) {
-    if (!props.dragActive || props.closed || props.dragging) return;
-    const lineId = e.dataTransfer.getData("application/x-eaj-line-id");
+    if (props.closed) return;
+    const lineId = e.dataTransfer.getData("application/x-eaj-line-id") || props.draggingLineId;
+    if (!lineId) return;
+    if (props.dragging || lineId === props.line.id) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      return;
+    }
     if (lineId && lineId !== props.line.id) {
       const rect = e.currentTarget.getBoundingClientRect();
       const before = e.clientY < rect.top + rect.height / 2;
@@ -3933,9 +3917,14 @@ function TaskRow(props: {
   }
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
-    if (!props.dragActive || props.closed) return;
-    const lineId = e.dataTransfer.getData("application/x-eaj-line-id");
-    if (!lineId || lineId === props.line.id) return;
+    if (props.closed) return;
+    const lineId = e.dataTransfer.getData("application/x-eaj-line-id") || props.draggingLineId;
+    if (!lineId) return;
+    if (lineId === props.line.id) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -3952,7 +3941,10 @@ function TaskRow(props: {
     const targetRow = target instanceof Element
       ? target.closest<HTMLElement>("[data-line-id][data-line-side]")
       : null;
-    if (targetRow && targetRow.dataset.lineId !== props.line.id) {
+    if (targetRow?.dataset.lineId === props.line.id) {
+      return { targetSide: props.line.side, targetIndex: props.index };
+    }
+    if (targetRow) {
       const targetSide = targetRow.dataset.lineSide;
       if (targetSide === "deposit" || targetSide === "withdrawal") {
         const rows = [...document.querySelectorAll<HTMLElement>(`[data-line-side="${targetSide}"]`)];
@@ -3978,94 +3970,198 @@ function TaskRow(props: {
     return null;
   }
 
-  function onHandlePointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
-    if (!canArrange || (e.pointerType === "mouse" && e.button !== 0)) return;
-    e.preventDefault();
-    const pointerId = e.pointerId;
-    props.onDragStart(props.line);
+  function startArrangeTracking(options: {
+    startX: number;
+    startY: number;
+    longPress: boolean;
+    matches: (event: PointerEvent | MouseEvent) => boolean;
+    addListeners: (handlers: {
+      move: (event: Event) => void;
+      up: (event: Event) => void;
+      cancel: (event: Event) => void;
+    }) => void;
+    removeListeners: (handlers: {
+      move: (event: Event) => void;
+      up: (event: Event) => void;
+      cancel: (event: Event) => void;
+    }) => void;
+  }) {
+    const { startX, startY, longPress } = options;
+    const startThreshold = longPress ? 10 : 4;
+    const dropThreshold = 6;
+    let active = false;
+    let cancelled = false;
+    let holdTimer: number | null = null;
 
-    const stopListening = () => {
-      document.removeEventListener("pointermove", onPointerMove, true);
-      document.removeEventListener("pointerup", onPointerUp, true);
-      document.removeEventListener("pointercancel", onPointerCancel, true);
+    const begin = () => {
+      if (active || cancelled) return;
+      active = true;
+      suppressOpenRef.current = true;
+      props.onDragStart(props.line);
+      props.onPreviewLine(props.line.id, props.line.side, props.index);
     };
-    const preview = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
+    if (longPress) {
+      holdTimer = window.setTimeout(begin, TOUCH_REORDER_HOLD_MS);
+    }
+
+    const releaseClickSuppression = () => {
+      window.setTimeout(() => {
+        suppressOpenRef.current = false;
+      }, 120);
+    };
+    const preview = (event: PointerEvent | MouseEvent) => {
+      if (!active) return;
       const target = resolvePointerTarget(event.clientX, event.clientY);
       if (target) props.onPreviewLine(props.line.id, target.targetSide, target.targetIndex);
     };
-    const finish = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
-      preview(event);
-      event.preventDefault();
-      const target = resolvePointerTarget(event.clientX, event.clientY);
-      if (target) {
-        props.onDropLine(props.line.id, target.targetSide, target.targetIndex);
-      } else {
-        props.onDragEnd();
+    const stopListening = (handlers: {
+      move: (event: Event) => void;
+      up: (event: Event) => void;
+      cancel: (event: Event) => void;
+    }) => {
+      if (holdTimer != null) {
+        window.clearTimeout(holdTimer);
+        holdTimer = null;
       }
-      stopListening();
+      options.removeListeners(handlers);
     };
-    const cancel = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
-      props.onDragEnd();
-      stopListening();
+
+    const handlers = {
+      move: (rawEvent: Event) => {
+        const event = rawEvent as PointerEvent | MouseEvent;
+        if (!options.matches(event)) return;
+        const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (!active && longPress) {
+          if (moved > startThreshold) {
+            cancelled = true;
+            stopListening(handlers);
+          }
+          return;
+        }
+        if (!active && moved > startThreshold) {
+          begin();
+        }
+        if (active) event.preventDefault();
+        preview(event);
+      },
+      up: (rawEvent: Event) => {
+        const event = rawEvent as PointerEvent | MouseEvent;
+        if (!options.matches(event)) return;
+        if (!active) {
+          cancelled = true;
+          stopListening(handlers);
+          return;
+        }
+        preview(event);
+        event.preventDefault();
+        const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (moved < dropThreshold) {
+          props.onDragEnd();
+          releaseClickSuppression();
+          stopListening(handlers);
+          return;
+        }
+        const target = resolvePointerTarget(event.clientX, event.clientY);
+        if (target) {
+          props.onDropLine(props.line.id, target.targetSide, target.targetIndex);
+        } else {
+          props.onDragEnd();
+        }
+        releaseClickSuppression();
+        stopListening(handlers);
+      },
+      cancel: (rawEvent: Event) => {
+        const event = rawEvent as PointerEvent | MouseEvent;
+        if (!options.matches(event)) return;
+        cancelled = true;
+        props.onDragEnd();
+        releaseClickSuppression();
+        stopListening(handlers);
+      },
     };
-    const onPointerMove = (event: PointerEvent) => preview(event);
-    const onPointerUp = (event: PointerEvent) => finish(event);
-    const onPointerCancel = (event: PointerEvent) => cancel(event);
-    document.addEventListener("pointermove", onPointerMove, true);
-    document.addEventListener("pointerup", onPointerUp, true);
-    document.addEventListener("pointercancel", onPointerCancel, true);
+
+    options.addListeners(handlers);
   }
 
-  function onHandleKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (!canArrange) return;
-    if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-      e.preventDefault();
-      props.onMove(props.line, "up");
-    } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-      e.preventDefault();
-      props.onMove(props.line, "down");
+  function onArrangePointerDown(
+    e: ReactPointerEvent<HTMLElement>,
+    options: { mouseOnly?: boolean; preventDefaultOnDown?: boolean } = {},
+  ) {
+    if (options.mouseOnly && e.pointerType !== "mouse") return;
+    if (!canArrange || (e.pointerType === "mouse" && e.button !== 0)) return;
+    lastPointerStartRef.current = window.performance.now();
+    if (options.preventDefaultOnDown !== false) e.preventDefault();
+    const pointerId = e.pointerId;
+    const mousePointer = e.pointerType === "mouse";
+    startArrangeTracking({
+      startX: e.clientX,
+      startY: e.clientY,
+      longPress: e.pointerType !== "mouse",
+      matches: (event) => ("pointerId" in event ? event.pointerId === pointerId : mousePointer),
+      addListeners: (handlers) => {
+        document.addEventListener("pointermove", handlers.move, true);
+        document.addEventListener("pointerup", handlers.up, true);
+        document.addEventListener("pointercancel", handlers.cancel, true);
+        if (mousePointer) {
+          document.addEventListener("mousemove", handlers.move, true);
+          document.addEventListener("mouseup", handlers.up, true);
+        }
+      },
+      removeListeners: (handlers) => {
+        document.removeEventListener("pointermove", handlers.move, true);
+        document.removeEventListener("pointerup", handlers.up, true);
+        document.removeEventListener("pointercancel", handlers.cancel, true);
+        if (mousePointer) {
+          document.removeEventListener("mousemove", handlers.move, true);
+          document.removeEventListener("mouseup", handlers.up, true);
+        }
+      },
+    });
+  }
+
+  function onArrangeMouseDown(e: ReactMouseEvent<HTMLElement>) {
+    if (!canArrange || e.button !== 0) return;
+    if (
+      typeof window.PointerEvent !== "undefined" &&
+      window.performance.now() - lastPointerStartRef.current < 400
+    ) {
+      return;
     }
+    startArrangeTracking({
+      startX: e.clientX,
+      startY: e.clientY,
+      longPress: false,
+      matches: () => true,
+      addListeners: (handlers) => {
+        document.addEventListener("mousemove", handlers.move, true);
+        document.addEventListener("mouseup", handlers.up, true);
+      },
+      removeListeners: (handlers) => {
+        document.removeEventListener("mousemove", handlers.move, true);
+        document.removeEventListener("mouseup", handlers.up, true);
+      },
+    });
   }
 
   return (
     <div
-      className={`task-row day-task${checked ? " completed" : ""}${props.editing ? " task-row-editing" : ""}${props.dragging ? " task-row-dragging" : ""}${props.exiting ? " task-row-exiting" : ""}`}
+      className={`task-row day-task${checked ? " completed" : ""}${canArrange ? " task-row-arrangeable" : ""}${props.dragging ? " task-row-dragging" : ""}${props.exiting ? " task-row-exiting" : ""}`}
       role="group"
       data-line-id={props.line.id}
       data-line-side={props.line.side}
-      draggable={canArrange}
-      aria-label={props.editing ? `Arrange ${props.line.label}` : undefined}
+      draggable={false}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={props.onDragEnd}
       onDrop={onDrop}
+      style={{ viewTransitionName: `task-${props.line.id}` }}
     >
-      {props.editing && !props.closed && (
-        <button
-          type="button"
-          className="task-drag-handle"
-          draggable={canArrange}
-          disabled={!canArrange}
-          aria-label={`Reorder ${props.line.label}`}
-          title="Drag to rearrange"
-          onDragStart={onDragStart}
-          onDragEnd={props.onDragEnd}
-          onPointerDown={onHandlePointerDown}
-          onPointerCancel={props.onDragEnd}
-          onKeyDown={onHandleKeyDown}
-        >
-          <GripIcon />
-        </button>
-      )}
       <button
         type="button"
         className={`task-status${checked ? " checked" : ""}`}
         aria-label={checked ? "Mark incomplete" : "Mark complete"}
         aria-pressed={checked}
-        disabled={props.closed || props.exiting || props.busy || props.editing}
+        disabled={props.closed || props.exiting || props.busy}
         onClick={(e) => props.onComplete(props.line, e.currentTarget)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -4076,8 +4172,18 @@ function TaskRow(props: {
       <button
         type="button"
         className="task-main task-detail-trigger"
-        disabled={props.editing}
-        onClick={() => props.onOpen(props.line)}
+        title={canArrange ? "Drag to rearrange" : undefined}
+        onPointerDown={(e) => onArrangePointerDown(e, { preventDefaultOnDown: false })}
+        onMouseDown={onArrangeMouseDown}
+        onClick={(e) => {
+          if (suppressOpenRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            suppressOpenRef.current = false;
+            return;
+          }
+          props.onOpen(props.line);
+        }}
       >
         <div className={checked ? "task-done-label" : undefined}>{props.line.label}</div>
         <div className="task-meta">
@@ -4106,30 +4212,40 @@ function TaskRow(props: {
               }}
             />
           )}
-          <button
-            type="button"
-            className="task-remove"
-            aria-label="Remove"
-            disabled={props.busy || props.exiting}
-            onClick={() => props.onRemove(props.line.id)}
-          >
-            ×
-          </button>
-        </div>
-      )}
-      {props.editing && !props.closed && (
-        <div className="task-edit-controls" aria-label={`Arrange ${props.line.label}`}>
-          <button
-            type="button"
-            className="task-edit-control task-edit-control-wide"
-            disabled={!canArrange}
-            aria-label={`Switch ${props.line.label} to ${otherSideLabel}`}
-            title={`Switch to ${otherSideLabel}`}
-            onClick={() => props.onMoveOtherSide(props.line)}
-          >
-            <SwapColumnIcon />
-            <span>Switch column</span>
-          </button>
+          {props.audit ? (
+            <div className="task-action-pair" aria-label="Task actions">
+              <button
+                type="button"
+                className="task-switch-side"
+                disabled={!canArrange}
+                aria-label={`Switch ${props.line.label} to ${otherSideLabel}`}
+                title={`Switch to ${otherSideLabel}`}
+                data-tooltip={`Switch to ${otherSideLabel}`}
+                onClick={() => props.onMoveOtherSide(props.line)}
+              >
+                <SwapColumnIcon />
+              </button>
+              <button
+                type="button"
+                className="task-remove"
+                aria-label="Remove"
+                disabled={props.busy || props.exiting}
+                onClick={() => props.onRemove(props.line.id)}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="task-remove"
+              aria-label="Remove"
+              disabled={props.busy || props.exiting}
+              onClick={() => props.onRemove(props.line.id)}
+            >
+              ×
+            </button>
+          )}
         </div>
       )}
     </div>
