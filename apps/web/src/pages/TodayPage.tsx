@@ -1,4 +1,4 @@
-import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
+import { applyLinePositions, deriveLineReorder, isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -53,6 +53,7 @@ import { withPreservedScroll } from "../lib/preserveScroll";
 import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
 import { useQuarterHourClock } from "../lib/useQuarterHourClock";
+import { useModalFocusTrap } from "../lib/useModalFocusTrap";
 import { conditionsAt, dayAverageConditions, parseDayWeather } from "../lib/weatherInsight";
 import {
   defaultTemperatureUnit,
@@ -546,6 +547,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftCost, setDraftCost] = useState("20");
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
+  const suggestionRequestRef = useRef(0);
   // Which recent row is mid-add, so a slow request cannot be double-tapped.
   // The ref is the synchronous lock; the state drives the busy rendering.
   const [addingRecentId, setAddingRecentId] = useState<string | null>(null);
@@ -767,316 +769,63 @@ export function TodayPage({ user }: { user: UserProfile }) {
     };
   }, [day?.id]);
 
-  // Keep keyboard focus inside the destructive confirmation.
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("delete-day-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((element) => !element.hasAttribute("disabled"))
-        : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !deletingDayRef.current) {
-        setConfirmingDelete(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (!list.length) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [confirmingDelete]);
-
-  // Keep keyboard focus inside the close-day confirmation.
-  useEffect(() => {
-    if (!confirmingClose) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("close-day-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((element) => !element.hasAttribute("disabled"))
-        : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !phaseBusyRef.current) {
-        setConfirmingClose(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (!list.length) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [confirmingClose]);
-
-  // Keep keyboard focus inside the over-budget confirmation.
-  useEffect(() => {
-    if (!overBudgetAdd) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("over-budget-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((element) => !element.hasAttribute("disabled"))
-        : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !overBudgetBusy) {
-        setOverBudgetAdd(null);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (!list.length) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [overBudgetAdd, overBudgetBusy]);
-
-  // Escape closes the celebration modal; Tab stays inside it.
-  useEffect(() => {
-    if (!closeCelebration) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("insight-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((el) => !el.hasAttribute("disabled"))
-        : [];
-
-    // Move focus in after paint so the dialog node exists.
-    const focusId = window.requestAnimationFrame(() => {
-      const first = focusables()[0];
-      first?.focus({ preventScroll: true });
-    });
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setCloseCelebration(null);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (list.length === 0) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      window.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [closeCelebration]);
-
-  // Escape closes the add-item sheet; Tab stays inside (same contract as the
-  // other dialogs). Initial focus lands on the first useful control: the
-  // first addable Recent row when one exists, otherwise the label field.
-  useEffect(() => {
-    if (!draftSide) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("add-item-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((el) => !el.hasAttribute("disabled"))
-        : [];
-
-    const focusId = window.requestAnimationFrame(() => {
-      const list = focusables();
-      const firstUseful = list.find((el) => el.getAttribute("aria-disabled") !== "true");
-      (firstUseful ?? list[0])?.focus({ preventScroll: true });
-    });
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setDraftSide(null);
-        setDraftLabel("");
-        setDraftCost("20");
-        setSuggestNote(null);
-        setAddingRecentId(null);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (list.length === 0) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      window.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [draftSide]);
-
-  // Escape closes task details; Tab stays inside the dialog (same contract as close celebration).
-  useEffect(() => {
-    if (!detailLineId) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("task-detail-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((el) => !el.hasAttribute("disabled"))
-        : [];
-
-    const focusId = window.requestAnimationFrame(() => {
-      const first = focusables()[0];
-      first?.focus({ preventScroll: true });
-    });
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        stopLiveSpeech();
-        setDetailLineId(null);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (list.length === 0) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      window.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [detailLineId, listening]);
-
-  // Escape closes the guide sheet; Tab stays inside (same contract as the
-  // other dialogs on this page).
-  useEffect(() => {
-    if (!guideOpen) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("guide-sheet");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((el) => !el.hasAttribute("disabled"))
-        : [];
-
-    const focusId = window.requestAnimationFrame(() => {
-      focusables()[0]?.focus({ preventScroll: true });
-    });
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setGuideOpen(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (list.length === 0) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      window.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [guideOpen]);
+  useModalFocusTrap({
+    open: confirmingDelete,
+    modalId: "delete-day-modal",
+    eventTarget: "document",
+    onEscape: () => {
+      if (!deletingDayRef.current) setConfirmingDelete(false);
+    },
+  });
+  useModalFocusTrap({
+    open: confirmingClose,
+    modalId: "close-day-modal",
+    eventTarget: "document",
+    onEscape: () => {
+      if (!phaseBusyRef.current) setConfirmingClose(false);
+    },
+  });
+  useModalFocusTrap({
+    open: !!overBudgetAdd,
+    modalId: "over-budget-modal",
+    eventTarget: "document",
+    onEscape: () => {
+      if (!overBudgetBusy) setOverBudgetAdd(null);
+    },
+  });
+  useModalFocusTrap({
+    open: !!closeCelebration,
+    modalId: "insight-modal",
+    onEscape: () => setCloseCelebration(null),
+  });
+  useModalFocusTrap({
+    open: !!draftSide,
+    modalId: "add-item-modal",
+    preferEnabledControl: true,
+    onEscape: () => {
+      setDraftSide(null);
+      setDraftLabel("");
+      setDraftCost("20");
+      setSuggestNote(null);
+      setAddingRecentId(null);
+    },
+  });
+  useModalFocusTrap({
+    open: !!detailLineId,
+    modalId: "task-detail-modal",
+    onEscape: () => {
+      stopLiveSpeech();
+      setDetailLineId(null);
+    },
+  });
+  useModalFocusTrap({
+    open: guideOpen,
+    modalId: "guide-sheet",
+    onEscape: () => setGuideOpen(false),
+  });
 
   useEffect(() => {
+    const request = ++suggestionRequestRef.current;
     if (!draftLabel.trim() || !day) return;
     const catalog = [
       ...day.lines
@@ -1088,6 +837,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     ];
     const t = window.setTimeout(() => {
       void suggestCost(draftLabel, catalog).then((r) => {
+        if (suggestionRequestRef.current !== request) return;
         setDraftCost(String(r.cost));
         setSuggestNote(
           r.source === "default"
@@ -1590,41 +1340,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   async function moveLineTo(line: Line, targetSide: "deposit" | "withdrawal", targetIndex: number) {
     if (!day || readOnly) return;
-    const sourceSide = line.side;
-    const ordered = (side: "deposit" | "withdrawal") =>
-      day.lines
-        .filter((l) => l.side === side)
-        .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
-    const desired = new Map<string, { side: "deposit" | "withdrawal"; sort: number }>();
-
-    if (sourceSide !== targetSide) {
-      ordered(sourceSide)
-        .filter((l) => l.id !== line.id)
-        .forEach((l, index) => desired.set(l.id, { side: sourceSide, sort: index }));
-    }
-
-    const targetOrdered = ordered(targetSide);
-    const sourceIndex = targetSide === sourceSide
-      ? targetOrdered.findIndex((l) => l.id === line.id)
-      : -1;
-    const adjustedTargetIndex =
-      sourceIndex >= 0 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-    const targetWithoutLine = targetOrdered.filter((l) => l.id !== line.id);
-    const clampedIndex = Math.max(0, Math.min(adjustedTargetIndex, targetWithoutLine.length));
-    const targetWithLine = [...targetWithoutLine];
-    targetWithLine.splice(clampedIndex, 0, { ...line, side: targetSide });
-    targetWithLine.forEach((l, index) => desired.set(l.id, { side: targetSide, sort: index }));
-
-    const existing = new Map(day.lines.map((l) => [l.id, l]));
-    const updates = [...desired.entries()].filter(([id, next]) => {
-      const current = existing.get(id);
-      return current && (current.sort !== next.sort || current.side !== next.side);
-    });
+    const updates = deriveLineReorder(day.lines, line.id, targetSide, targetIndex);
     if (!updates.length) return;
-    const optimisticLines = day.lines.map((current) => {
-      const next = desired.get(current.id);
-      return next ? { ...current, side: next.side, sort: next.sort } : current;
-    });
+    const optimisticLines = applyLinePositions(day.lines, updates);
 
     setError(null);
     setDetailError(null);
@@ -1632,18 +1350,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setDraggingLineId(null);
     setDay((prev) => (prev?.id === day.id ? { ...prev, lines: optimisticLines } : prev));
     try {
-      await Promise.all(
-        updates.map(([id, next]) =>
-          api(`/api/days/${day.id}/lines/${id}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              sort: next.sort,
-              side: next.side,
-              allowOverCapacity: next.side === "withdrawal",
-            }),
-          }),
-        ),
-      );
+      await api(`/api/days/${day.id}/lines/reorder`, {
+        method: "PATCH",
+        body: JSON.stringify({ positions: updates }),
+      });
       await withPreservedScroll(() => load(undefined, { soft: true }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not move this item.");

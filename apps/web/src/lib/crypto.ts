@@ -1,6 +1,7 @@
 /** Client-side E2E helpers: password → KEK (Argon2id) → wrap/unwrap DEK → AES-GCM. */
 
 import { argon2id } from "hash-wasm";
+import { invalidatePersonalData } from "./personalDataCache";
 
 const textEnc = new TextEncoder();
 const textDec = new TextDecoder();
@@ -119,6 +120,7 @@ type StoredDek = {
 
 export function setSessionDek(dek: CryptoKey | null) {
   sessionDek = dek;
+  invalidatePersonalData();
 }
 
 export function getSessionDek(): CryptoKey | null {

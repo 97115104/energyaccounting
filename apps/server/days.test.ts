@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { eq } from "drizzle-orm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,9 @@ process.env.DATA_DIR = dataDir;
 process.on("exit", () => {
   rmSync(dataDir, { recursive: true, force: true });
 });
+
+const { migrateDatabase } = await import("./src/db/migrate.ts");
+migrateDatabase(dataDir);
 
 const [{ dayRoutes }, { db }, schema, session] = await Promise.all([
   import("./src/routes/days.ts"),
@@ -575,6 +579,43 @@ describe("day lifecycle", () => {
     const body = (await response.json()) as { suggestions: Array<{ id: string }> };
     expect(body.suggestions.map((entry) => entry.id)).toEqual(["repeated"]);
   });
+
+  test("batch reorder commits all line positions together and rejects foreign ids", async () => {
+    const { userId, token } = await makeAuthedUser("reorder");
+    await db.insert(dayTable).values(dayRow("reorder-day", userId, "plan", 0));
+    await db.insert(taskLineTable).values([
+      { ...lineRow("reorder-a", "reorder-day", "reorder-a"), sort: 0 },
+      { ...lineRow("reorder-b", "reorder-day", "reorder-b"), sort: 1 },
+    ]);
+    const moved = await apiRequest("/days/reorder-day/lines/reorder", token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        positions: [
+          { id: "reorder-a", side: "withdrawal", sort: 0 },
+          { id: "reorder-b", side: "deposit", sort: 0 },
+        ],
+      }),
+    });
+    expect(moved.status).toBe(200);
+    const movedRows = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, "reorder-day"));
+    expect(movedRows.map((line) => [line.id, line.side, line.sort]).sort()).toEqual([
+      ["reorder-a", "withdrawal", 0],
+      ["reorder-b", "deposit", 0],
+    ]);
+
+    const rejected = await apiRequest("/days/reorder-day/lines/reorder", token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ positions: [{ id: "missing", side: "deposit", sort: 3 }] }),
+    });
+    expect(rejected.status).toBe(404);
+    const unchanged = await db.query.taskLineTable.findFirst({
+      where: (line, { eq }) => eq(line.id, "reorder-a"),
+    });
+    expect(unchanged?.side).toBe("withdrawal");
+    expect(unchanged?.sort).toBe(0);
+  });
 });
 
 describe("DELETE /api/days/:dayId", () => {
@@ -775,7 +816,7 @@ describe("corpus restore", () => {
   });
 });
 
-test("legacy migration closes duplicate open days with balances computed from their lines", async () => {
+test("legacy migration rejects conflicting active days without rewriting history", async () => {
   const legacyDir = mkdtempSync(join(tmpdir(), "eaj-legacy-test-"));
   const legacy = new Database(join(legacyDir, "eaj.sqlite"), { create: true });
   legacy.exec(`
@@ -825,7 +866,7 @@ test("legacy migration closes duplicate open days with balances computed from th
   legacy.close();
 
   const child = Bun.spawn(
-    [process.execPath, "-e", "await import('./apps/server/src/db/index.ts')"],
+    [process.execPath, "./apps/server/src/db/migrate.ts"],
     {
       cwd: join(import.meta.dir, "../.."),
       env: { ...process.env, DATA_DIR: legacyDir },
@@ -834,24 +875,20 @@ test("legacy migration closes duplicate open days with balances computed from th
     },
   );
   const exitCode = await child.exited;
-  expect(exitCode).toBe(0);
+  expect(exitCode).not.toBe(0);
 
   const migrated = new Database(join(legacyDir, "eaj.sqlite"));
   const older = migrated
-    .query("SELECT opening_balance, closing_balance, phase, closed_at FROM day_table WHERE id = 'older'")
-    .get() as { opening_balance: number; closing_balance: number; phase: string; closed_at: number | null };
+    .query("SELECT opening_balance, closing_balance, phase FROM day_table WHERE id = 'older'")
+    .get() as { opening_balance: number; closing_balance: number | null; phase: string };
   const newer = migrated
-    .query("SELECT opening_balance, closing_balance, phase, closed_at FROM day_table WHERE id = 'newer'")
-    .get() as { opening_balance: number; closing_balance: number | null; phase: string; closed_at: number | null };
-  expect(older.opening_balance).toBe(100);
-  expect(older.closing_balance).toBe(70);
-  expect(older.phase).toBe("closed");
-  expect(older.closed_at).not.toBeNull();
+    .query("SELECT opening_balance, closing_balance, phase FROM day_table WHERE id = 'newer'")
+    .get() as { opening_balance: number; closing_balance: number | null; phase: string };
+  expect(older).toEqual({ opening_balance: 80, closing_balance: null, phase: "audit" });
   expect(newer).toEqual({
-    opening_balance: 100,
+    opening_balance: 60,
     closing_balance: null,
     phase: "plan",
-    closed_at: null,
   });
   migrated.close();
   rmSync(legacyDir, { recursive: true, force: true });

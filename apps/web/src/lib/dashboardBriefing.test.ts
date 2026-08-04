@@ -76,6 +76,20 @@ describe("chooseDashboardRange", () => {
     expect(chooseDashboardRange(points, "2026-08-04")).toBe("week");
   });
 
+  test("ranges overnight days by their close time rather than their start date", () => {
+    const points = [
+      stat({
+        id: "overnight",
+        date: "2026-07-27",
+        startedAt: "2026-07-27T23:30:00.000Z",
+        closedAt: "2026-08-01T01:00:00.000Z",
+      }),
+      closedStatOn("2026-08-02", 2),
+      closedStatOn("2026-08-03", 3),
+    ];
+    expect(chooseDashboardRange(points, "2026-08-04")).toBe("week");
+  });
+
   test("uses month when recent history spans enough days to be more informative", () => {
     const points = closedSeries("2026-07-10", 9, 3);
 

@@ -70,11 +70,14 @@ The maintainers host the public instance at [https://eaj.97115104.com/](https://
 
 ```bash
 bun install
+DATA_DIR=$HOME/.local/share/eaj bun run db:backup
+DATA_DIR=$HOME/.local/share/eaj bun run db:migrate
+DATA_DIR=$HOME/.local/share/eaj bun run db:verify
 bun run build
 DATA_DIR=$HOME/.local/share/eaj PORT=3000 COOKIE_SECURE=1 bun run start
 ```
 
-Serve behind TLS. The server serves `apps/web/dist` when present. `./run-service.sh` defaults `DATA_DIR` to `$HOME/.local/share/eaj` and `COOKIE_SECURE=1`, then runs install, build, and start. It sources a local `.env` when that file exists.
+Serve behind TLS. The server serves `apps/web/dist` when present. `./run-service.sh` is the preferred production entrypoint: it defaults `DATA_DIR` to `$HOME/.local/share/eaj` and `COOKIE_SECURE=1`, then performs a SQLite-consistent backup, migrations, integrity/foreign-key verification, build, and start. Direct server starts deliberately fail when the migration ledger is not current. It sources a local `.env` when that file exists.
 
 | Variable | Default in `run-service.sh` | Purpose |
 |----------|-----------------------------|---------|
@@ -117,6 +120,9 @@ The same v7 corpus can be uploaded later to restore an account. The browser vali
 - `bun test` runs shared balance math, server, and web `src/lib` tests
 - `bun run typecheck` runs TypeScript checks across packages
 - `bun run build` builds the production web app
+- `bun run db:backup` writes a SQLite-consistent snapshot under `DATA_DIR/backups/`
+- `bun run db:migrate` applies append-only schema migrations
+- `bun run db:verify` checks the migration ledger, SQLite integrity, and foreign keys
 - `bun run icons` regenerates PWA and touch icon assets
 - `bun run readme-marks` regenerates the animated NeuroMe header GIF (needs ImageMagick `convert`)
 - `bun run generate-more-invite-codes [count]` mints signup invite codes (see above)

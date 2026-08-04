@@ -1,4 +1,4 @@
-import { isoDate } from "@eaj/shared";
+import { isoDate, mapConcurrent } from "@eaj/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { UserProfile } from "../App";
@@ -9,7 +9,7 @@ import {
   chooseDashboardRange,
   type DashboardRange,
 } from "../lib/dashboardBriefing";
-import { closeDayInsights, planningHint, type Insight, type StatPoint } from "../lib/insights";
+import { closeDayInsights, planningHint, type Insight, type StatLinePoint, type StatPoint } from "../lib/insights";
 import { defaultTemperatureUnit, formatTemp } from "../lib/weatherUi";
 
 type Point = StatPoint & {
@@ -18,28 +18,17 @@ type Point = StatPoint & {
 
 type Range = DashboardRange;
 
-async function hydrateStatLines<T extends StatPoint>(points: T[]): Promise<T[]> {
+async function decryptStatLines(lines: readonly StatLinePoint[]): Promise<StatLinePoint[]> {
   const dek = getSessionDek();
-  if (!dek) return points;
-  const hydrated = await Promise.all(
-    points.map(async (point) => ({
-      ...point,
-      lines: await Promise.all(
-        (point.lines ?? []).map(async (line) => {
-          if (!line.labelCiphertext || !line.labelIv) return line;
-          try {
-            return {
-              ...line,
-              label: await decryptText(dek, line.labelCiphertext, line.labelIv, "eaj-label"),
-            };
-          } catch {
-            return line;
-          }
-        }),
-      ),
-    })),
-  );
-  return hydrated as T[];
+  if (!dek) return [...lines];
+  return mapConcurrent(lines, 4, async (line) => {
+    if (!line.labelCiphertext || !line.labelIv) return line;
+    try {
+      return { ...line, label: await decryptText(dek, line.labelCiphertext, line.labelIv, "eaj-label") };
+    } catch {
+      return line;
+    }
+  });
 }
 
 /** Monday (local) of the calendar week containing dateIso. */
@@ -139,6 +128,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
   // Insights and default range selection use a fixed history window so those
   // decisions are not scoped to whichever chart tab is active.
   const [insightSeries, setInsightSeries] = useState<Point[]>([]);
+  const [briefingLinesByDay, setBriefingLinesByDay] = useState<Map<string, StatLinePoint[]>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -150,10 +140,9 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     let alive = true;
     setLoading(true);
     setError(null);
-    void api<{ series: Point[] }>(`/api/stats?from=${from}&to=${to}`)
-      .then(async (r) => {
-        const hydrated = await hydrateStatLines(r.series);
-        if (alive) setSeries(hydrated);
+    void api<{ series: Point[] }>(`/api/stats?from=${from}&to=${to}&lineDetail=false`)
+      .then((r) => {
+        if (alive) setSeries(r.series);
       })
       .catch((e) => {
         if (alive) setError(e instanceof Error ? e.message : "Could not load your day summary.");
@@ -172,10 +161,9 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     const from = new Date(to + "T12:00:00Z");
     from.setUTCDate(from.getUTCDate() - 365);
     const fromIso = from.toISOString().slice(0, 10);
-    void api<{ series: Point[] }>(`/api/stats?from=${fromIso}&to=${to}`)
-      .then(async (r) => {
-        const hydrated = await hydrateStatLines(r.series);
-        if (alive) setInsightSeries(hydrated);
+    void api<{ series: Point[] }>(`/api/stats?from=${fromIso}&to=${to}&lineDetail=false`)
+      .then((r) => {
+        if (alive) setInsightSeries(r.series);
       })
       .catch(() => undefined);
     return () => {
@@ -229,14 +217,34 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     () =>
       latest
         ? closedInsightDays
-            .filter((point) => Date.parse(point.startedAt) < Date.parse(latest.startedAt))
+            .filter((point) => Date.parse(point.closedAt ?? point.startedAt) < Date.parse(latest.closedAt ?? latest.startedAt))
             .slice(-30)
         : closedInsightDays,
     [closedInsightDays, latest],
   );
+  useEffect(() => {
+    const previous = [...dayHistory].filter((point) => point.phase === "closed").at(-1);
+    const ids = [...new Set([latest?.id, previous?.id].filter((id): id is string => !!id))];
+    if (!ids.length) return;
+    let alive = true;
+    void Promise.all(
+      ids.map(async (id) => {
+        const day = await api<{ lines: StatLinePoint[] }>(`/api/days/${id}`);
+        return [id, await decryptStatLines(day.lines)] as const;
+      }),
+    ).then((entries) => {
+      if (alive) setBriefingLinesByDay(new Map(entries));
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [latest?.id, dayHistory]);
   const dayBriefing = useMemo(
-    () => buildDayBriefing(latest, dayHistory),
-    [latest, dayHistory],
+    () => buildDayBriefing(
+      latest && { ...latest, lines: briefingLinesByDay.get(latest.id) ?? latest.lines },
+      dayHistory.map((point) => ({ ...point, lines: briefingLinesByDay.get(point.id) ?? point.lines })),
+    ),
+    [latest, dayHistory, briefingLinesByDay],
   );
   const dayMode = range === "day";
   const bucketing = displayed.length < series.length;

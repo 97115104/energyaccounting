@@ -34,10 +34,11 @@ function utcDayMs(dateIso: string) {
   return Date.parse(`${dateIso}T12:00:00Z`);
 }
 
-function pointDayMs(point: Pick<StatPoint, "date" | "startedAt">) {
-  const day = point.date || point.startedAt.slice(0, 10);
+function pointDayMs(point: Pick<StatPoint, "date" | "startedAt" | "closedAt">) {
+  const lifecycleAt = point.closedAt ?? point.startedAt;
+  const day = lifecycleAt.slice(0, 10) || point.date;
   const ms = utcDayMs(day);
-  return Number.isFinite(ms) ? ms : Date.parse(point.startedAt);
+  return Number.isFinite(ms) ? ms : Date.parse(lifecycleAt);
 }
 
 function closedDaysByDate(points: StatPoint[]) {
@@ -93,10 +94,10 @@ export function chooseDashboardRange(points: StatPoint[], todayIso: string): Das
 }
 
 function recentClosedBefore(latest: StatPoint, history: StatPoint[]) {
-  const latestStart = Date.parse(latest.startedAt);
+  const latestStart = Date.parse(latest.closedAt ?? latest.startedAt);
   return history
-    .filter((point) => point.phase === "closed" && Date.parse(point.startedAt) < latestStart)
-    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
+    .filter((point) => point.phase === "closed" && Date.parse(point.closedAt ?? point.startedAt) < latestStart)
+    .sort((a, b) => Date.parse(a.closedAt ?? a.startedAt) - Date.parse(b.closedAt ?? b.startedAt));
 }
 
 function roundedMean(points: StatPoint[], pick: (point: StatPoint) => number) {

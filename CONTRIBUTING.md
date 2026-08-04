@@ -18,7 +18,7 @@ bun run dev       # API with watch reload
 bun run dev:web   # Vite dev server
 ```
 
-Data lands in `./data` by default (`DATA_DIR` overrides it), and the SQLite file is created on first run with lightweight `ALTER TABLE` migrations applied automatically.
+Data lands in `./data` by default (`DATA_DIR` overrides it). The launch scripts run the append-only migration runner before the API starts; direct server imports only validate that the migration ledger, SQLite integrity check, and foreign-key check are current.
 
 ## Checks a change must pass
 
@@ -36,7 +36,7 @@ The balance math in `packages/shared` is the single source of truth for energy a
 
 The encryption boundary is the load-bearing constraint of the whole design. Task labels, journal text, and task details cross the network only as AES-GCM ciphertext, and the server must never gain a code path that expects to read them. Features that analyze user history work from the plaintext numeric columns (costs, balances, completion flags, feel ratings), and any feature that needs the actual text must do its work in the browser after the session DEK unlocks. When in doubt about which side of the line a field sits on, the encryption-boundary section and mermaid diagram in [ARCHITECTURE.md](ARCHITECTURE.md) are the reference.
 
-Schema changes follow the existing pattern in `apps/server/src/db/`: add the column to the Drizzle table in `schema.ts`, add a guarded `ALTER TABLE` near the top of `index.ts` so existing databases upgrade in place, and add the column to the `CREATE TABLE IF NOT EXISTS` block so fresh databases match. Profile fields additionally thread through the PATCH schema in `routes/auth.ts`, every place the user object is returned, and the `UserProfile` type in `apps/web/src/App.tsx`.
+Schema changes are append-only migrations in `apps/server/src/db/migrations.ts`: add the current shape to `schema.ts` and the fresh-table DDL, then add an explicit inspected migration with a postcondition and fixture coverage. Never put mutations in `db/index.ts`; it is intentionally a read-only schema gate. Migrations must not rewrite balances, phases, or lifecycle history, and conflicts such as duplicate active days must fail before data mutation. Profile fields additionally thread through the PATCH schema in `routes/auth.ts`, every place the user object is returned, and the `UserProfile` type in `apps/web/src/App.tsx`.
 
 UI work matches the existing `panel`, `btn`, and `field` classes in `apps/web/src/styles.css`, respects the `prefers-reduced-motion` block, and keeps copy in the app's voice, namely warm, dry, and never shaming. The app is built for neurodivergent users, so motion stays gentle, hints stay dismissible, and nothing nags.
 

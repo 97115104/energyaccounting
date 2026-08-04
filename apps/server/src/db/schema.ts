@@ -113,6 +113,7 @@ export const dayTable = sqliteTable(
   },
   (t) => [
     index("day_user_started_at").on(t.userId, t.startedAt),
+    index("day_user_closed_at").on(t.userId, t.closedAt),
     uniqueIndex("day_user_source_id").on(t.userId, t.sourceId),
     // SQLite's partial index is the final guard against concurrent starts.
     uniqueIndex("day_one_active_per_user")
@@ -157,7 +158,7 @@ export const taskCatalogTable = sqliteTable("task_catalog_table", {
   difficultyTotal: integer("difficulty_total").notNull().default(0),
   difficultyCount: integer("difficulty_count").notNull().default(0),
   lastUsed: text("last_used").notNull(),
-});
+}, (t) => [uniqueIndex("task_catalog_user_side_hash").on(t.userId, t.side, t.labelHash)]);
 
 export const weatherCacheTable = sqliteTable(
   "weather_cache_table",

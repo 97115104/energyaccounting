@@ -9,6 +9,7 @@ function roundCoord(n: number): string {
 
 /** Bump when the payload shape changes so stale cache rows get refetched. */
 export const WEATHER_PAYLOAD_VERSION = 3;
+const WEATHER_TIMEOUT_MS = 5_000;
 
 /** True when a stored day payload already has the v3 shape (stop soft-refresh loops). */
 export function isCurrentWeatherPayload(payload: Record<string, unknown> | null | undefined): boolean {
@@ -79,7 +80,7 @@ export async function fetchDayWeather(
     `&timezone=auto&start_date=${date}&end_date=${date}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS) });
     if (!res.ok) return null;
     const raw = (await res.json()) as {
       timezone?: string;

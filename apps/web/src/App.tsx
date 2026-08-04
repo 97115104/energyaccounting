@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./lib/api";
 import {
@@ -28,13 +28,14 @@ import { ButterflyStateButton } from "./components/ButterflyStateButton";
 import { ButterflyStateModal } from "./components/ButterflyStateModal";
 import { useButterflyDay, usePrefersReducedMotion } from "./lib/useButterflyDay";
 import { AuthPage } from "./pages/AuthPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { OnboardingPage } from "./pages/OnboardingPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { SharePage } from "./pages/SharePage";
-import { TodayPage } from "./pages/TodayPage";
-import { YouPage } from "./pages/YouPage";
 import { SiteFooter } from "./components/SiteFooter";
+
+const OnboardingPage = lazy(() => import("./pages/OnboardingPage").then((page) => ({ default: page.OnboardingPage })));
+const TodayPage = lazy(() => import("./pages/TodayPage").then((page) => ({ default: page.TodayPage })));
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((page) => ({ default: page.DashboardPage })));
+const YouPage = lazy(() => import("./pages/YouPage").then((page) => ({ default: page.YouPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((page) => ({ default: page.SettingsPage })));
+const SharePage = lazy(() => import("./pages/SharePage").then((page) => ({ default: page.SharePage })));
 
 export type UserProfile = {
   id: string;
@@ -454,6 +455,7 @@ export function App() {
           </Link>
         </nav>
       )}
+      <Suspense fallback={null}>
       <Routes>
         <Route
           path="/auth"
@@ -566,6 +568,7 @@ export function App() {
         <Route path="/share/:token" element={<SharePage signedIn={authed} />} />
         <Route path="*" element={<Navigate to={authed ? "/" : "/auth"} replace />} />
       </Routes>
+      </Suspense>
       {!(authed && loc.pathname === "/") && <SiteFooter />}
       {authed && stateExplainOpen && (
         <ButterflyStateModal

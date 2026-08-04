@@ -1,8 +1,30 @@
 import { decryptText, encryptText, getSessionDek } from "./crypto";
+import { mapConcurrent } from "@eaj/shared";
 import { api } from "./api";
 import type { CatalogEntry } from "./butterflyTraits";
 import { loadPersonalData } from "./personalData";
 import { decryptYouProfile, encryptYouProfile, normalizeYouProfile, type YouProfile } from "./youProfile";
+import type {
+  ActiveDayResolution,
+  CorpusDay,
+  CorpusLine,
+  CorpusPreview,
+  CorpusUser,
+  RestoreMode,
+  RestoreResult,
+  TrainingCorpus,
+} from "./corpus/contracts";
+
+export type {
+  ActiveDayResolution,
+  CorpusDay,
+  CorpusLine,
+  CorpusPreview,
+  CorpusUser,
+  RestoreMode,
+  RestoreResult,
+  TrainingCorpus,
+} from "./corpus/contracts";
 
 export const CORPUS_SCHEMA_VERSION = 7;
 
@@ -65,102 +87,6 @@ type ExportPayload = {
     difficultyCount: number;
     lastUsed: string;
   }>;
-};
-
-export type CorpusUser = {
-  id: string | null;
-  displayName: string | null;
-  timezone: string;
-  lat: number | null;
-  lon: number | null;
-  country: string | null;
-  temperatureUnit: "C" | "F" | null;
-  greetingStyle: "classic" | "humor" | "facts" | "mix" | null;
-  includePhysicalActivities: boolean;
-  onboardingCompleted: boolean;
-  locationPrompted: boolean;
-  identity: Record<string, unknown> | null;
-};
-
-export type CorpusLine = {
-  sourceId: string;
-  side: "deposit" | "withdrawal";
-  sort: number;
-  label: string;
-  labelHash: string;
-  plannedCost: number;
-  actualCost: number | null;
-  completed: boolean;
-  completedAt: string | null;
-  difficulty: number | null;
-  details: string | null;
-};
-
-export type CorpusDay = {
-  sourceId: string;
-  date: string;
-  startedAt: string;
-  closedAt: string | null;
-  openingBalance: number;
-  closingBalance: number | null;
-  projectedClosing: number;
-  availableCapacity: number;
-  phase: "plan" | "audit" | "closed";
-  feelRating: number | null;
-  weather: Record<string, unknown> | null;
-  isHoliday: boolean;
-  attwood: unknown;
-  journal: string | null;
-  compensateNote: string | null;
-  /** Opaque retired data retained solely for same-key archival restores. */
-  legacyQualitative: { ciphertext: string; iv: string } | null;
-  lines: CorpusLine[];
-};
-
-export type TrainingCorpus = {
-  schemaVersion: 6 | 7;
-  exportedAt: string;
-  purpose?: string;
-  user: CorpusUser;
-  youProfile: YouProfile | null;
-  youProfileUpdatedAt: string;
-  days: CorpusDay[];
-  catalog: Array<{
-    id: string;
-    side: string;
-    label: string;
-    labelHash: string;
-    typicalCost: number;
-    weekdayMask: number;
-    useCount: number;
-    typicalDifficulty: number | null;
-    difficultyCount: number;
-    lastUsed: string;
-  }>;
-};
-
-export type RestoreMode = "merge" | "replace";
-export type ActiveDayResolution = "keep-current" | "replace-current";
-
-export type CorpusPreview = {
-  daysToAdd: number;
-  daysExisting: number;
-  linesToAdd: number;
-  linesExisting: number;
-  hasImportedProfile: boolean;
-  activeDayConflict: boolean;
-  currentActiveSourceId: string | null;
-  importedActiveSourceId: string | null;
-};
-
-export type RestoreResult = {
-  ok: true;
-  profileRestored: boolean;
-  daysAdded: number;
-  daysExisting: number;
-  daysSkippedForActiveConflict: number;
-  linesAdded: number;
-  linesExisting: number;
 };
 
 type RestoreWire = {
@@ -476,15 +402,13 @@ export async function prepareCorpusRestore(
 ): Promise<RestoreWire> {
   const dek = getSessionDek();
   if (!dek) throw new Error("Unlock your journal key before restoring.");
-  const days: RestoreWire["days"] = [];
-  for (const day of corpus.days) {
+  const days = await mapConcurrent(corpus.days, 4, async (day): Promise<RestoreWire["days"][number]> => {
     const journal = await encryptOptional(dek, day.journal, "eaj-journal");
     const compensate = await encryptOptional(dek, day.compensateNote, "eaj-compensate");
-    const lines: RestoreWire["days"][number]["lines"] = [];
-    for (const line of day.lines) {
+    const lines = await mapConcurrent(day.lines, 4, async (line): Promise<RestoreWire["days"][number]["lines"][number]> => {
       const label = await encryptText(dek, line.label, "eaj-label");
       const details = await encryptOptional(dek, line.details, "eaj-task-details");
-      lines.push({
+      return {
         sourceId: line.sourceId,
         side: line.side,
         sort: line.sort,
@@ -498,9 +422,9 @@ export async function prepareCorpusRestore(
         difficulty: line.difficulty,
         detailsCiphertext: details.ciphertext,
         detailsIv: details.iv,
-      });
-    }
-    days.push({
+      };
+    });
+    return {
       sourceId: day.sourceId,
       date: day.date,
       startedAt: day.startedAt,
@@ -516,8 +440,8 @@ export async function prepareCorpusRestore(
       compensateNoteIv: compensate.iv,
       legacyQualitative: day.legacyQualitative,
       lines,
-    });
-  }
+    };
+  });
   return {
     schemaVersion: CORPUS_SCHEMA_VERSION,
     mode,
@@ -597,14 +521,12 @@ export async function downloadTrainingCorpus(): Promise<void> {
   if (!dek) throw new Error("Unlock your journal key before exporting.");
 
   const raw = await api<ExportPayload>("/api/export/days");
-  const days: CorpusDay[] = [];
-  for (const d of raw.days) {
+  const days = await mapConcurrent(raw.days, 4, async (d): Promise<CorpusDay> => {
     const closedAt = d.closedAt ?? (d.phase === "closed" ? d.startedAt : null);
-    const lines: CorpusLine[] = [];
-    for (const l of d.lines) {
+    const lines = await mapConcurrent(d.lines, 4, async (l): Promise<CorpusLine> => {
       const label = await decryptRequired(dek, l.labelCiphertext, l.labelIv, "eaj-label", "a task label");
       if (label === null) throw new Error("A task label is missing. Your corpus was not exported.");
-      lines.push({
+      return {
         sourceId: l.sourceId ?? l.id,
         side: l.side,
         sort: l.sort,
@@ -622,9 +544,9 @@ export async function downloadTrainingCorpus(): Promise<void> {
           "eaj-task-details",
           "a task detail",
         ),
-      });
-    }
-    days.push({
+      };
+    });
+    return {
       sourceId: d.sourceId ?? d.id,
       date: d.date,
       startedAt: d.startedAt,
@@ -652,14 +574,13 @@ export async function downloadTrainingCorpus(): Promise<void> {
         "Legacy archive data is incomplete.",
       ),
       lines,
-    });
-  }
+    };
+  });
 
-  const catalog = [];
-  for (const c of raw.catalog) {
+  const catalog = await mapConcurrent(raw.catalog, 4, async (c) => {
     const label = await decryptRequired(dek, c.labelCiphertext, c.labelIv, "eaj-label", "a catalog label");
     if (label === null) throw new Error("A catalog label is missing. Your corpus was not exported.");
-    catalog.push({
+    return {
       id: c.id,
       side: c.side,
       label,
@@ -670,8 +591,8 @@ export async function downloadTrainingCorpus(): Promise<void> {
       typicalDifficulty: c.typicalDifficulty,
       difficultyCount: c.difficultyCount,
       lastUsed: c.lastUsed,
-    });
-  }
+    };
+  });
 
   const youProfile = await fetchDecryptedYouProfile(dek);
   const corpus: TrainingCorpus = {

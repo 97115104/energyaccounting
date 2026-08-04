@@ -8,6 +8,29 @@ export type CatalogHint = {
 
 let embedder: null | ((text: string) => Promise<number[]>) = null;
 let embedderPromise: Promise<void> | null = null;
+const embeddingCache = new Map<string, Promise<number[]>>();
+const MAX_EMBEDDING_CACHE = 512;
+
+function normalizedLabel(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+async function embeddingFor(text: string): Promise<number[]> {
+  const key = normalizedLabel(text);
+  const cached = embeddingCache.get(key);
+  if (cached) return cached;
+  if (!embedder) throw new Error("Embedding model is unavailable.");
+  const value = embedder(key).catch((error) => {
+    embeddingCache.delete(key);
+    throw error;
+  });
+  embeddingCache.set(key, value);
+  if (embeddingCache.size > MAX_EMBEDDING_CACHE) {
+    const oldest = embeddingCache.keys().next().value;
+    if (oldest) embeddingCache.delete(oldest);
+  }
+  return value;
+}
 
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
@@ -83,11 +106,11 @@ export async function suggestCost(
     const ok = await ensureEmbedder();
     if (ok && embedder) {
       try {
-        const q = await embedder(trimmed);
+        const q = await embeddingFor(trimmed);
         let best: CatalogHint | null = null;
         let score = -1;
         for (const c of catalog) {
-          const e = await embedder(c.label);
+          const e = await embeddingFor(c.label);
           const s = cosine(q, e);
           if (s > score) {
             score = s;

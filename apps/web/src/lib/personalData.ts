@@ -11,6 +11,8 @@
 import { api } from "./api";
 import type { CatalogEntry } from "./butterflyTraits";
 import { decryptText, getSessionDek } from "./crypto";
+import { mapConcurrent } from "@eaj/shared";
+import { personalDataGeneration } from "./personalDataCache";
 
 export const AAD = {
   label: "eaj-label",
@@ -147,31 +149,27 @@ function attwoodOf(day: ExportDay): { net: number; deposit: number; withdrawal: 
  * Load and decrypt everything the on-device intelligence needs, once.
  * O(days + tasks + catalog) decrypt operations.
  */
-export async function loadPersonalData(): Promise<PersonalData> {
-  const dek = getSessionDek();
-  if (!dek) throw new Error("Unlock your journal key first.");
+let cachedPersonalData: { dek: CryptoKey; generation: number; value: Promise<PersonalData> } | null = null;
+
+async function loadPersonalDataUncached(dek: CryptoKey): Promise<PersonalData> {
   const raw = await api<ExportPayload>("/api/export/days");
 
-  const catalog: CatalogEntry[] = [];
-  for (const c of raw.catalog) {
+  const catalog = (await mapConcurrent(raw.catalog, 4, async (c) => {
     const label = await decryptOptional(dek, c.labelCiphertext, c.labelIv, AAD.label);
-    if (!label) continue;
-    catalog.push({
+    return label ? {
       side: c.side as CatalogEntry["side"],
       label,
       useCount: c.useCount,
       typicalDifficulty: c.typicalDifficulty,
       difficultyCount: c.difficultyCount,
-    });
-  }
+    } : null;
+  })).filter((entry): entry is CatalogEntry => entry !== null);
 
-  const days: PersonalDay[] = [];
-  for (const d of raw.days) {
-    const tasks: PersonalTask[] = [];
-    for (const l of d.lines) {
+  const days = await mapConcurrent(raw.days, 4, async (d): Promise<PersonalDay> => {
+    const tasks = await mapConcurrent(d.lines, 4, async (l): Promise<PersonalTask> => {
       const label = (await decryptOptional(dek, l.labelCiphertext, l.labelIv, AAD.label)) ?? "";
       const details = await decryptOptional(dek, l.detailsCiphertext, l.detailsIv, AAD.taskDetails);
-      tasks.push({
+      return {
         side: l.side,
         label,
         plannedCost: l.plannedCost,
@@ -180,10 +178,10 @@ export async function loadPersonalData(): Promise<PersonalData> {
         completedAt: l.completedAt ?? null,
         difficulty: l.difficulty,
         details,
-      });
-    }
+      };
+    });
     const attwood = attwoodOf(d);
-    days.push({
+    return {
       id: d.id,
       date: d.date,
       phase: d.phase,
@@ -204,8 +202,8 @@ export async function loadPersonalData(): Promise<PersonalData> {
         AAD.compensate,
       ),
       tasks,
-    });
-  }
+    };
+  });
 
   return {
     schemaVersion: raw.schemaVersion,
@@ -214,4 +212,25 @@ export async function loadPersonalData(): Promise<PersonalData> {
     catalog,
     days,
   };
+}
+
+/**
+ * Load and decrypt everything the on-device intelligence needs. The snapshot
+ * is retained only in memory and is discarded after any source/key mutation.
+ */
+export async function loadPersonalData(): Promise<PersonalData> {
+  const dek = getSessionDek();
+  if (!dek) throw new Error("Unlock your journal key first.");
+  const generation = personalDataGeneration();
+  if (cachedPersonalData?.dek === dek && cachedPersonalData.generation === generation) {
+    return cachedPersonalData.value;
+  }
+  const value = loadPersonalDataUncached(dek);
+  cachedPersonalData = { dek, generation, value };
+  try {
+    return await value;
+  } catch (error) {
+    if (cachedPersonalData?.value === value) cachedPersonalData = null;
+    throw error;
+  }
 }

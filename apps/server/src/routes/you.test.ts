@@ -9,6 +9,9 @@ import { eq } from "drizzle-orm";
 // directory before anything pulls it in (dynamic imports keep the ordering).
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "eaj-you-test-"));
 
+const { migrateDatabase } = await import("../db/migrate.ts");
+migrateDatabase(process.env.DATA_DIR);
+
 const { db } = await import("../db/index.ts");
 const {
   dayTable,

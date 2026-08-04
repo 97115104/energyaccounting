@@ -35,6 +35,15 @@ fi
 echo "▸ Installing dependencies..."
 bun install
 
+echo "▸ Backing up database..."
+bun run db:backup
+
+echo "▸ Migrating database..."
+bun run db:migrate
+
+echo "▸ Verifying database..."
+bun run db:verify
+
 # Always rebuild: rsync excludes dist; code changes must refresh apps/web/dist
 echo "▸ Building web app..."
 bun run build

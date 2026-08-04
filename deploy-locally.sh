@@ -142,6 +142,12 @@ start_services() {
 
   mkdir -p "$DATA_DIR"
 
+  # Server imports validate only; schema changes are an explicit, repeatable
+  # pre-start step so local development exercises the production contract.
+  info "Migrating local database"
+  bun run db:migrate
+  bun run db:verify
+
   if port_in_use "$PORT"; then
     if api_listener_is_current; then
       warn "Port $PORT already has the current EAJ API; will health-check it"

@@ -19,8 +19,10 @@ export async function api<T>(
     throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
   }
   const method = (init.method ?? "GET").toUpperCase();
-  if (method !== "GET" && path.startsWith("/api/days")) {
+  if (method !== "GET" && (path.startsWith("/api/days") || path.startsWith("/api/import/corpus"))) {
+    invalidatePersonalData();
     window.dispatchEvent(new Event(DAY_CHANGED_EVENT));
   }
   return data;
 }
+import { invalidatePersonalData } from "./personalDataCache";

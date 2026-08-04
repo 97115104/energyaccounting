@@ -19,3 +19,7 @@ export {
   isWithdrawalHeavy,
   isoDate,
 } from "./balance";
+
+export { mapConcurrent } from "./async";
+export { applyLinePositions, deriveLineReorder, type LinePosition, type ReorderableLine } from "./lineReorder";
+export { foldCatalog, weekdayBit, type CatalogLine, type CatalogOccurrence, type FoldedCatalogEntry } from "./catalog";

@@ -6,49 +6,21 @@ import {
   clampDifficulty,
   closingBalance,
   completedFreedEnergy,
+  foldCatalog,
   reservedCapacity,
+  type CatalogOccurrence,
   type AllocatableTask,
   type TaskCosts,
 } from "@eaj/shared";
-import { and, desc, eq, gte, lt, lte, ne, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "../db/index.ts";
 import { dayTable, taskCatalogTable, taskLineTable, userTable, youProfileTable } from "../db/schema.ts";
 import { holidayForDate } from "../lib/holidays.ts";
 import { sanitizeIdentity } from "../lib/identity.ts";
+import { buildRestorePlan, type RestorePlanIndexes } from "../lib/restorePlan.ts";
 import { assertIsoDate, newId, requireFullUser } from "../lib/session.ts";
 import { fetchDayWeather, calendarDateInTimeZone, weatherNeedsRefresh } from "../lib/weather.ts";
-
-function weekdayBit(dateIso: string): number {
-  const d = new Date(dateIso + "T12:00:00Z");
-  return 1 << d.getUTCDay();
-}
-
-/** Keep catalog difficulty means correct when a rated line moves, clears, or is deleted. */
-async function adjustCatalogDifficulty(
-  userId: string,
-  labelHash: string,
-  side: string,
-  totalDelta: number,
-  countDelta: number,
-) {
-  if (!labelHash || (totalDelta === 0 && countDelta === 0)) return;
-  const catalog = await db.query.taskCatalogTable.findFirst({
-    where: and(
-      eq(taskCatalogTable.userId, userId),
-      eq(taskCatalogTable.labelHash, labelHash),
-      eq(taskCatalogTable.side, side),
-    ),
-  });
-  if (!catalog) return;
-  await db
-    .update(taskCatalogTable)
-    .set({
-      difficultyTotal: Math.max(0, catalog.difficultyTotal + totalDelta),
-      difficultyCount: Math.max(0, catalog.difficultyCount + countDelta),
-    })
-    .where(eq(taskCatalogTable.id, catalog.id));
-}
 
 function pairedDetails(
   ciphertext: string | null | undefined,
@@ -71,64 +43,6 @@ async function ownedDay(userId: string, dayId: string) {
 }
 
 type WriteDb = Pick<typeof db, "select" | "insert" | "update" | "delete">;
-
-/** Record one live use of an activity, shared by manual line adds and plan repeats. */
-async function upsertCatalogUse(
-  userId: string,
-  day: typeof dayTable.$inferSelect,
-  line: {
-    side: string;
-    labelCiphertext: string;
-    labelIv: string;
-    labelHash: string;
-    plannedCost: number;
-    difficulty: number | null;
-  },
-  executor: WriteDb = db,
-) {
-  if (!line.labelHash) return;
-  const bit = weekdayBit(day.date);
-  const [catalog] = await executor
-    .select()
-    .from(taskCatalogTable)
-    .where(
-      and(
-        eq(taskCatalogTable.userId, userId),
-        eq(taskCatalogTable.labelHash, line.labelHash),
-        eq(taskCatalogTable.side, line.side),
-      ),
-    );
-  if (catalog) {
-    await executor
-      .update(taskCatalogTable)
-      .set({
-        typicalCost: line.plannedCost,
-        useCount: catalog.useCount + 1,
-        difficultyTotal: catalog.difficultyTotal + (line.difficulty ?? 0),
-        difficultyCount: catalog.difficultyCount + (line.difficulty === null ? 0 : 1),
-        lastUsed: day.date,
-        weekdayMask: catalog.weekdayMask | bit,
-        labelCiphertext: line.labelCiphertext,
-        labelIv: line.labelIv,
-      })
-      .where(eq(taskCatalogTable.id, catalog.id));
-  } else {
-    await executor.insert(taskCatalogTable).values({
-      id: newId(),
-      userId,
-      side: line.side,
-      labelCiphertext: line.labelCiphertext,
-      labelIv: line.labelIv,
-      labelHash: line.labelHash,
-      typicalCost: line.plannedCost,
-      weekdayMask: bit,
-      useCount: 1,
-      difficultyTotal: line.difficulty ?? 0,
-      difficultyCount: line.difficulty === null ? 0 : 1,
-      lastUsed: day.date,
-    });
-  }
-}
 
 /** Ledgers strictly earlier than `day` in lifecycle order (startedAt, then id). */
 function strictlyEarlierThan(day: typeof dayTable.$inferSelect) {
@@ -186,50 +100,29 @@ async function rebuildCatalog(userId: string, executor: WriteDb = db) {
     .from(dayTable)
     .where(eq(dayTable.userId, userId))
     .orderBy(dayTable.startedAt, dayTable.id);
-  const entries = new Map<
-    string,
-    {
-      side: string;
-      labelCiphertext: string;
-      labelIv: string;
-      labelHash: string;
-      typicalCost: number;
-      weekdayMask: number;
-      useCount: number;
-      difficultyTotal: number;
-      difficultyCount: number;
-      lastUsed: string;
-    }
-  >();
-  for (const day of days) {
-    const lines = await linesForDay(day.id, executor);
-    for (const line of lines) {
-      if (!line.labelHash) continue;
-      const key = `${line.side}:${line.labelHash}`;
-      const current = entries.get(key);
-      entries.set(key, {
-        side: line.side,
-        labelCiphertext: line.labelCiphertext,
-        labelIv: line.labelIv,
-        labelHash: line.labelHash,
-        typicalCost: line.plannedCost,
-        weekdayMask: (current?.weekdayMask ?? 0) | weekdayBit(day.date),
-        useCount: (current?.useCount ?? 0) + 1,
-        difficultyTotal: (current?.difficultyTotal ?? 0) + (line.difficulty ?? 0),
-        difficultyCount: (current?.difficultyCount ?? 0) + (line.difficulty === null ? 0 : 1),
-        lastUsed: day.date,
-      });
-    }
-  }
+  const dayDates = new Map(days.map((day) => [day.id, day.date]));
+  const lines = days.length
+    ? await executor.select().from(taskLineTable).where(inArray(taskLineTable.dayId, days.map((day) => day.id)))
+    : [];
+  const occurrences: CatalogOccurrence[] = lines.flatMap((line) => {
+    const date = dayDates.get(line.dayId);
+    return date
+      ? [{ date, line: { ...line, side: line.side as "deposit" | "withdrawal" } }]
+      : [];
+  });
+  const entries = foldCatalog(occurrences);
   await executor.delete(taskCatalogTable).where(eq(taskCatalogTable.userId, userId));
-  for (const entry of entries.values()) {
+  for (const entry of entries) {
     await executor.insert(taskCatalogTable).values({ id: newId(), userId, ...entry });
   }
 }
 
 /** Plaintext stat row for one day, shared by /stats and export. */
-async function statPointForDay(d: typeof dayTable.$inferSelect) {
-  const lines = await linesForDay(d.id);
+function statPointForDay(
+  d: typeof dayTable.$inferSelect,
+  lines: readonly (typeof taskLineTable.$inferSelect)[],
+  includeLines: boolean,
+) {
   const tasks: AllocatableTask[] = lines.map((l) => ({
     side: l.side as TaskCosts["side"],
     planned: l.plannedCost,
@@ -272,16 +165,20 @@ async function statPointForDay(d: typeof dayTable.$inferSelect) {
     difficultyRatedCount: rated.length,
     plannedTotal,
     actualTotal,
-    lines: lines.map((l) => ({
-      side: l.side,
-      sort: l.sort,
-      labelCiphertext: l.labelCiphertext,
-      labelIv: l.labelIv,
-      labelHash: l.labelHash,
-      plannedCost: l.plannedCost,
-      actualCost: l.actualCost,
-      completed: l.completed,
-    })),
+    ...(includeLines
+      ? {
+          lines: lines.map((l) => ({
+            side: l.side,
+            sort: l.sort,
+            labelCiphertext: l.labelCiphertext,
+            labelIv: l.labelIv,
+            labelHash: l.labelHash,
+            plannedCost: l.plannedCost,
+            actualCost: l.actualCost,
+            completed: l.completed,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -563,67 +460,50 @@ function validateRestoreCorpus(corpus: RestoreCorpus): string | null {
   return null;
 }
 
-async function importedDayMatch(userId: string, sourceId: string, executor: WriteDb = db) {
-  const bySource = await executor
-    .select()
-    .from(dayTable)
-    .where(and(eq(dayTable.userId, userId), eq(dayTable.sourceId, sourceId)));
-  if (bySource[0]) return bySource[0];
-  const byLegacyId = await executor
-    .select()
-    .from(dayTable)
-    .where(and(eq(dayTable.userId, userId), eq(dayTable.id, sourceId)));
-  return byLegacyId[0];
-}
-
-async function importedLineMatch(dayId: string, sourceId: string, executor: WriteDb = db) {
-  const bySource = await executor
-    .select()
-    .from(taskLineTable)
-    .where(and(eq(taskLineTable.dayId, dayId), eq(taskLineTable.sourceId, sourceId)));
-  if (bySource[0]) return bySource[0];
-  const byLegacyId = await executor
-    .select()
-    .from(taskLineTable)
-    .where(and(eq(taskLineTable.dayId, dayId), eq(taskLineTable.id, sourceId)));
-  return byLegacyId[0];
+async function restorePlanIndexes(userId: string, executor: WriteDb = db): Promise<RestorePlanIndexes> {
+  const days = await executor.select().from(dayTable).where(eq(dayTable.userId, userId));
+  const dayIdBySource = new Map<string, string>();
+  for (const day of days) {
+    dayIdBySource.set(day.id, day.id);
+    if (day.sourceId) dayIdBySource.set(day.sourceId, day.id);
+  }
+  const lines = days.length
+    ? await executor.select().from(taskLineTable).where(inArray(taskLineTable.dayId, days.map((day) => day.id)))
+    : [];
+  const lineSourcesByDay = new Map<string, Set<string>>();
+  for (const line of lines) {
+    const sources = lineSourcesByDay.get(line.dayId) ?? new Set<string>();
+    sources.add(line.id);
+    if (line.sourceId) sources.add(line.sourceId);
+    lineSourcesByDay.set(line.dayId, sources);
+  }
+  const active = days.find((day) => day.phase !== "closed");
+  return {
+    dayIdBySource,
+    lineSourcesByDay,
+    activeDayId: active?.id ?? null,
+    activeDaySourceId: active ? active.sourceId ?? active.id : null,
+  };
 }
 
 async function restorePreview(userId: string, preview: typeof restorePreviewSchema.static) {
-  let daysToAdd = 0;
-  let daysExisting = 0;
-  let linesToAdd = 0;
-  let linesExisting = 0;
-  let importedActiveSourceId: string | null = null;
-  for (const sourceDay of preview.days) {
-    const existing = await importedDayMatch(userId, sourceDay.sourceId);
-    if (!existing) {
-      daysToAdd += 1;
-      linesToAdd += sourceDay.lineSourceIds.length;
-      if (sourceDay.phase !== "closed") importedActiveSourceId = sourceDay.sourceId;
-      continue;
-    }
-    daysExisting += 1;
-    for (const sourceLineId of sourceDay.lineSourceIds) {
-      if (await importedLineMatch(existing.id, sourceLineId)) linesExisting += 1;
-      else linesToAdd += 1;
-    }
-  }
-  const active = await db.query.dayTable.findFirst({
-    where: and(eq(dayTable.userId, userId), ne(dayTable.phase, "closed")),
-  });
-  const activeDayConflict = !!(
-    active && importedActiveSourceId && active.id !== importedActiveSourceId && active.sourceId !== importedActiveSourceId
+  const plan = buildRestorePlan(
+    preview.days.map((day) => ({
+      sourceId: day.sourceId,
+      phase: day.phase,
+      lines: day.lineSourceIds.map((sourceId) => ({ sourceId })),
+    })),
+    await restorePlanIndexes(userId),
   );
   return {
-    daysToAdd,
-    daysExisting,
-    linesToAdd,
-    linesExisting,
+    daysToAdd: plan.daysToAdd,
+    daysExisting: plan.daysExisting,
+    linesToAdd: plan.linesToAdd,
+    linesExisting: plan.linesExisting,
     hasImportedProfile: preview.hasProfile,
-    activeDayConflict,
-    currentActiveSourceId: active ? active.sourceId ?? active.id : null,
-    importedActiveSourceId,
+    activeDayConflict: plan.activeDayConflict,
+    currentActiveSourceId: plan.currentActiveSourceId,
+    importedActiveSourceId: plan.importedActiveSourceId,
   };
 }
 
@@ -971,62 +851,92 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
             await tx.update(userTable).set(profilePatch!).where(eq(userTable.id, user.id));
           }
 
-          let active: typeof dayTable.$inferSelect | undefined = (
-            await tx
-              .select()
-              .from(dayTable)
-              .where(and(eq(dayTable.userId, user.id), ne(dayTable.phase, "closed")))
-          )[0];
-          for (const sourceDay of body.days) {
-            let target = body.mode === "merge"
-              ? await importedDayMatch(user.id, sourceDay.sourceId, tx)
-              : undefined;
-            if (!target && sourceDay.phase !== "closed" && active) {
-              if (body.activeDayResolution === "keep-current") {
-                restored.daysSkippedForActiveConflict += 1;
-                continue;
-              }
-              if (body.activeDayResolution === "replace-current") {
+          // Build the whole ID-only diff from two bulk reads, then execute the
+          // deterministic plan in this same transaction. This avoids N+1
+          // restore lookups and makes repeat merges explicitly idempotent.
+          const currentDays = await tx.select().from(dayTable).where(eq(dayTable.userId, user.id));
+          const currentLines = currentDays.length
+            ? await tx.select().from(taskLineTable).where(inArray(taskLineTable.dayId, currentDays.map((day) => day.id)))
+            : [];
+          const dayIdBySource = new Map<string, string>();
+          const dayById = new Map(currentDays.map((day) => [day.id, day]));
+          for (const day of currentDays) {
+            dayIdBySource.set(day.id, day.id);
+            if (day.sourceId) dayIdBySource.set(day.sourceId, day.id);
+          }
+          const lineSourcesByDay = new Map<string, Set<string>>();
+          const lineByDayAndSource = new Map<string, typeof taskLineTable.$inferSelect>();
+          for (const line of currentLines) {
+            const sources = lineSourcesByDay.get(line.dayId) ?? new Set<string>();
+            sources.add(line.id);
+            lineByDayAndSource.set(`${line.dayId}:${line.id}`, line);
+            if (line.sourceId) {
+              sources.add(line.sourceId);
+              lineByDayAndSource.set(`${line.dayId}:${line.sourceId}`, line);
+            }
+            lineSourcesByDay.set(line.dayId, sources);
+          }
+          let active = currentDays.find((day) => day.phase !== "closed");
+          const plan = buildRestorePlan(
+            body.days.map((day) => ({
+              sourceId: day.sourceId,
+              phase: day.phase,
+              lines: day.lines.map((line) => ({ sourceId: line.sourceId })),
+            })),
+            {
+              dayIdBySource,
+              lineSourcesByDay,
+              activeDayId: active?.id ?? null,
+              activeDaySourceId: active ? active.sourceId ?? active.id : null,
+            },
+            body.activeDayResolution,
+          );
+          if (plan.activeDayConflict && !body.activeDayResolution) {
+            throw new Error("Choose how to resolve the active energy day.");
+          }
+          const sourceDays = new Map(body.days.map((day) => [day.sourceId, day]));
+          for (const action of plan.days) {
+            const sourceDay = sourceDays.get(action.sourceId)!;
+            if (action.action === "skip-active-conflict") {
+              restored.daysSkippedForActiveConflict += 1;
+              continue;
+            }
+            if (action.action === "insert") {
+              if (sourceDay.phase !== "closed" && active) {
+                if (body.activeDayResolution !== "replace-current") {
+                  throw new Error("Choose how to resolve the active energy day.");
+                }
                 await tx.delete(dayTable).where(eq(dayTable.id, active.id));
                 active = undefined;
-              } else {
-                throw new Error("Choose how to resolve the active energy day.");
               }
-            }
-
-            if (!target) {
-              target = await insertRestoredDay(user.id, sourceDay, tx);
+              const inserted = await insertRestoredDay(user.id, sourceDay, tx);
               restored.daysAdded += 1;
               restored.linesAdded += sourceDay.lines.length;
-              if (target.phase !== "closed") active = target;
+              if (inserted.phase !== "closed") active = inserted;
               continue;
             }
 
+            const target = dayById.get(action.targetDayId!);
+            if (!target) throw new Error("The account changed while the restore was in progress. Review and try again.");
             restored.daysExisting += 1;
             if (!target.sourceId) {
-              await tx
-                .update(dayTable)
-                .set({ sourceId: sourceDay.sourceId })
-                .where(eq(dayTable.id, target.id));
+              await tx.update(dayTable).set({ sourceId: sourceDay.sourceId }).where(eq(dayTable.id, target.id));
             }
-            let addedToClosedDay = false;
-            for (const sourceLine of sourceDay.lines) {
-              const existingLine = await importedLineMatch(target.id, sourceLine.sourceId, tx);
-              if (existingLine) {
-                restored.linesExisting += 1;
-                if (!existingLine.sourceId) {
-                  await tx
-                    .update(taskLineTable)
-                    .set({ sourceId: sourceLine.sourceId })
-                    .where(eq(taskLineTable.id, existingLine.id));
-                }
-                continue;
+            const sourceLines = new Map(sourceDay.lines.map((line) => [line.sourceId, line]));
+            for (const sourceId of action.lineSourceIdsExisting) {
+              const existingLine = lineByDayAndSource.get(`${target.id}:${sourceId}`);
+              if (!existingLine) throw new Error("The account changed while the restore was in progress. Review and try again.");
+              restored.linesExisting += 1;
+              if (!existingLine.sourceId) {
+                await tx.update(taskLineTable).set({ sourceId }).where(eq(taskLineTable.id, existingLine.id));
               }
+            }
+            for (const sourceId of action.lineSourceIdsToInsert) {
+              const sourceLine = sourceLines.get(sourceId)!;
               await tx.insert(taskLineTable).values(restoredLineValues(sourceLine, target.id));
               restored.linesAdded += 1;
-              addedToClosedDay ||= target.phase === "closed";
             }
-            if (addedToClosedDay) await refreshClosedBalance(target, tx);
+            if (action.lineSourceIdsToInsert.length > 0) await refreshClosedBalance(target, tx);
           }
 
           if (body.mode === "replace" && body.youProfile) {
@@ -1117,23 +1027,12 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         detailsCiphertext: details.ciphertext,
         detailsIv: details.iv,
       };
-      if (day.phase === "closed") {
-        await db.transaction(async (tx) => {
-          await tx.insert(taskLineTable).values(newLine);
-          await rebuildCatalog(user.id, tx);
-          await refreshClosedBalance(day, tx);
-        });
-        return { id };
-      }
-
-      await db.insert(taskLineTable).values(newLine);
-      await upsertCatalogUse(user.id, day, {
-        side: body.side,
-        labelCiphertext: body.labelCiphertext,
-        labelIv: body.labelIv,
-        labelHash: body.labelHash,
-        plannedCost: planned,
-        difficulty,
+      // Source and derived catalog state are one command: a failed catalog
+      // write can never leave a successfully-created task behind.
+      await db.transaction(async (tx) => {
+        await tx.insert(taskLineTable).values(newLine);
+        await rebuildCatalog(user.id, tx);
+        await refreshClosedBalance(day, tx);
       });
       return { id };
     },
@@ -1149,6 +1048,57 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         detailsCiphertext: t.Optional(t.Nullable(t.String())),
         detailsIv: t.Optional(t.Nullable(t.String())),
         allowOverCapacity: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .patch(
+    "/days/:dayId/lines/reorder",
+    async ({ params, body, request, set }) => {
+      const user = await requireFullUser(request);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const day = await ownedDay(user.id, params.dayId);
+      if (!day) {
+        set.status = 404;
+        return { error: "Day not found." };
+      }
+      const ids = body.positions.map((position) => position.id);
+      if (new Set(ids).size !== ids.length) {
+        set.status = 400;
+        return { error: "Each task can appear only once in a reorder." };
+      }
+      const existing = await db
+        .select()
+        .from(taskLineTable)
+        .where(eq(taskLineTable.dayId, day.id));
+      const existingById = new Map(existing.map((line) => [line.id, line]));
+      if (ids.some((id) => !existingById.has(id))) {
+        set.status = 404;
+        return { error: "One or more tasks no longer belong to this day." };
+      }
+      await db.transaction(async (tx) => {
+        for (const position of body.positions) {
+          await tx
+            .update(taskLineTable)
+            .set({ side: position.side, sort: Math.max(0, Math.round(position.sort)) })
+            .where(and(eq(taskLineTable.id, position.id), eq(taskLineTable.dayId, day.id)));
+        }
+        await rebuildCatalog(user.id, tx);
+        await refreshClosedBalance(day, tx);
+      });
+      return { ok: true };
+    },
+    {
+      body: t.Object({
+        positions: t.Array(
+          t.Object({
+            id: t.String(),
+            side: t.Union([t.Literal("deposit"), t.Literal("withdrawal")]),
+            sort: t.Number(),
+          }),
+        ),
       }),
     },
   )
@@ -1260,30 +1210,6 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         return { error: "That change would reserve more points than remain available." };
       }
 
-      // Move difficulty samples when rating, side, or label identity changes.
-      const catalogKeyChanged =
-        nextLabelHash !== line.labelHash || nextSide !== line.side;
-      if (day.phase !== "closed" && (nextDifficulty !== line.difficulty || catalogKeyChanged)) {
-        if (line.difficulty !== null) {
-          await adjustCatalogDifficulty(
-            user.id,
-            line.labelHash,
-            line.side,
-            -line.difficulty,
-            -1,
-          );
-        }
-        if (nextDifficulty !== null) {
-          await adjustCatalogDifficulty(
-            user.id,
-            nextLabelHash,
-            nextSide,
-            nextDifficulty,
-            1,
-          );
-        }
-      }
-
       const changes = {
         plannedCost: nextPlanned,
         actualCost: nextActual,
@@ -1298,15 +1224,11 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         side: nextSide,
         sort: body.sort === undefined ? line.sort : body.sort,
       };
-      if (day.phase === "closed") {
-        await db.transaction(async (tx) => {
-          await tx.update(taskLineTable).set(changes).where(eq(taskLineTable.id, line.id));
-          await rebuildCatalog(user.id, tx);
-          await refreshClosedBalance(day, tx);
-        });
-      } else {
-        await db.update(taskLineTable).set(changes).where(eq(taskLineTable.id, line.id));
-      }
+      await db.transaction(async (tx) => {
+        await tx.update(taskLineTable).set(changes).where(eq(taskLineTable.id, line.id));
+        await rebuildCatalog(user.id, tx);
+        await refreshClosedBalance(day, tx);
+      });
       return { ok: true };
     },
     {
@@ -1555,17 +1477,18 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
       }
       const fromAt = query.from ? new Date(`${query.from}T00:00:00.000Z`) : undefined;
       const toAt = query.to ? new Date(`${query.to}T23:59:59.999Z`) : undefined;
-      const rows = await db
+      const metricAt = sql`COALESCE(${dayTable.closedAt}, ${dayTable.startedAt})`;
+      let days = await db
         .select()
         .from(dayTable)
-        .where(eq(dayTable.userId, user.id))
+        .where(
+          and(
+            eq(dayTable.userId, user.id),
+            fromAt ? gte(metricAt, fromAt.getTime()) : undefined,
+            toAt ? lte(metricAt, toAt.getTime()) : undefined,
+          ),
+        )
         .orderBy(dayTable.startedAt, dayTable.id);
-      let days = rows.filter((d) => {
-        const metricAt = d.phase === "closed" ? (d.closedAt ?? d.startedAt) : d.startedAt;
-        if (fromAt && metricAt < fromAt) return false;
-        if (toAt && metricAt > toAt) return false;
-        return true;
-      });
 
       // Spanning days can start before the visible range but still be the live sheet.
       const active = await db.query.dayTable.findFirst({
@@ -1577,16 +1500,24 @@ export const dayRoutes = new Elysia({ prefix: "/api" })
         );
       }
 
-      const series = [];
-      for (const d of days) {
-        series.push(await statPointForDay(d));
+      const lines = days.length
+        ? await db.select().from(taskLineTable).where(inArray(taskLineTable.dayId, days.map((day) => day.id)))
+        : [];
+      const linesByDay = new Map<string, (typeof taskLineTable.$inferSelect)[]>();
+      for (const line of lines) {
+        const group = linesByDay.get(line.dayId) ?? [];
+        group.push(line);
+        linesByDay.set(line.dayId, group);
       }
+      const includeLines = query.lineDetail !== "false";
+      const series = days.map((day) => statPointForDay(day, linesByDay.get(day.id) ?? [], includeLines));
       return { series };
     },
     {
       query: t.Object({
         from: t.Optional(t.String()),
         to: t.Optional(t.String()),
+        lineDetail: t.Optional(t.String()),
       }),
     },
   );
