@@ -228,7 +228,7 @@ async function rebuildCatalog(userId: string, executor: WriteDb = db) {
 
 /** Plaintext stat row for one day, shared by /stats and export. */
 async function statPointForDay(d: typeof dayTable.$inferSelect) {
-  const lines = await db.select().from(taskLineTable).where(eq(taskLineTable.dayId, d.id));
+  const lines = await linesForDay(d.id);
   const tasks: AllocatableTask[] = lines.map((l) => ({
     side: l.side as TaskCosts["side"],
     planned: l.plannedCost,
@@ -271,6 +271,16 @@ async function statPointForDay(d: typeof dayTable.$inferSelect) {
     difficultyRatedCount: rated.length,
     plannedTotal,
     actualTotal,
+    lines: lines.map((l) => ({
+      side: l.side,
+      sort: l.sort,
+      labelCiphertext: l.labelCiphertext,
+      labelIv: l.labelIv,
+      labelHash: l.labelHash,
+      plannedCost: l.plannedCost,
+      actualCost: l.actualCost,
+      completed: l.completed,
+    })),
   };
 }
 

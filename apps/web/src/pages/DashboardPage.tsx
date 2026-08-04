@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
+import { decryptText, getSessionDek } from "../lib/crypto";
+import { buildDayBriefing } from "../lib/dashboardBriefing";
 import { closeDayInsights, planningHint, type Insight, type StatPoint } from "../lib/insights";
 import { defaultTemperatureUnit, formatTemp } from "../lib/weatherUi";
 
@@ -11,6 +13,30 @@ type Point = StatPoint & {
 };
 
 type Range = "day" | "week" | "month" | "year";
+
+async function hydrateStatLines<T extends StatPoint>(points: T[]): Promise<T[]> {
+  const dek = getSessionDek();
+  if (!dek) return points;
+  const hydrated = await Promise.all(
+    points.map(async (point) => ({
+      ...point,
+      lines: await Promise.all(
+        (point.lines ?? []).map(async (line) => {
+          if (!line.labelCiphertext || !line.labelIv) return line;
+          try {
+            return {
+              ...line,
+              label: await decryptText(dek, line.labelCiphertext, line.labelIv, "eaj-label"),
+            };
+          } catch {
+            return line;
+          }
+        }),
+      ),
+    })),
+  );
+  return hydrated as T[];
+}
 
 /** Monday (local) of the calendar week containing dateIso. */
 function weekStartIso(dateIso: string): string {
@@ -107,7 +133,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
   const [series, setSeries] = useState<Point[]>([]);
   // Insights need a fixed ~60-day window so streak/average copy is not
   // silently scoped to whatever chart range the user clicked.
-  const [insightSeries, setInsightSeries] = useState<StatPoint[]>([]);
+  const [insightSeries, setInsightSeries] = useState<Point[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -116,22 +142,40 @@ export function DashboardPage({ user }: { user: UserProfile }) {
 
   useEffect(() => {
     const { from, to } = rangeBounds(range);
+    let alive = true;
     setLoading(true);
     setError(null);
     void api<{ series: Point[] }>(`/api/stats?from=${from}&to=${to}`)
-      .then((r) => setSeries(r.series))
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load your day summary."))
-      .finally(() => setLoading(false));
+      .then(async (r) => {
+        const hydrated = await hydrateStatLines(r.series);
+        if (alive) setSeries(hydrated);
+      })
+      .catch((e) => {
+        if (alive) setError(e instanceof Error ? e.message : "Could not load your day summary.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [range]);
 
   useEffect(() => {
+    let alive = true;
     const to = isoDate();
     const from = new Date(to + "T12:00:00Z");
     from.setUTCDate(from.getUTCDate() - 60);
     const fromIso = from.toISOString().slice(0, 10);
-    void api<{ series: StatPoint[] }>(`/api/stats?from=${fromIso}&to=${to}`)
-      .then((r) => setInsightSeries(r.series))
+    void api<{ series: Point[] }>(`/api/stats?from=${fromIso}&to=${to}`)
+      .then(async (r) => {
+        const hydrated = await hydrateStatLines(r.series);
+        if (alive) setInsightSeries(hydrated);
+      })
       .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const previousDays = useMemo(
@@ -163,6 +207,27 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     const active = [...series].reverse().find((p) => p.phase !== "closed");
     return active ?? series.at(-1);
   }, [series]);
+  const closedInsightDays = useMemo(
+    () =>
+      insightSeries
+        .filter((point) => point.phase === "closed")
+        .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
+    [insightSeries],
+  );
+  const dayHistory = useMemo(
+    () =>
+      latest
+        ? closedInsightDays
+            .filter((point) => Date.parse(point.startedAt) < Date.parse(latest.startedAt))
+            .slice(-30)
+        : closedInsightDays,
+    [closedInsightDays, latest],
+  );
+  const dayBriefing = useMemo(
+    () => buildDayBriefing(latest, dayHistory),
+    [latest, dayHistory],
+  );
+  const dayMode = range === "day";
   const bucketing = displayed.length < series.length;
   const completionRate = series.reduce((sum, point) => sum + point.taskCount, 0)
     ? Math.round(
@@ -171,13 +236,15 @@ export function DashboardPage({ user }: { user: UserProfile }) {
           100,
       )
     : 0;
-  const takeaway = latest
-    ? latest.phase === "closed"
-      ? latest.closingBalance >= avgClose
-        ? `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
-        : `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
-      : `${latest.availableCapacity ?? 0} points available now · ${latest.closingBalance} projected remaining if plans hold.`
-    : "Close a day to begin building a useful energy history.";
+  const takeaway = dayMode
+    ? dayBriefing.headline
+    : latest
+      ? latest.phase === "closed"
+        ? latest.closingBalance >= avgClose
+          ? `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points above this period's average.`
+          : `Latest day ended with ${latest.closingBalance} energy remaining, ${Math.abs(latest.closingBalance - avgClose)} points below this period's average.`
+        : `${latest.availableCapacity ?? 0} points available now · ${latest.closingBalance} projected remaining if plans hold.`
+      : "Close a day to begin building a useful energy history.";
 
   return (
     <div className="dashboard">
@@ -204,59 +271,87 @@ export function DashboardPage({ user }: { user: UserProfile }) {
         {loading && <p className="muted">Reading your days…</p>}
         <div className="dashboard-primary">
           <div>
-            <span className="dashboard-value">{latest?.closingBalance ?? "Unavailable"}</span>
-            <span className="muted">latest energy remaining</span>
+            <span className="dashboard-value">
+              {dayMode ? dayBriefing.primaryValue : latest?.closingBalance ?? "Unavailable"}
+            </span>
+            <span className="muted">
+              {dayMode ? dayBriefing.primaryLabel : "latest energy remaining"}
+            </span>
           </div>
-          <p>{completionRate}% of planned lines completed in this period.</p>
+          <p>
+            {dayMode
+              ? dayBriefing.completionText
+              : `${completionRate} percent of planned lines completed in this period.`}
+          </p>
         </div>
-        <div
-          className="balance-chart"
-          role="group"
-          aria-label={
-            bucketing
-              ? "Weekly average energy remaining by week"
-              : "Energy remaining when the day closed"
-          }
-        >
-          <div className="balance-zero" aria-hidden="true" />
-          {displayed.map((p) => {
-            const height = Math.max(3, (Math.abs(p.closingBalance) / maxAbs) * 48);
-            const positive = p.closingBalance >= 0;
-            const weekLabel = bucketing ? weekStartIso(p.date) : p.date;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                className={`balance-mark ${positive ? "positive" : "negative"} ${p.isHoliday ? "holiday" : ""}`}
-                aria-label={
-                  bucketing
-                    ? `Week of ${weekLabel}, average energy remaining ${p.closingBalance}.`
-                    : `${dayLabel(p)}, energy remaining ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
-                }
-                title={
-                  bucketing
-                    ? `Week of ${weekLabel}: avg remaining ${p.closingBalance}`
-                    : `${dayLabel(p)}: remaining ${p.closingBalance}, net ${p.attwoodNet}`
-                }
-                onClick={() => navigate(`/?day=${p.id}`)}
-              >
-                <span
-                  className="balance-mark-bar"
-                  style={{ height: `${height}%` }}
-                  aria-hidden="true"
-                />
-              </button>
-            );
-          })}
-          {!loading && !previousDays.length && (
-            <p className="muted dashboard-empty">No closed days in this range yet.</p>
-          )}
-        </div>
-        <div className="chart-caption">
-          <span>Negative</span>
-          <span>{bucketing ? "Calendar-week averages" : "Per day"}</span>
-          <span>Positive</span>
-        </div>
+        {dayMode ? (
+          <div className="day-briefing-chart" role="group" aria-label="Today's planned energy compared with recent closed days">
+            {dayBriefing.chartRows.map((row) => (
+              <div key={row.id} className={`day-briefing-row day-briefing-row-${row.tone}`}>
+                <div className="day-briefing-row-head">
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                </div>
+                <div className="day-briefing-track" aria-hidden="true">
+                  <span style={{ width: `${row.width}%` }} />
+                </div>
+                <p>{row.compare}</p>
+              </div>
+            ))}
+            <p className="dashboard-briefing-insight">{dayBriefing.insight}</p>
+          </div>
+        ) : (
+          <>
+            <div
+              className="balance-chart"
+              role="group"
+              aria-label={
+                bucketing
+                  ? "Weekly average energy remaining by week"
+                  : "Energy remaining when the day closed"
+              }
+            >
+              <div className="balance-zero" aria-hidden="true" />
+              {displayed.map((p) => {
+                const height = Math.max(3, (Math.abs(p.closingBalance) / maxAbs) * 48);
+                const positive = p.closingBalance >= 0;
+                const weekLabel = bucketing ? weekStartIso(p.date) : p.date;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`balance-mark ${positive ? "positive" : "negative"} ${p.isHoliday ? "holiday" : ""}`}
+                    aria-label={
+                      bucketing
+                        ? `Week of ${weekLabel}, average energy remaining ${p.closingBalance}.`
+                        : `${dayLabel(p)}, energy remaining ${p.closingBalance}, Attwood net ${p.attwoodNet}, ${p.completedCount} of ${p.taskCount} completed`
+                    }
+                    title={
+                      bucketing
+                        ? `Week of ${weekLabel}: avg remaining ${p.closingBalance}`
+                        : `${dayLabel(p)}: remaining ${p.closingBalance}, net ${p.attwoodNet}`
+                    }
+                    onClick={() => navigate(`/?day=${p.id}`)}
+                  >
+                    <span
+                      className="balance-mark-bar"
+                      style={{ height: `${height}%` }}
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+              {!loading && !previousDays.length && (
+                <p className="muted dashboard-empty">No closed days in this range yet.</p>
+              )}
+            </div>
+            <div className="chart-caption">
+              <span>Negative</span>
+              <span>{bucketing ? "Calendar-week averages" : "Per day"}</span>
+              <span>Positive</span>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="panel capacity-platter">

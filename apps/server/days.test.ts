@@ -278,6 +278,18 @@ describe("day lifecycle", () => {
       closingBalance: null,
       phase: "plan",
     });
+    await db.insert(taskLineTable).values({
+      id: "close-range-line",
+      dayId: "close-range-day",
+      side: "withdrawal",
+      sort: 0,
+      labelCiphertext: "cipher-close-range",
+      labelIv: "iv-close-range",
+      labelHash: "close-range-hash",
+      plannedCost: 15,
+      actualCost: 20,
+      completed: true,
+    });
 
     const closed = await apiRequest("/days/close-range-day/close", token, { method: "POST" });
     expect(closed.status).toBe(200);
@@ -292,12 +304,40 @@ describe("day lifecycle", () => {
     const stats = await apiRequest(`/stats?from=${today}&to=${today}`, token);
     expect(stats.status).toBe(200);
     const statsBody = (await stats.json()) as {
-      series: Array<{ id: string; closedAt: string | null; durationMinutes: number | null }>;
+      series: Array<{
+        id: string;
+        closedAt: string | null;
+        durationMinutes: number | null;
+        lines?: Array<{
+          side: string;
+          labelCiphertext: string;
+          labelIv: string;
+          labelHash: string;
+          plannedCost: number;
+          actualCost: number | null;
+          completed: boolean;
+          label?: string;
+          details?: string;
+        }>;
+      }>;
     };
     expect(statsBody.series.some((point) => point.id === "close-range-day")).toBe(true);
     const point = statsBody.series.find((p) => p.id === "close-range-day")!;
     expect(point.closedAt).toBe(closeBody.closedAt);
     expect(point.durationMinutes).toBeGreaterThan(0);
+    expect(point.lines).toEqual([
+      expect.objectContaining({
+        side: "withdrawal",
+        labelCiphertext: "cipher-close-range",
+        labelIv: "iv-close-range",
+        labelHash: "close-range-hash",
+        plannedCost: 15,
+        actualCost: 20,
+        completed: true,
+      }),
+    ]);
+    expect(point.lines?.[0]).not.toHaveProperty("label");
+    expect(point.lines?.[0]).not.toHaveProperty("details");
   });
 
   test("completion toggles store and clear completion timestamps", async () => {

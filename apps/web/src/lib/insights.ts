@@ -32,6 +32,19 @@ export type StatPoint = {
   difficultyRatedCount?: number;
   plannedTotal: number;
   actualTotal: number;
+  lines?: StatLinePoint[];
+};
+
+export type StatLinePoint = {
+  side: "deposit" | "withdrawal";
+  sort?: number;
+  labelCiphertext?: string;
+  labelIv?: string;
+  labelHash?: string;
+  plannedCost: number;
+  actualCost?: number | null;
+  completed?: boolean;
+  label?: string;
 };
 
 export type InsightTone = "celebrate" | "notice" | "gentle";

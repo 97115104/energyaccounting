@@ -1,9 +1,8 @@
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { flushSync } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
@@ -26,6 +25,7 @@ import {
   getSessionDek,
   labelHash,
 } from "../lib/crypto";
+import { buildTrendNarrative } from "../lib/dashboardBriefing";
 import {
   buildGuide,
   recoveryPlan,
@@ -86,15 +86,6 @@ type LineMovePreview = {
   targetSide: "deposit" | "withdrawal";
   targetIndex: number;
 } | null;
-
-type DocumentWithViewTransition = Document & {
-  startViewTransition?: (callback: () => void) => {
-    finished: Promise<void>;
-    ready: Promise<void>;
-    updateCallbackDone: Promise<void>;
-    skipTransition: () => void;
-  };
-};
 
 type Suggestion = {
   id: string;
@@ -329,44 +320,6 @@ function guideSideLabel(side: "deposit" | "withdrawal") {
   return side === "deposit" ? "Add energy" : "Use energy";
 }
 
-function previewLineMove(lines: Line[], preview: LineMovePreview): Line[] {
-  if (!preview) return lines;
-  const source = lines.find((line) => line.id === preview.lineId);
-  if (!source) return lines;
-
-  const ordered = (side: "deposit" | "withdrawal") =>
-    lines
-      .filter((line) => line.side === side)
-      .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
-  const sourceSide = source.side;
-  const desired = new Map<string, { side: "deposit" | "withdrawal"; sort: number }>();
-
-  if (sourceSide !== preview.targetSide) {
-    ordered(sourceSide)
-      .filter((line) => line.id !== source.id)
-      .forEach((line, index) => desired.set(line.id, { side: sourceSide, sort: index }));
-  }
-
-  const targetOrdered = ordered(preview.targetSide);
-  const sourceIndex = preview.targetSide === sourceSide
-    ? targetOrdered.findIndex((line) => line.id === source.id)
-    : -1;
-  const adjustedTargetIndex =
-    sourceIndex >= 0 && sourceIndex < preview.targetIndex
-      ? preview.targetIndex - 1
-      : preview.targetIndex;
-  const targetWithoutSource = targetOrdered.filter((line) => line.id !== source.id);
-  const clampedIndex = Math.max(0, Math.min(adjustedTargetIndex, targetWithoutSource.length));
-  const targetWithSource = [...targetWithoutSource];
-  targetWithSource.splice(clampedIndex, 0, { ...source, side: preview.targetSide });
-  targetWithSource.forEach((line, index) => desired.set(line.id, { side: preview.targetSide, sort: index }));
-
-  return lines.map((line) => {
-    const next = desired.get(line.id);
-    return next ? { ...line, side: next.side, sort: next.sort } : line;
-  });
-}
-
 function sameLineMovePreview(a: LineMovePreview, b: LineMovePreview) {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -497,14 +450,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   function previewLine(lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) {
     const next = { lineId, targetSide, targetIndex };
     if (sameLineMovePreview(dragPreviewRef.current, next)) return;
-    const doc = document as DocumentWithViewTransition;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (doc.startViewTransition && !reducedMotion) {
-      doc.startViewTransition(() => {
-        flushSync(() => setDragPreviewNow(next));
-      });
-      return;
-    }
     setDragPreviewNow(next);
   }
 
@@ -1121,10 +1066,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => window.clearTimeout(t);
   }, [draftLabel, day, suggestions]);
 
-  const visibleLines = useMemo(
-    () => previewLineMove(day?.lines ?? [], dragPreview),
-    [day?.lines, dragPreview],
-  );
+  const visibleLines = useMemo(() => day?.lines ?? [], [day?.lines]);
   const deposits = useMemo(
     () => visibleLines.filter((l) => l.side === "deposit").sort((a, b) => a.sort - b.sort),
     [visibleLines],
@@ -1224,6 +1166,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
       return w ? [{ label: d.label, tone: d.tone, ...w }] : [];
     });
   }, [closedStats]);
+  const trendNarrative = useMemo(
+    () => buildTrendNarrative(trendMetrics, closedStats.length),
+    [trendMetrics, closedStats.length],
+  );
 
   // Escape closes the trends dialog, matching the other lightweight modals.
   useEffect(() => {
@@ -2578,6 +2524,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             addingRecentId={addingRecentId}
             dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
+            dropTarget={dragPreview}
             onAdd={() => setDraftSide("withdrawal")}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
@@ -2616,6 +2563,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             addingRecentId={addingRecentId}
             dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
+            dropTarget={dragPreview}
             onAdd={() => setDraftSide("deposit")}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
@@ -3330,10 +3278,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                     </div>
                   ))}
                 </div>
-                <p className="muted">
-                  Averages cover your last 7 closed days; arrows compare them with the days
-                  before. Direction is information, not a grade.
-                </p>
+                <p className="muted trend-narrative">{trendNarrative}</p>
               </>
             ) : (
               <p className="muted">
@@ -3529,6 +3474,7 @@ function Column(props: {
   addingRecentId: string | null;
   dragActive: boolean;
   draggingLineId: string | null;
+  dropTarget: LineMovePreview;
   exitingIds: Set<string>;
   completingIds: Set<string>;
   onAdd: () => void;
@@ -3648,6 +3594,37 @@ function Column(props: {
     props.onDropLine(lineId, props.side, targetIndex);
   }
 
+  function normalizedDropTarget() {
+    const target = props.dropTarget;
+    if (target?.targetSide !== props.side) return null;
+    const sourceIndex = props.lines.findIndex((line) => line.id === target.lineId);
+    const adjustedTargetIndex =
+      sourceIndex >= 0 && sourceIndex < target.targetIndex
+        ? target.targetIndex - 1
+        : target.targetIndex;
+    const targetLines = props.lines.filter((line) => line.id !== target.lineId);
+    const index = Math.max(0, Math.min(adjustedTargetIndex, targetLines.length));
+    if (sourceIndex >= 0 && index === sourceIndex) return null;
+    return { lineId: target.lineId, index, targetLines };
+  }
+
+  function shouldShowDropBefore(line: Line) {
+    const target = normalizedDropTarget();
+    if (!target || target.lineId === line.id) return false;
+    const index = target.targetLines.findIndex((targetLine) => targetLine.id === line.id);
+    return index === target.index;
+  }
+
+  function shouldShowDropAtEnd(list: Line[]) {
+    const target = normalizedDropTarget();
+    if (!target) return false;
+    return target.index >= target.targetLines.length || list.length === 0;
+  }
+
+  function DropIndicator() {
+    return <div className="task-drop-indicator" aria-hidden="true" />;
+  }
+
   return (
     <div
       className={`panel column-panel ${props.className}${props.dragActive ? " column-drop-active" : ""}`}
@@ -3683,29 +3660,32 @@ function Column(props: {
       {incomplete.map((l) => {
         const index = props.lines.findIndex((line) => line.id === l.id);
         return (
-        <TaskRow
-          key={l.id}
-          line={l}
-          closed={props.closed}
-          audit={props.audit}
-          dragActive={props.dragActive}
-          draggingLineId={props.draggingLineId}
-          dragging={props.draggingLineId === l.id}
-          index={index}
-          exiting={props.exitingIds.has(l.id)}
-          busy={props.completingIds.has(l.id)}
-          onActual={props.onActual}
-          onComplete={props.onComplete}
-          onRemove={props.onRemove}
-          onOpen={props.onOpen}
-          onMoveOtherSide={props.onMoveOtherSide}
-          onDragStart={props.onDragStart}
-          onDragEnd={props.onDragEnd}
-          onPreviewLine={props.onPreviewLine}
-          onDropLine={props.onDropLine}
-        />
+          <Fragment key={l.id}>
+            {shouldShowDropBefore(l) && <DropIndicator />}
+            <TaskRow
+              line={l}
+              closed={props.closed}
+              audit={props.audit}
+              dragActive={props.dragActive}
+              draggingLineId={props.draggingLineId}
+              dragging={props.draggingLineId === l.id}
+              index={index}
+              exiting={props.exitingIds.has(l.id)}
+              busy={props.completingIds.has(l.id)}
+              onActual={props.onActual}
+              onComplete={props.onComplete}
+              onRemove={props.onRemove}
+              onOpen={props.onOpen}
+              onMoveOtherSide={props.onMoveOtherSide}
+              onDragStart={props.onDragStart}
+              onDragEnd={props.onDragEnd}
+              onPreviewLine={props.onPreviewLine}
+              onDropLine={props.onDropLine}
+            />
+          </Fragment>
         );
       })}
+      {shouldShowDropAtEnd(incomplete) && <DropIndicator />}
       {completedCount > 0 && praise.lead && (
         <div className="col-completed">
           <button
@@ -3738,27 +3718,29 @@ function Column(props: {
               {completed.map((l) => {
                 const index = props.lines.findIndex((line) => line.id === l.id);
                 return (
-                <TaskRow
-                  key={l.id}
-                  line={l}
-                  closed={props.closed}
-                  audit={props.audit}
-                  dragActive={props.dragActive}
-                  draggingLineId={props.draggingLineId}
-                  dragging={props.draggingLineId === l.id}
-                  index={index}
-                  exiting={false}
-                  busy={props.completingIds.has(l.id)}
-                  onActual={props.onActual}
-                  onComplete={props.onComplete}
-                  onRemove={props.onRemove}
-                  onOpen={props.onOpen}
-                  onMoveOtherSide={props.onMoveOtherSide}
-                  onDragStart={props.onDragStart}
-                  onDragEnd={props.onDragEnd}
-                  onPreviewLine={props.onPreviewLine}
-                  onDropLine={props.onDropLine}
-                />
+                  <Fragment key={l.id}>
+                    {shouldShowDropBefore(l) && <DropIndicator />}
+                    <TaskRow
+                      line={l}
+                      closed={props.closed}
+                      audit={props.audit}
+                      dragActive={props.dragActive}
+                      draggingLineId={props.draggingLineId}
+                      dragging={props.draggingLineId === l.id}
+                      index={index}
+                      exiting={false}
+                      busy={props.completingIds.has(l.id)}
+                      onActual={props.onActual}
+                      onComplete={props.onComplete}
+                      onRemove={props.onRemove}
+                      onOpen={props.onOpen}
+                      onMoveOtherSide={props.onMoveOtherSide}
+                      onDragStart={props.onDragStart}
+                      onDragEnd={props.onDragEnd}
+                      onPreviewLine={props.onPreviewLine}
+                      onDropLine={props.onDropLine}
+                    />
+                  </Fragment>
                 );
               })}
             </div>
@@ -3985,6 +3967,7 @@ function TaskRow(props: {
       up: (event: Event) => void;
       cancel: (event: Event) => void;
     }) => void;
+    cleanup?: () => void;
   }) {
     const { startX, startY, longPress } = options;
     const startThreshold = longPress ? 10 : 4;
@@ -3992,13 +3975,13 @@ function TaskRow(props: {
     let active = false;
     let cancelled = false;
     let holdTimer: number | null = null;
+    let stopped = false;
 
     const begin = () => {
       if (active || cancelled) return;
       active = true;
       suppressOpenRef.current = true;
       props.onDragStart(props.line);
-      props.onPreviewLine(props.line.id, props.line.side, props.index);
     };
     if (longPress) {
       holdTimer = window.setTimeout(begin, TOUCH_REORDER_HOLD_MS);
@@ -4019,11 +4002,14 @@ function TaskRow(props: {
       up: (event: Event) => void;
       cancel: (event: Event) => void;
     }) => {
+      if (stopped) return;
+      stopped = true;
       if (holdTimer != null) {
         window.clearTimeout(holdTimer);
         holdTimer = null;
       }
       options.removeListeners(handlers);
+      options.cleanup?.();
     };
 
     const handlers = {
@@ -4093,6 +4079,12 @@ function TaskRow(props: {
     if (options.preventDefaultOnDown !== false) e.preventDefault();
     const pointerId = e.pointerId;
     const mousePointer = e.pointerType === "mouse";
+    const captureTarget = e.currentTarget;
+    try {
+      captureTarget.setPointerCapture(pointerId);
+    } catch {
+      // Some browsers only allow capture after movement starts.
+    }
     startArrangeTracking({
       startX: e.clientX,
       startY: e.clientY,
@@ -4114,6 +4106,15 @@ function TaskRow(props: {
         if (mousePointer) {
           document.removeEventListener("mousemove", handlers.move, true);
           document.removeEventListener("mouseup", handlers.up, true);
+        }
+      },
+      cleanup: () => {
+        try {
+          if (captureTarget.hasPointerCapture(pointerId)) {
+            captureTarget.releasePointerCapture(pointerId);
+          }
+        } catch {
+          // Capture may already be released by the browser on cancel.
         }
       },
     });

@@ -1180,6 +1180,27 @@ html[data-theme="night"] .btn.secondary {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
+.task-drop-indicator {
+  position: relative;
+  height: 8px;
+  margin: -0.1rem 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  overflow: hidden;
+}
+
+.task-drop-indicator::after {
+  content: "";
+  position: absolute;
+  left: 0.45rem;
+  right: 0.45rem;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--accent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-old(root),
   ::view-transition-new(root) {
@@ -2447,6 +2468,72 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 
 .balance-mark.negative.holiday::after {
   top: 2px;
+}
+
+.day-briefing-chart {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.day-briefing-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.day-briefing-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-weight: 700;
+}
+
+.day-briefing-row-head strong {
+  font-family: var(--display);
+  font-size: 1.35rem;
+}
+
+.day-briefing-track {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 65%, transparent);
+  overflow: hidden;
+}
+
+.day-briefing-track span {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: var(--muted);
+  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.day-briefing-row-withdrawal .day-briefing-track span {
+  background: var(--withdraw);
+}
+
+.day-briefing-row-deposit .day-briefing-track span {
+  background: var(--deposit);
+}
+
+.day-briefing-row-signed .day-briefing-track span {
+  background: var(--accent);
+}
+
+.day-briefing-row p,
+.dashboard-briefing-insight {
+  margin: 0;
+  color: var(--muted);
+}
+
+.dashboard-briefing-insight {
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
 }
 
 .dashboard-empty {
@@ -3773,34 +3860,34 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 
 .dictation-textarea {
   width: 100%;
-  padding-right: 3.8rem;
-  padding-bottom: 3.1rem;
+  padding-right: 2.85rem;
+  padding-bottom: 2.45rem;
 }
 
 .dictation-input {
-  padding-right: 3.5rem;
+  padding-right: 2.7rem;
 }
 
 .dictate-field-button {
   appearance: none;
   position: absolute;
-  right: 0.55rem;
-  bottom: 0.55rem;
+  right: 0.65rem;
+  bottom: 0.65rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-  border-radius: 50% !important;
-  background: color-mix(in srgb, var(--panel) 78%, transparent);
-  color: var(--ink);
-  box-shadow: 0 5px 18px color-mix(in srgb, var(--ink) 8%, transparent);
+  border: 0;
+  border-radius: 7px !important;
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  box-shadow: none;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 
 .dictatable-field.single-line .dictate-field-button {
@@ -3811,8 +3898,8 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 
 .dictate-field-button:hover:not(:disabled),
 .dictate-field-button:focus-visible:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink);
 }
 
 .dictate-field-button:active:not(:disabled) {
@@ -3828,10 +3915,14 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
   cursor: not-allowed;
 }
 
+.dictate-field-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .dictate-field-button.recording {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: var(--panel);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 /* Standalone DictationControl remains available for compact inline editors. */
