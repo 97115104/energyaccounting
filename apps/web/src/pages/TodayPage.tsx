@@ -1,6 +1,7 @@
 import { isWithdrawalHeavy, isoDate } from "@eaj/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { UserProfile } from "../App";
@@ -78,6 +79,12 @@ type Line = {
   details?: string;
   label?: string;
 };
+
+type LineMovePreview = {
+  lineId: string;
+  targetSide: "deposit" | "withdrawal";
+  targetIndex: number;
+} | null;
 
 type Suggestion = {
   id: string;
@@ -318,22 +325,6 @@ function GripIcon() {
   );
 }
 
-function ChevronUpIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="currentColor" d="m12 8 7 7-1.4 1.4L12 10.8l-5.6 5.6L5 15l7-7Z" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="currentColor" d="m12 16-7-7 1.4-1.4 5.6 5.6 5.6-5.6L19 9l-7 7Z" />
-    </svg>
-  );
-}
-
 function SwapColumnIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -343,6 +334,48 @@ function SwapColumnIcon() {
       />
     </svg>
   );
+}
+
+function guideSideLabel(side: "deposit" | "withdrawal") {
+  return side === "deposit" ? "Add energy" : "Use energy";
+}
+
+function previewLineMove(lines: Line[], preview: LineMovePreview): Line[] {
+  if (!preview) return lines;
+  const source = lines.find((line) => line.id === preview.lineId);
+  if (!source) return lines;
+
+  const ordered = (side: "deposit" | "withdrawal") =>
+    lines
+      .filter((line) => line.side === side)
+      .sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
+  const sourceSide = source.side;
+  const desired = new Map<string, { side: "deposit" | "withdrawal"; sort: number }>();
+
+  if (sourceSide !== preview.targetSide) {
+    ordered(sourceSide)
+      .filter((line) => line.id !== source.id)
+      .forEach((line, index) => desired.set(line.id, { side: sourceSide, sort: index }));
+  }
+
+  const targetOrdered = ordered(preview.targetSide);
+  const sourceIndex = preview.targetSide === sourceSide
+    ? targetOrdered.findIndex((line) => line.id === source.id)
+    : -1;
+  const adjustedTargetIndex =
+    sourceIndex >= 0 && sourceIndex < preview.targetIndex
+      ? preview.targetIndex - 1
+      : preview.targetIndex;
+  const targetWithoutSource = targetOrdered.filter((line) => line.id !== source.id);
+  const clampedIndex = Math.max(0, Math.min(adjustedTargetIndex, targetWithoutSource.length));
+  const targetWithSource = [...targetWithoutSource];
+  targetWithSource.splice(clampedIndex, 0, { ...source, side: preview.targetSide });
+  targetWithSource.forEach((line, index) => desired.set(line.id, { side: preview.targetSide, sort: index }));
+
+  return lines.map((line) => {
+    const next = desired.get(line.id);
+    return next ? { ...line, side: next.side, sort: next.sort } : line;
+  });
 }
 
 export function TodayPage({ user }: { user: UserProfile }) {
@@ -391,8 +424,10 @@ export function TodayPage({ user }: { user: UserProfile }) {
   });
   // Which column shows on small screens (segmented tab view).
   const [mobileCol, setMobileCol] = useState<"withdrawal" | "deposit">("withdrawal");
-  const [editingSide, setEditingSide] = useState<"deposit" | "withdrawal" | null>(null);
+  const [boardEditing, setBoardEditing] = useState(false);
   const [draggingLineId, setDraggingLineId] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<LineMovePreview>(null);
+  const [guideToast, setGuideToast] = useState<{ key: number; text: string } | null>(null);
   const [justFreed, setJustFreed] = useState<number | undefined>();
   // Rows mid exit-animation before they join the hidden/completed pool.
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
@@ -674,10 +709,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const readOnly = !!day && day.phase === "closed" && !amending;
   useEffect(() => {
     if (readOnly) {
-      setEditingSide(null);
+      setBoardEditing(false);
       setDraggingLineId(null);
+      setDragPreview(null);
     }
   }, [day?.id, readOnly]);
+
+  useEffect(() => {
+    if (!guideToast) return;
+    const timeoutId = window.setTimeout(() => setGuideToast(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [guideToast]);
   // Numeric history feeds the planning hint during plan and the Trends card
   // in every phase, so it loads once per day view.
   useEffect(() => {
@@ -1066,14 +1108,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => window.clearTimeout(t);
   }, [draftLabel, day, suggestions]);
 
+  const visibleLines = useMemo(
+    () => previewLineMove(day?.lines ?? [], dragPreview),
+    [day?.lines, dragPreview],
+  );
   const deposits = useMemo(
-    () => (day?.lines.filter((l) => l.side === "deposit") ?? []).sort((a, b) => a.sort - b.sort),
-    [day],
+    () => visibleLines.filter((l) => l.side === "deposit").sort((a, b) => a.sort - b.sort),
+    [visibleLines],
   );
   const withdrawals = useMemo(
-    () =>
-      (day?.lines.filter((l) => l.side === "withdrawal") ?? []).sort((a, b) => a.sort - b.sort),
-    [day],
+    () => visibleLines.filter((l) => l.side === "withdrawal").sort((a, b) => a.sort - b.sort),
+    [visibleLines],
   );
 
   const parsedWeather = useMemo(() => parseDayWeather(day?.weather ?? null), [day?.weather]);
@@ -1199,7 +1244,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         available: day.availableCapacity,
         depositTotal: day.attwood.depositTotal,
         withdrawalTotal: day.attwood.withdrawalTotal,
-        incompleteWithdrawals: withdrawals.filter((w) => !w.completed).length,
+        incompleteWithdrawals: day.lines.filter((line) => line.side === "withdrawal" && !line.completed).length,
         weatherKind,
         uv: uvNow,
         isDaylight,
@@ -1233,7 +1278,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     );
   }, [
     day,
-    withdrawals,
     weatherKind,
     uvNow,
     isDaylight,
@@ -1467,14 +1511,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
       targetDayId = (await startNewDay()) ?? undefined;
       if (!targetDayId) return false;
     }
+    const targetSide = sideOverride ?? action.side;
     const ok = await addLine(
-      sideOverride ?? action.side,
+      targetSide,
       action.label,
       action.cost,
       undefined,
       targetDayId,
     );
-    if (ok) dismissGuideItem(item.id);
+    if (ok) {
+      dismissGuideItem(item.id);
+      setGuideToast({
+        key: Date.now(),
+        text: `Added to ${guideSideLabel(targetSide)}.`,
+      });
+    }
     return ok;
   }
 
@@ -1578,9 +1629,16 @@ export function TodayPage({ user }: { user: UserProfile }) {
       return current && (current.sort !== next.sort || current.side !== next.side);
     });
     if (!updates.length) return;
+    const optimisticLines = day.lines.map((current) => {
+      const next = desired.get(current.id);
+      return next ? { ...current, side: next.side, sort: next.sort } : current;
+    });
 
     setError(null);
     setDetailError(null);
+    setDragPreview(null);
+    setDraggingLineId(null);
+    setDay((prev) => (prev?.id === day.id ? { ...prev, lines: optimisticLines } : prev));
     try {
       await Promise.all(
         updates.map(([id, next]) =>
@@ -2516,11 +2574,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
-            editing={editingSide === "withdrawal"}
-            dragActive={editingSide !== null}
+            editing={boardEditing}
+            dragActive={boardEditing}
             draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("withdrawal")}
-            onToggleEdit={() => setEditingSide(editingSide === "withdrawal" ? null : "withdrawal")}
+            onToggleEdit={() => setBoardEditing((editing) => !editing)}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
@@ -2530,9 +2588,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onMove={(line, direction) => void moveLine(line, direction)}
             onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
             onDragStart={(line) => setDraggingLineId(line.id)}
-            onDragEnd={() => setDraggingLineId(null)}
+            onDragEnd={() => {
+              setDraggingLineId(null);
+              setDragPreview(null);
+            }}
+            onPreviewLine={(lineId, targetSide, targetIndex) => {
+              setDragPreview({ lineId, targetSide, targetIndex });
+            }}
             onDropLine={(lineId, targetSide, targetIndex) => {
               const line = day.lines.find((l) => l.id === lineId);
+              setDraggingLineId(null);
+              setDragPreview(null);
               if (line) void moveLineTo(line, targetSide, targetIndex);
             }}
             exitingIds={exitingIds}
@@ -2549,11 +2615,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
             phase={day.phase}
             availableCapacity={day.availableCapacity}
             addingRecentId={addingRecentId}
-            editing={editingSide === "deposit"}
-            dragActive={editingSide !== null}
+            editing={boardEditing}
+            dragActive={boardEditing}
             draggingLineId={draggingLineId}
             onAdd={() => setDraftSide("deposit")}
-            onToggleEdit={() => setEditingSide(editingSide === "deposit" ? null : "deposit")}
+            onToggleEdit={() => setBoardEditing((editing) => !editing)}
             onAddRecent={(s) => void addRecent(s)}
             onAddAllRecent={(items) => void addAllRecent(items)}
             onActual={updateActual}
@@ -2563,9 +2629,17 @@ export function TodayPage({ user }: { user: UserProfile }) {
             onMove={(line, direction) => void moveLine(line, direction)}
             onMoveOtherSide={(line) => void moveLineToOtherSide(line)}
             onDragStart={(line) => setDraggingLineId(line.id)}
-            onDragEnd={() => setDraggingLineId(null)}
+            onDragEnd={() => {
+              setDraggingLineId(null);
+              setDragPreview(null);
+            }}
+            onPreviewLine={(lineId, targetSide, targetIndex) => {
+              setDragPreview({ lineId, targetSide, targetIndex });
+            }}
             onDropLine={(lineId, targetSide, targetIndex) => {
               const line = day.lines.find((l) => l.id === lineId);
+              setDraggingLineId(null);
+              setDragPreview(null);
               if (line) void moveLineTo(line, targetSide, targetIndex);
             }}
             exitingIds={exitingIds}
@@ -2672,6 +2746,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
         />
       )}
 
+      {guideToast && (
+        <div key={guideToast.key} className="guide-toast" role="status">
+          {guideToast.text}
+        </div>
+      )}
+
       </div>
 
       {/* No suggestions, no lightbulb: the FAB earns its place or leaves.
@@ -2734,9 +2814,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 closed={readOnly}
                 inSheet
                 onAction={(entry, useAlt, sideOverride) => {
-                  void applyGuideAction(entry, useAlt, sideOverride).then((ok) => {
-                    if (ok) setGuideOpen(false);
-                  });
+                  void applyGuideAction(entry, useAlt, sideOverride);
                 }}
                 onDismiss={dismissGuideItem}
               />
@@ -3478,6 +3556,7 @@ function Column(props: {
   onMoveOtherSide: (line: Line) => void;
   onDragStart: (line: Line) => void;
   onDragEnd: () => void;
+  onPreviewLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
   onDropLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
 }) {
   const columnId = `col-${props.side}`;
@@ -3565,6 +3644,11 @@ function Column(props: {
 
   function onColumnDragOver(e: DragEvent<HTMLDivElement>) {
     if (!props.dragActive || props.closed) return;
+    const lineId = draggedLineId(e);
+    if (lineId) {
+      const targetIndex = props.lines.filter((l) => l.id !== lineId).length;
+      props.onPreviewLine(lineId, props.side, targetIndex);
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   }
@@ -3597,7 +3681,7 @@ function Column(props: {
               title={`${props.editing ? "Finish editing" : "Edit"} ${props.title}`}
               onClick={props.onToggleEdit}
             >
-              {props.editing ? "Done" : <PencilIcon />}
+              {props.editing ? <span aria-hidden="true">✓</span> : <PencilIcon />}
             </button>
           )}
           <button
@@ -3638,6 +3722,7 @@ function Column(props: {
           onMoveOtherSide={props.onMoveOtherSide}
           onDragStart={props.onDragStart}
           onDragEnd={props.onDragEnd}
+          onPreviewLine={props.onPreviewLine}
           onDropLine={props.onDropLine}
         />
         );
@@ -3694,6 +3779,7 @@ function Column(props: {
                   onMoveOtherSide={props.onMoveOtherSide}
                   onDragStart={props.onDragStart}
                   onDragEnd={props.onDragEnd}
+                  onPreviewLine={props.onPreviewLine}
                   onDropLine={props.onDropLine}
                 />
                 );
@@ -3816,6 +3902,7 @@ function TaskRow(props: {
   onMoveOtherSide: (line: Line) => void;
   onDragStart: (line: Line) => void;
   onDragEnd: () => void;
+  onPreviewLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
   onDropLine: (lineId: string, targetSide: "deposit" | "withdrawal", targetIndex: number) => void;
 }) {
   const checked = props.line.completed || !!props.exiting;
@@ -3834,7 +3921,14 @@ function TaskRow(props: {
 
   function onDragOver(e: DragEvent<HTMLDivElement>) {
     if (!props.dragActive || props.closed || props.dragging) return;
+    const lineId = e.dataTransfer.getData("application/x-eaj-line-id");
+    if (lineId && lineId !== props.line.id) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      props.onPreviewLine(lineId, props.line.side, props.index + (before ? 0 : 1));
+    }
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
   }
 
@@ -3849,8 +3943,11 @@ function TaskRow(props: {
     props.onDropLine(lineId, props.line.side, props.index + (before ? 0 : 1));
   }
 
-  function resolvePointerDrop(clientX: number, clientY: number) {
-    if (!canArrange) return;
+  function resolvePointerTarget(
+    clientX: number,
+    clientY: number,
+  ): { targetSide: "deposit" | "withdrawal"; targetIndex: number } | null {
+    if (!canArrange) return null;
     const target = document.elementFromPoint(clientX, clientY);
     const targetRow = target instanceof Element
       ? target.closest<HTMLElement>("[data-line-id][data-line-side]")
@@ -3863,10 +3960,10 @@ function TaskRow(props: {
         if (targetIndex >= 0) {
           const rect = targetRow.getBoundingClientRect();
           const before = clientY < rect.top + rect.height / 2;
-          props.onDropLine(props.line.id, targetSide, targetIndex + (before ? 0 : 1));
+          return { targetSide, targetIndex: targetIndex + (before ? 0 : 1) };
         }
       }
-      return;
+      return null;
     }
 
     const targetColumn = target instanceof Element
@@ -3874,25 +3971,39 @@ function TaskRow(props: {
       : null;
     const targetSide = targetColumn?.dataset.columnSide;
     if (targetSide === "deposit" || targetSide === "withdrawal") {
-      props.onDropLine(props.line.id, targetSide, Number.MAX_SAFE_INTEGER);
+      const targetRows = [...document.querySelectorAll<HTMLElement>(`[data-line-side="${targetSide}"]`)]
+        .filter((row) => row.dataset.lineId !== props.line.id);
+      return { targetSide, targetIndex: targetRows.length };
     }
+    return null;
   }
 
-  function onHandlePointerDown(e: ReactPointerEvent<HTMLSpanElement>) {
+  function onHandlePointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
     if (!canArrange || (e.pointerType === "mouse" && e.button !== 0)) return;
     e.preventDefault();
     const pointerId = e.pointerId;
     props.onDragStart(props.line);
 
     const stopListening = () => {
+      document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("pointercancel", onPointerCancel, true);
     };
+    const preview = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      const target = resolvePointerTarget(event.clientX, event.clientY);
+      if (target) props.onPreviewLine(props.line.id, target.targetSide, target.targetIndex);
+    };
     const finish = (event: PointerEvent) => {
       if (event.pointerId !== pointerId) return;
+      preview(event);
       event.preventDefault();
-      resolvePointerDrop(event.clientX, event.clientY);
-      props.onDragEnd();
+      const target = resolvePointerTarget(event.clientX, event.clientY);
+      if (target) {
+        props.onDropLine(props.line.id, target.targetSide, target.targetIndex);
+      } else {
+        props.onDragEnd();
+      }
       stopListening();
     };
     const cancel = (event: PointerEvent) => {
@@ -3900,10 +4011,23 @@ function TaskRow(props: {
       props.onDragEnd();
       stopListening();
     };
+    const onPointerMove = (event: PointerEvent) => preview(event);
     const onPointerUp = (event: PointerEvent) => finish(event);
     const onPointerCancel = (event: PointerEvent) => cancel(event);
+    document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("pointercancel", onPointerCancel, true);
+  }
+
+  function onHandleKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (!canArrange) return;
+    if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      props.onMove(props.line, "up");
+    } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      e.preventDefault();
+      props.onMove(props.line, "down");
+    }
   }
 
   return (
@@ -3920,18 +4044,21 @@ function TaskRow(props: {
       onDrop={onDrop}
     >
       {props.editing && !props.closed && (
-        <span
+        <button
+          type="button"
           className="task-drag-handle"
-          aria-hidden="true"
           draggable={canArrange}
+          disabled={!canArrange}
+          aria-label={`Reorder ${props.line.label}`}
           title="Drag to rearrange"
           onDragStart={onDragStart}
           onDragEnd={props.onDragEnd}
           onPointerDown={onHandlePointerDown}
           onPointerCancel={props.onDragEnd}
+          onKeyDown={onHandleKeyDown}
         >
           <GripIcon />
-        </span>
+        </button>
       )}
       <button
         type="button"
@@ -3994,34 +4121,14 @@ function TaskRow(props: {
         <div className="task-edit-controls" aria-label={`Arrange ${props.line.label}`}>
           <button
             type="button"
-            className="task-edit-control"
-            disabled={!canArrange || props.index <= 0}
-            aria-label={`Move ${props.line.label} earlier`}
-            title="Move earlier"
-            onClick={() => props.onMove(props.line, "up")}
-          >
-            <ChevronUpIcon />
-          </button>
-          <button
-            type="button"
-            className="task-edit-control"
-            disabled={!canArrange || props.index >= props.count - 1}
-            aria-label={`Move ${props.line.label} later`}
-            title="Move later"
-            onClick={() => props.onMove(props.line, "down")}
-          >
-            <ChevronDownIcon />
-          </button>
-          <button
-            type="button"
             className="task-edit-control task-edit-control-wide"
             disabled={!canArrange}
-            aria-label={`Move ${props.line.label} to ${otherSideLabel}`}
-            title={`Move to ${otherSideLabel}`}
+            aria-label={`Switch ${props.line.label} to ${otherSideLabel}`}
+            title={`Switch to ${otherSideLabel}`}
             onClick={() => props.onMoveOtherSide(props.line)}
           >
             <SwapColumnIcon />
-            <span>{otherSideLabel}</span>
+            <span>Switch column</span>
           </button>
         </div>
       )}

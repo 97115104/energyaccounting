@@ -957,13 +957,16 @@ html[data-weather="thunder"] .sky-layer {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 0.65rem;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink);
   font: inherit;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
@@ -1203,13 +1206,28 @@ html[data-theme="night"] .btn.secondary {
 }
 
 .task-drag-handle {
+  appearance: none;
   display: inline-grid;
   place-items: center;
   width: 44px;
   height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--muted);
   cursor: grab;
   touch-action: none;
+}
+
+.task-drag-handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.task-drag-handle:hover:not(:disabled),
+.task-drag-handle:focus-visible:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .task-row[draggable="true"] {
@@ -1266,9 +1284,9 @@ html[data-theme="night"] .btn.secondary {
 }
 
 .task-edit-controls {
-  grid-column: 1 / -1;
+  grid-column: 3 / -1;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 0.35rem;
   padding-top: 0.35rem;
@@ -1309,7 +1327,7 @@ html[data-theme="night"] .btn.secondary {
 }
 
 .task-edit-control-wide {
-  min-width: 0;
+  min-width: 8rem;
 }
 
 /* Flat remove control: red ×, no filled brick (matches header icon-btn). */
@@ -3078,6 +3096,21 @@ html[data-theme="night"] .tips-fab {
   inset: 0;
   z-index: 41;
   background: color-mix(in srgb, var(--bg0) 10%, rgba(0, 0, 0, 0.18));
+}
+
+.guide-toast {
+  position: fixed;
+  right: calc(1rem + var(--sar));
+  bottom: calc(5rem + var(--sab));
+  z-index: 43;
+  max-width: min(320px, calc(100vw - 2rem - var(--sal) - var(--sar)));
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+  color: var(--ink);
+  font-weight: 800;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 18%, transparent);
+  animation: sheet-in 0.18s ease;
 }
 
 /* One guide recommendation, inline on the Today panel or inside the sheet. */

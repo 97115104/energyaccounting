@@ -233,7 +233,8 @@ function buildSteps(includeHomeScreen: boolean): Step[] {
           children, and therapists use it to grow steadier days and clearer productivity. You start
           each day when you are ready, and every day begins with 100 points. Adding energy back and
           spending it with the same care is part of a healthy lifestyle, so restores and uses stay
-          visible side by side. Try the buttons below to feel how that balance moves.
+          visible side by side. The same activity can add energy for one person and use energy for
+          another; when the guide shows +10 and -10, choose the side that is true for you today.
         </>
       ),
       glyph: <SunGlyph />,
@@ -905,7 +906,7 @@ export function OnboardingPage({ user, onUser }: Props) {
   );
 }
 
-const ENERGY_STEP = 12;
+const ENERGY_STEP = 10;
 
 function EnergyControls({
   balance,
@@ -926,7 +927,7 @@ function EnergyControls({
           onClick={() => onChange(Math.min(100, balance + ENERGY_STEP))}
           disabled={balance >= 100}
         >
-          + Add energy
+          +10 Add energy
         </button>
         <button
           type="button"
@@ -934,9 +935,12 @@ function EnergyControls({
           onClick={() => onChange(Math.max(0, balance - ENERGY_STEP))}
           disabled={balance <= 0}
         >
-          − Use energy
+          −10 Use energy
         </button>
       </div>
+      <p className="ob-demo-note">
+        Use + when something restores you. Use - when the same kind of thing costs energy today.
+      </p>
     </div>
   );
 }
