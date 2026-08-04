@@ -26,6 +26,72 @@ export type TrendMetric = {
   delta: number | null;
 };
 
+export type DashboardRange = "day" | "week" | "month" | "year";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function utcDayMs(dateIso: string) {
+  return Date.parse(`${dateIso}T12:00:00Z`);
+}
+
+function pointDayMs(point: Pick<StatPoint, "date" | "startedAt">) {
+  const day = point.date || point.startedAt.slice(0, 10);
+  const ms = utcDayMs(day);
+  return Number.isFinite(ms) ? ms : Date.parse(point.startedAt);
+}
+
+function closedDaysByDate(points: StatPoint[]) {
+  return points
+    .filter((point) => point.phase === "closed")
+    .sort((a, b) => pointDayMs(a) - pointDayMs(b));
+}
+
+function closedWithin(points: StatPoint[], todayMs: number, days: number) {
+  const startMs = todayMs - (days - 1) * DAY_MS;
+  return points.filter((point) => {
+    const dayMs = pointDayMs(point);
+    return Number.isFinite(dayMs) && dayMs >= startMs && dayMs <= todayMs;
+  });
+}
+
+function spanDays(points: StatPoint[]) {
+  if (points.length < 2) return points.length;
+  const first = pointDayMs(points[0]!);
+  const last = pointDayMs(points[points.length - 1]!);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return points.length;
+  return Math.floor((last - first) / DAY_MS) + 1;
+}
+
+function distinctMonthCount(points: StatPoint[]) {
+  return new Set(points.map((point) => (point.date || point.startedAt.slice(0, 10)).slice(0, 7))).size;
+}
+
+export function chooseDashboardRange(points: StatPoint[], todayIso: string): DashboardRange {
+  const closed = closedDaysByDate(points);
+  if (closed.length < 2) return "day";
+
+  const todayMs = utcDayMs(todayIso);
+  if (!Number.isFinite(todayMs)) return "day";
+
+  const week = closedWithin(closed, todayMs, 7);
+  const month = closedWithin(closed, todayMs, 30);
+  const year = closedWithin(closed, todayMs, 365);
+
+  if (year.length >= 45 && spanDays(year) >= 90 && distinctMonthCount(year) >= 4) {
+    return "year";
+  }
+  if (month.length >= 8 && spanDays(month) >= 12) {
+    return "month";
+  }
+  if (week.length >= 3) {
+    return "week";
+  }
+  if (month.length >= 4 && spanDays(month) >= 7) {
+    return "month";
+  }
+  return "day";
+}
+
 function recentClosedBefore(latest: StatPoint, history: StatPoint[]) {
   const latestStart = Date.parse(latest.startedAt);
   return history

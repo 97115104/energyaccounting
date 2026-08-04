@@ -2086,6 +2086,17 @@ html[data-theme="night"] .btn.secondary {
   margin-top: 0.3rem;
 }
 
+.trend-empty-state {
+  max-width: 24rem;
+  margin-top: 0.45rem;
+}
+
+.trend-empty-copy {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
 .trend-arrow {
   font-weight: 700;
   color: var(--muted);
@@ -2851,9 +2862,8 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
 }
 
 .day-rhythm-status {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  display: grid;
+  gap: 0.15rem;
   min-width: 0;
   padding-right: 0.25rem;
 }
@@ -2862,6 +2872,13 @@ html[data-theme="night"] .weather-chip:not(:disabled):hover {
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--muted);
+}
+
+.day-rhythm-subhead {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .phase-stepper {

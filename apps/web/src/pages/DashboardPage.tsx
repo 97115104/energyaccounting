@@ -1,10 +1,14 @@
 import { isoDate } from "@eaj/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { UserProfile } from "../App";
 import { api } from "../lib/api";
 import { decryptText, getSessionDek } from "../lib/crypto";
-import { buildDayBriefing } from "../lib/dashboardBriefing";
+import {
+  buildDayBriefing,
+  chooseDashboardRange,
+  type DashboardRange,
+} from "../lib/dashboardBriefing";
 import { closeDayInsights, planningHint, type Insight, type StatPoint } from "../lib/insights";
 import { defaultTemperatureUnit, formatTemp } from "../lib/weatherUi";
 
@@ -12,7 +16,7 @@ type Point = StatPoint & {
   weather: { tempMax?: number; precip?: number; holidayName?: string | null } | null;
 };
 
-type Range = "day" | "week" | "month" | "year";
+type Range = DashboardRange;
 
 async function hydrateStatLines<T extends StatPoint>(points: T[]): Promise<T[]> {
   const dek = getSessionDek();
@@ -129,10 +133,11 @@ function rangeBounds(kind: Range): { from: string; to: string } {
 }
 
 export function DashboardPage({ user }: { user: UserProfile }) {
-  const [range, setRange] = useState<Range>("week");
+  const [range, setRange] = useState<Range>("day");
   const [series, setSeries] = useState<Point[]>([]);
-  // Insights need a fixed ~60-day window so streak/average copy is not
-  // silently scoped to whatever chart range the user clicked.
+  const userSelectedRangeRef = useRef(false);
+  // Insights and default range selection use a fixed history window so those
+  // decisions are not scoped to whichever chart tab is active.
   const [insightSeries, setInsightSeries] = useState<Point[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -165,7 +170,7 @@ export function DashboardPage({ user }: { user: UserProfile }) {
     let alive = true;
     const to = isoDate();
     const from = new Date(to + "T12:00:00Z");
-    from.setUTCDate(from.getUTCDate() - 60);
+    from.setUTCDate(from.getUTCDate() - 365);
     const fromIso = from.toISOString().slice(0, 10);
     void api<{ series: Point[] }>(`/api/stats?from=${fromIso}&to=${to}`)
       .then(async (r) => {
@@ -177,6 +182,12 @@ export function DashboardPage({ user }: { user: UserProfile }) {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (userSelectedRangeRef.current || !insightSeries.length) return;
+    const recommendedRange = chooseDashboardRange(insightSeries, isoDate());
+    if (recommendedRange !== range) setRange(recommendedRange);
+  }, [insightSeries, range]);
 
   const previousDays = useMemo(
     () => series.filter((point) => point.phase === "closed"),
@@ -260,7 +271,10 @@ export function DashboardPage({ user }: { user: UserProfile }) {
               key={r}
               type="button"
               className={`btn ${range === r ? "accent" : "secondary"}`}
-              onClick={() => setRange(r)}
+              onClick={() => {
+                userSelectedRangeRef.current = true;
+                setRange(r);
+              }}
             >
               {r}
             </button>

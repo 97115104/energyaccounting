@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { buildDayBriefing, buildTrendNarrative, type TrendMetric } from "./dashboardBriefing";
+import {
+  buildDayBriefing,
+  buildTrendNarrative,
+  chooseDashboardRange,
+  type TrendMetric,
+} from "./dashboardBriefing";
 import type { StatPoint } from "./insights";
 
 function stat(overrides: Partial<StatPoint> = {}): StatPoint {
@@ -37,6 +42,52 @@ function expectProfileCopy(text: string) {
   expect(text).not.toContain("—");
   expect(text).not.toMatch(/\bnot\b[^.?!]+?\bbut\b/i);
 }
+
+function addDays(dateIso: string, offset: number) {
+  const date = new Date(`${dateIso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function closedStatOn(dateIso: string, index: number) {
+  return stat({
+    id: `closed-${index}`,
+    date: dateIso,
+    startedAt: `${dateIso}T09:00:00.000Z`,
+    closedAt: `${dateIso}T20:00:00.000Z`,
+  });
+}
+
+function closedSeries(startIso: string, count: number, everyDays = 1) {
+  return Array.from({ length: count }, (_, index) =>
+    closedStatOn(addDays(startIso, index * everyDays), index),
+  );
+}
+
+describe("chooseDashboardRange", () => {
+  test("defaults to day when comparison ranges do not have useful history", () => {
+    expect(chooseDashboardRange([], "2026-08-04")).toBe("day");
+    expect(chooseDashboardRange(closedSeries("2026-08-03", 1), "2026-08-04")).toBe("day");
+  });
+
+  test("uses week when the last seven days have a small trend sample", () => {
+    const points = ["2026-07-29", "2026-08-01", "2026-08-03"].map(closedStatOn);
+
+    expect(chooseDashboardRange(points, "2026-08-04")).toBe("week");
+  });
+
+  test("uses month when recent history spans enough days to be more informative", () => {
+    const points = closedSeries("2026-07-10", 9, 3);
+
+    expect(chooseDashboardRange(points, "2026-08-04")).toBe("month");
+  });
+
+  test("uses year when there is enough multi-month history", () => {
+    const points = closedSeries("2026-03-01", 46, 3);
+
+    expect(chooseDashboardRange(points, "2026-08-04")).toBe("year");
+  });
+});
 
 describe("buildDayBriefing", () => {
   test("compares today's planned energy with recent closed days", () => {

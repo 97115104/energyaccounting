@@ -240,6 +240,39 @@ function timeLabel(iso: string | null | undefined): string | null {
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+type RhythmPhase = "plan" | "audit" | "closed";
+
+function daypartLabel(date: Date): string {
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  const hour = safeDate.getHours();
+  if (hour < 5) return "Late night";
+  if (hour < 12) return "Morning";
+  if (hour < 17) return "Afternoon";
+  if (hour < 21) return "Evening";
+  return "Night";
+}
+
+function rhythmPhaseLabel(phase: RhythmPhase, date: Date): string {
+  if (phase === "closed") return "Day closed";
+  return `${daypartLabel(date)} ${phase}`;
+}
+
+function shortDayTime(date: Date): string {
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  return safeDate.toLocaleString(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function rhythmSubhead(day: DayPayload, phase: RhythmPhase, referenceDate: Date): string {
+  if (phase === "closed") {
+    return `Closed ${shortDayTime(referenceDate)}`;
+  }
+  return `Open since ${shortDayTime(new Date(day.startedAt))}`;
+}
+
 function durationLabel(minutes: number | null | undefined): string | null {
   if (minutes == null) return null;
   if (minutes < 60) return `${minutes} min`;
@@ -1080,7 +1113,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const dayClosed = day?.phase === "closed";
   // Closed days (including history) show the day's average; open days track the 15-min forecast.
   const useDayAverage = dayClosed || isHistoryView;
-  const clockNow = useQuarterHourClock(Boolean(parsedWeather) && !useDayAverage);
+  const clockNow = useQuarterHourClock(!dayClosed || (Boolean(parsedWeather) && !useDayAverage));
   const tz = liveTimezone(user.timezone);
   const liveConditions = useMemo(() => {
     if (!parsedWeather) return null;
@@ -2197,6 +2230,15 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }
 
   const closed = day?.phase === "closed";
+  const rhythmPhase: RhythmPhase = closed ? "closed" : day.phase === "audit" ? "audit" : "plan";
+  const rhythmReference = closed && day.closedAt ? new Date(day.closedAt) : clockNow;
+  const currentRhythmLabel = rhythmPhaseLabel(rhythmPhase, rhythmReference);
+  const currentRhythmSubhead = rhythmSubhead(day, rhythmPhase, rhythmReference);
+  const planStepLabel = rhythmPhaseLabel("plan", clockNow);
+  const auditStepLabel = rhythmPhaseLabel(
+    "audit",
+    closed && day.closedAt ? new Date(day.closedAt) : clockNow,
+  );
 
   return (
     <div className="today-root">
@@ -2413,13 +2455,8 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </HelpTip>
             <div className="day-rhythm-copy">
               <div className="day-rhythm-status">
-                <span className="day-rhythm-label">
-                  {closed
-                    ? "Day closed"
-                    : day.phase === "audit"
-                      ? "Evening audit"
-                      : "Morning plan"}
-                </span>
+                <span className="day-rhythm-label">{currentRhythmLabel}</span>
+                <span className="day-rhythm-subhead">{currentRhythmSubhead}</span>
               </div>
               {!closed && (
                 <p className="phase-step-hint muted" key={day.phase}>
@@ -2453,9 +2490,9 @@ export function TodayPage({ user }: { user: UserProfile }) {
                       disabled={!clickable}
                       aria-label={
                         step.id === "plan"
-                          ? "Morning plan"
+                          ? planStepLabel
                           : step.id === "audit"
-                            ? "Evening audit"
+                            ? auditStepLabel
                             : "Close day"
                       }
                       onClick={() => {
@@ -2593,7 +2630,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
         
       {(day.phase === "audit" || closed) && (
         <div className="panel" style={{ marginTop: "1rem" }}>
-          <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>Evening audit</h2>
+          <h2 style={{ fontFamily: "var(--display)", marginTop: 0 }}>{auditStepLabel}</h2>
           <p className="muted">How do you feel, on a scale from 1 to 10?</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "1rem" }}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -3281,11 +3318,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 <p className="muted trend-narrative">{trendNarrative}</p>
               </>
             ) : (
-              <p className="muted">
-                These trends will populate slowly but surely 🙂
-                <br />
-                Close a few more days and your patterns will start to appear here.
-              </p>
+              <div className="trend-empty-state">
+                <p className="muted trend-empty-copy">
+                  Close a few more days to see your trends here.
+                </p>
+              </div>
             )}
           </div>
         </div>
