@@ -48,6 +48,7 @@ import {
 import { loadPersonalData } from "../lib/personalData";
 import {
   addableRecent,
+  collapseSimilarRecent,
   filterUnusedRecent,
   recentDisabledReason,
   shouldShowColumnRecent,
@@ -2521,9 +2522,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
         >
             <p className="muted">Available to allocate · {day.availableCapacity}</p>
             {(() => {
-              const recentForSide = filterUnusedRecent(
-                recent.filter((s) => s.side === draftSide && s.label),
-                day.lines,
+              const recentForSide = collapseSimilarRecent(
+                filterUnusedRecent(
+                  recent.filter((s) => s.side === draftSide && s.label),
+                  day.lines,
+                ),
               );
               if (recentForSide.length === 0) return null;
               return (
@@ -3182,7 +3185,7 @@ function Column(props: {
 
   // Keep past-day picks visible under the live list while energy remains,
   // even after one item is added or others are completed.
-  const unusedRecent = filterUnusedRecent(props.recent, props.lines);
+  const unusedRecent = collapseSimilarRecent(filterUnusedRecent(props.recent, props.lines));
   const showRecent = shouldShowColumnRecent({
     closed: props.closed,
     phase: props.phase,
@@ -3371,6 +3374,8 @@ function Column(props: {
         );
       })}
       {shouldShowDropAtEnd(incomplete) && <DropIndicator />}
+      {(completedCount > 0 && praise.lead) || showRecent ? (
+        <div className="column-bottom-stack">
       {completedCount > 0 && praise.lead && (
         <div className="col-completed">
           <button
@@ -3434,7 +3439,7 @@ function Column(props: {
       )}
       {showRecent ? (
         <div
-          className={`column-recent${incomplete.length || completedCount ? " column-recent-follow" : ""}${!showSuggestions ? " column-recent-hidden" : ""}`}
+          className={`column-recent${incomplete.length || completedCount ? " column-recent-follow" : ""}`}
         >
           <div className="column-recent-head">
             <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
@@ -3533,6 +3538,8 @@ function Column(props: {
               })}
             </ul>
           </div>
+        </div>
+      ) : null}
         </div>
       ) : (
         showEmptyCopy && (

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   addableRecent,
+  collapseSimilarRecent,
   filterUnusedRecent,
   recentDisabledReason,
   shouldShowColumnRecent,
@@ -39,6 +40,55 @@ describe("filterUnusedRecent", () => {
       { side: "deposit", label: "walk" },
     ]);
     expect(unused.map((s) => s.id)).toEqual(["b"]);
+  });
+});
+
+describe("collapseSimilarRecent", () => {
+  test("keeps the newest representative for generic copy rewrites", () => {
+    const recent = [
+      {
+        id: "newest",
+        side: "deposit" as const,
+        label: "Review a few reports for budget planning.",
+        typicalCost: 20,
+      },
+      {
+        id: "older-rewrite",
+        side: "deposit" as const,
+        label: "Review report for budget planning",
+        typicalCost: 20,
+      },
+      {
+        id: "different-activity",
+        side: "deposit" as const,
+        label: "Write a report for budget planning",
+        typicalCost: 20,
+      },
+      {
+        id: "different-quantity",
+        side: "deposit" as const,
+        label: "Review 2 reports for budget planning",
+        typicalCost: 20,
+      },
+    ];
+
+    expect(collapseSimilarRecent(recent).map((suggestion) => suggestion.id)).toEqual([
+      "newest",
+      "different-activity",
+      "different-quantity",
+    ]);
+  });
+
+  test("does not merge activities that share context but not the activity", () => {
+    const recent = [
+      { id: "review", side: "deposit" as const, label: "Review budget report", typicalCost: 20 },
+      { id: "call", side: "deposit" as const, label: "Call budget contact", typicalCost: 20 },
+    ];
+
+    expect(collapseSimilarRecent(recent).map((suggestion) => suggestion.id)).toEqual([
+      "review",
+      "call",
+    ]);
   });
 });
 

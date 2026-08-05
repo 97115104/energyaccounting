@@ -17,6 +17,45 @@ export type LineLike = {
   labelHash?: string;
 };
 
+const SUGGESTION_FILLER_WORDS = new Set(["a", "an", "the", "few", "some"]);
+
+function singularSuggestionWord(word: string): string {
+  if (word.length <= 3 || word.endsWith("ss")) return word;
+  if (word.endsWith("sses")) return word.slice(0, -2);
+  if (word.endsWith("ies") && !word.endsWith("vies")) return `${word.slice(0, -3)}y`;
+  if (word.endsWith("ches") || word.endsWith("shes") || word.endsWith("xes") || word.endsWith("zes")) {
+    return word.slice(0, -2);
+  }
+  return word.endsWith("s") ? word.slice(0, -1) : word;
+}
+
+/**
+ * A deliberately conservative client-side key for decrypted suggestion labels.
+ * It removes only incidental articles/quantity words, normalizes simple
+ * plurals, and keeps meaningful names, quantities, and activity words.
+ */
+export function suggestionFingerprint(label: string | undefined): string {
+  if (!label) return "";
+  return label
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .filter((word) => !SUGGESTION_FILLER_WORDS.has(word))
+    .map(singularSuggestionWord)
+    .sort()
+    .join(" ");
+}
+
+function isSimilarSuggestionLabel(left: string | undefined, right: string | undefined): boolean {
+  const leftFingerprint = suggestionFingerprint(left);
+  // Do not guess that overlapping words mean the same activity. The canonical
+  // form must be exactly equal, so a changed person, activity, or quantity is
+  // always retained as a distinct suggestion.
+  return leftFingerprint.length > 0 && leftFingerprint === suggestionFingerprint(right);
+}
+
 /**
  * Why a recent choice cannot be added right now, or null when it can.
  * Only live (non-closed) withdrawal planning enforces capacity; deposits
@@ -50,6 +89,24 @@ export function filterUnusedRecent<T extends RecentLike>(
     if (used.has(`${s.side}:label:${trimmed}`)) return false;
     return true;
   });
+}
+
+/**
+ * Collapse near-identical recent activities after decryption. The API orders
+ * items by recency, so retaining the first item keeps the freshest wording and
+ * cost. Similarity is derived from every label's exact canonical token key;
+ * it has no task-specific vocabulary or title-specific branches.
+ */
+export function collapseSimilarRecent<T extends RecentLike>(recent: readonly T[]): T[] {
+  return recent.reduce<T[]>((representatives, suggestion) => {
+    if (!suggestionFingerprint(suggestion.label)) return representatives;
+    const alreadyRepresented = representatives.some(
+      (representative) =>
+        representative.side === suggestion.side &&
+        isSimilarSuggestionLabel(representative.label, suggestion.label),
+    );
+    return alreadyRepresented ? representatives : [...representatives, suggestion];
+  }, []);
 }
 
 /**
