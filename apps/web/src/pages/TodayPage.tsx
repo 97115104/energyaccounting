@@ -3182,17 +3182,20 @@ function Column(props: {
     (l) => l.completed && !props.exitingIds.has(l.id),
   );
   const completedCount = completed.length;
+  const completedVisible = props.audit || showCompleted;
 
   // Keep past-day picks visible under the live list while energy remains,
   // even after one item is added or others are completed.
   const unusedRecent = collapseSimilarRecent(filterUnusedRecent(props.recent, props.lines));
-  const showRecent = shouldShowColumnRecent({
-    closed: props.closed,
-    phase: props.phase,
-    side: props.side,
-    availableCapacity: props.availableCapacity,
-    unusedCount: unusedRecent.length,
-  });
+  const showRecent =
+    !props.audit &&
+    shouldShowColumnRecent({
+      closed: props.closed,
+      phase: props.phase,
+      side: props.side,
+      availableCapacity: props.availableCapacity,
+      unusedCount: unusedRecent.length,
+    });
   const batchAddable = showRecent
     ? addableRecent(unusedRecent, props.availableCapacity, props.phase)
     : [];
@@ -3374,36 +3377,55 @@ function Column(props: {
         );
       })}
       {shouldShowDropAtEnd(incomplete) && <DropIndicator />}
-      {(completedCount > 0 && praise.lead) || showRecent ? (
+      {completedCount > 0 || showRecent ? (
         <div className="column-bottom-stack">
-      {completedCount > 0 && praise.lead && (
+      {completedCount > 0 && (
         <div className="col-completed">
-          <button
-            type="button"
-            className="col-completed-toggle"
-            aria-expanded={showCompleted}
-            aria-controls={completedListId}
-            onClick={toggleShowCompleted}
-          >
-            <span className="col-completed-copy">
-              <span>
-                {praise.lead}{" "}
-                <span className={`praise-accent praise-accent-${praise.effect}`}>
-                  {praise.accent}
-                </span>
-                {praise.effect === "fire" && (
-                  <span className="praise-flame" aria-hidden="true">
-                    {" "}
-                    🔥
+          {praise.lead && (props.audit ? (
+            <div className="col-completed-summary">
+              <span className="col-completed-copy">
+                <span>
+                  {praise.lead}{" "}
+                  <span className={`praise-accent praise-accent-${praise.effect}`}>
+                    {praise.accent}
                   </span>
-                )}
+                  {praise.effect === "fire" && (
+                    <span className="praise-flame" aria-hidden="true">
+                      {" "}
+                      🔥
+                    </span>
+                  )}
+                </span>
               </span>
-              <span className="col-completed-action">
-                · {showCompleted ? "Hide" : "Show"}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="col-completed-toggle"
+              aria-expanded={completedVisible}
+              aria-controls={completedListId}
+              onClick={toggleShowCompleted}
+            >
+              <span className="col-completed-copy">
+                <span>
+                  {praise.lead}{" "}
+                  <span className={`praise-accent praise-accent-${praise.effect}`}>
+                    {praise.accent}
+                  </span>
+                  {praise.effect === "fire" && (
+                    <span className="praise-flame" aria-hidden="true">
+                      {" "}
+                      🔥
+                    </span>
+                  )}
+                </span>
+                <span className="col-completed-action">
+                  · {completedVisible ? "Hide" : "Show"}
+                </span>
               </span>
-            </span>
-          </button>
-          {showCompleted && (
+            </button>
+          ))}
+          {completedVisible && (
             <div className="col-completed-list" id={completedListId}>
               {completed.map((l) => {
                 const index = props.lines.findIndex((line) => line.id === l.id);

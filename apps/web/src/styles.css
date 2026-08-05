@@ -1477,17 +1477,21 @@ html[data-theme="night"] .btn.secondary {
   margin-bottom: 0.15rem;
 }
 
-.col-completed-toggle {
-  appearance: none;
+.col-completed-toggle,
+.col-completed-summary {
   width: 100%;
   border: 0;
   background: transparent;
   padding: 0.45rem 0.2rem;
   text-align: left;
-  cursor: pointer;
   color: var(--muted);
   font: inherit;
   font-size: 0.88rem;
+}
+
+.col-completed-toggle {
+  appearance: none;
+  cursor: pointer;
 }
 
 .col-completed-toggle:hover,
