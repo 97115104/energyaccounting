@@ -1736,8 +1736,14 @@ html[data-theme="night"] .btn.secondary {
 
 .column-recent-follow {
   margin-top: 0.85rem;
-  padding-top: 0.65rem;
+  /* Keep the heading below the rounded crest of the divider. */
+  padding-top: 0.9rem;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.column-recent.column-recent-hidden {
+  /* A hidden optional section belongs at the quiet end of a matched column. */
+  margin-top: auto;
 }
 
 .column-recent-head {

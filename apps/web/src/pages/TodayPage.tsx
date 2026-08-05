@@ -3434,7 +3434,7 @@ function Column(props: {
       )}
       {showRecent ? (
         <div
-          className={`column-recent${incomplete.length || completedCount ? " column-recent-follow" : ""}`}
+          className={`column-recent${incomplete.length || completedCount ? " column-recent-follow" : ""}${!showSuggestions ? " column-recent-hidden" : ""}`}
         >
           <div className="column-recent-head">
             <h3 className="recent-heading column-recent-heading" id={`${columnId}-recent`}>
