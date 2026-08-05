@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UserProfile } from "../App";
-import { ModalCloseButton } from "../components/ModalCloseButton";
+import { DialogFrame } from "../components/DialogFrame";
 import { api, DAY_CHANGED_EVENT } from "../lib/api";
 import {
   downloadTrainingCorpus,
@@ -73,7 +73,6 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [emailCode, setEmailCode] = useState("");
   const [savingEmail, setSavingEmail] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
-  const deletingRef = useRef(false);
   const restoreFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -148,50 +147,6 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       { maximumAge: 0, timeout: 12_000 },
     );
   }
-
-  useEffect(() => {
-    deletingRef.current = deleting;
-  }, [deleting]);
-
-  // Keep keyboard focus inside the destructive confirmation (same contract as Today).
-  useEffect(() => {
-    if (!deleteOpen) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const modal = document.getElementById("delete-profile-modal");
-    const focusables = () =>
-      modal
-        ? Array.from(
-            modal.querySelectorAll<HTMLElement>(
-              'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            ),
-          ).filter((element) => !element.hasAttribute("disabled"))
-        : [];
-    const focusId = window.requestAnimationFrame(() => focusables()[0]?.focus({ preventScroll: true }));
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !deletingRef.current) {
-        setDeleteOpen(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const list = focusables();
-      if (!list.length) return;
-      const first = list[0]!;
-      const last = list[list.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [deleteOpen]);
 
   function cancelEmailEdit() {
     setEditingEmail(false);
@@ -737,25 +692,38 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
       </div>
 
       {restoreOpen && restoreCorpus && restorePreview && (
-        <div
-          className="insight-scrim"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) resetRestore();
-          }}
-        >
-          <div
-            id="restore-corpus-modal"
-            className="panel insight-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="restore-corpus-title"
-            aria-describedby="restore-corpus-description"
-          >
-            <ModalCloseButton label="Cancel corpus restore" disabled={restoring} onClick={() => resetRestore()} />
+        <DialogFrame
+          id="restore-corpus-modal"
+          ariaLabelledby="restore-corpus-title"
+          ariaDescribedby="restore-corpus-description"
+          closeLabel="Cancel corpus restore"
+          closeDisabled={restoring}
+          onClose={() => resetRestore()}
+          header={
             <h2 id="restore-corpus-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Restore corpus?
             </h2>
+          }
+          footer={
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", marginTop: "1.25rem" }}>
+              <button type="button" className="btn secondary" disabled={restoring} onClick={() => resetRestore()}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`btn ${restoreMode === "replace" ? "danger" : "accent"}`}
+                disabled={restoring}
+                onClick={() => void restoreSelectedCorpus()}
+              >
+                {restoring
+                  ? "Restoring…"
+                  : restoreMode === "replace"
+                    ? "Replace with corpus"
+                    : "Merge corpus"}
+              </button>
+            </div>
+          }
+        >
             <p id="restore-corpus-description" className="muted">
               This {restoreCorpus.schemaVersion === 6 ? "v6" : "v7"} corpus contains {restoreCorpus.days.length} days and{" "}
               {restoreCorpus.days.reduce((total, day) => total + day.lines.length, 0)} tasks. Your private text is
@@ -829,44 +797,36 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
               </fieldset>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", marginTop: "1.25rem" }}>
-              <button type="button" className="btn secondary" disabled={restoring} onClick={() => resetRestore()}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`btn ${restoreMode === "replace" ? "danger" : "accent"}`}
-                disabled={restoring}
-                onClick={() => void restoreSelectedCorpus()}
-              >
-                {restoring
-                  ? "Restoring…"
-                  : restoreMode === "replace"
-                    ? "Replace with corpus"
-                    : "Merge corpus"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </DialogFrame>
       )}
 
       {deleteOpen && (
-        <div className="insight-scrim" role="presentation">
-          <div
-            id="delete-profile-modal"
-            className="panel insight-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-title"
-          >
-            <ModalCloseButton
-              label="Keep profile"
-              disabled={deleting}
-              onClick={() => setDeleteOpen(false)}
-            />
+        <DialogFrame
+          id="delete-profile-modal"
+          role="alertdialog"
+          ariaLabelledby="delete-title"
+          closeLabel="Keep profile"
+          closeDisabled={deleting}
+          dismissOnBackdrop={false}
+          onClose={() => setDeleteOpen(false)}
+          header={
             <h2 id="delete-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Delete your profile?
             </h2>
+          }
+          footer={
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={deleting || !deletePw || deleteConfirm.trim() !== "DELETE"}
+                onClick={() => void deleteAccount()}
+              >
+                {deleting ? "Deleting…" : "Delete everything"}
+              </button>
+            </div>
+          }
+        >
             <p className="muted">
               This permanently deletes everything: account, days, tasks, journal entries, your
               You profile, your butterfly, and every share link. Consider downloading your data
@@ -911,18 +871,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
               />
             </div>
             {deleteError && <p className="error">{deleteError}</p>}
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn danger"
-                disabled={deleting || !deletePw || deleteConfirm.trim() !== "DELETE"}
-                onClick={() => void deleteAccount()}
-              >
-                {deleting ? "Deleting…" : "Delete everything"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </DialogFrame>
       )}
     </div>
   );

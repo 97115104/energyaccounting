@@ -13,7 +13,7 @@ import { readCachedIdentity } from "../lib/identityCache";
 import { AFFIRMATIONS, dailyAffirmation } from "../lib/affirmations";
 import { deviceTimezone } from "../lib/timezone";
 import { IdentityMark } from "../components/IdentityMark";
-import { ModalCloseButton } from "../components/ModalCloseButton";
+import { DialogFrame } from "../components/DialogFrame";
 import type { UserProfile } from "../App";
 
 function authModeFromParam(raw: string | null): "login" | "register" | null {
@@ -81,28 +81,6 @@ export function AuthPage({
     setMode(fromUrl);
     onModeChange?.(fromUrl);
   }, [searchParams, onModeChange]);
-
-  // The privacy modal is informational: focus the dialog on open, close on
-  // Escape, and hand focus back to the trigger afterwards.
-  useEffect(() => {
-    if (!privacyOpen) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const focusId = window.requestAnimationFrame(() =>
-      document
-        .getElementById("privacy-modal")
-        ?.querySelector<HTMLElement>("button")
-        ?.focus({ preventScroll: true }),
-    );
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPrivacyOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(focusId);
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.({ preventScroll: true });
-    };
-  }, [privacyOpen]);
 
   function switchMode(next: "login" | "register") {
     inviteReqSeq.current++;
@@ -486,43 +464,40 @@ export function AuthPage({
         </>
       )}
       {privacyOpen && (
-        <div className="insight-scrim" role="presentation" onClick={() => setPrivacyOpen(false)}>
-          <div
-            id="privacy-modal"
-            className="panel insight-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="privacy-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ModalCloseButton label="Close privacy details" onClick={() => setPrivacyOpen(false)} />
+        <DialogFrame
+          id="privacy-modal"
+          ariaLabelledby="privacy-title"
+          closeLabel="Close privacy details"
+          onClose={() => setPrivacyOpen(false)}
+          header={
             <h2 id="privacy-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               We value privacy
             </h2>
-            <p>
-              <strong>TL;DR:</strong> we cannot read what you write. The words in your journal,
-              activity names, task notes, and You profile are end-to-end encrypted with a key from
-              your password. Our server only ever stores{" "}
-              <a
-                href="https://en.wikipedia.org/wiki/Ciphertext"
-                target="_blank"
-                rel="noreferrer"
-              >
-                ciphertext
-              </a>{" "}
-              for those.
-            </p>
-            <p className="muted">
-              What stays readable so the app can work: your email, energy numbers (costs, balances,
-              how you rated the day), and the look of your butterfly. Those let trends and the Energy
-              Guide run without opening your private text.
-            </p>
-            <p className="muted">
-              Sharing anything personal is always a choice you make, and you can update or revoke it
-              in Settings. You can also export your data or delete your account at any time.
-            </p>
-          </div>
-        </div>
+          }
+        >
+          <p>
+            <strong>TL;DR:</strong> we cannot read what you write. The words in your journal,
+            activity names, task notes, and You profile are end-to-end encrypted with a key from
+            your password. Our server only ever stores{" "}
+            <a
+              href="https://en.wikipedia.org/wiki/Ciphertext"
+              target="_blank"
+              rel="noreferrer"
+            >
+              ciphertext
+            </a>{" "}
+            for those.
+          </p>
+          <p className="muted">
+            What stays readable so the app can work: your email, energy numbers (costs, balances,
+            how you rated the day), and the look of your butterfly. Those let trends and the Energy
+            Guide run without opening your private text.
+          </p>
+          <p className="muted">
+            Sharing anything personal is always a choice you make, and you can update or revoke it
+            in Settings. You can also export your data or delete your account at any time.
+          </p>
+        </DialogFrame>
       )}
     </div>
   );

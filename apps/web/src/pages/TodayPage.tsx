@@ -8,8 +8,10 @@ import type { UserProfile } from "../App";
 import { HelpTip } from "../components/HelpTip";
 import { BecauseList } from "../components/BecauseList";
 import { CompletionBurst } from "../components/CompletionBurst";
+import { DialogFrame, usePageScrollLock } from "../components/DialogFrame";
 import { ModalCloseButton } from "../components/ModalCloseButton";
 import { SiteFooter } from "../components/SiteFooter";
+import { useToast } from "../components/ToastProvider";
 import { WeatherDetailModal } from "../components/WeatherDetailModal";
 import { WeatherGlyph } from "../components/WeatherGlyph";
 import { api } from "../lib/api";
@@ -26,6 +28,7 @@ import {
   labelHash,
 } from "../lib/crypto";
 import { buildTrendNarrative } from "../lib/dashboardBriefing";
+import { mergeRecordById, type DraftPersistenceEffect } from "../lib/draftPersistence";
 import {
   buildGuide,
   recoveryPlan,
@@ -54,6 +57,7 @@ import { prefetchSuggestModel, suggestCost } from "../lib/suggest";
 import { liveTimezone } from "../lib/timezone";
 import { useQuarterHourClock } from "../lib/useQuarterHourClock";
 import { useModalFocusTrap } from "../lib/useModalFocusTrap";
+import { useSerializedDraftSaver } from "../lib/useSerializedDraftSaver";
 import { conditionsAt, dayAverageConditions, parseDayWeather } from "../lib/weatherInsight";
 import {
   defaultTemperatureUnit,
@@ -87,6 +91,14 @@ type LineMovePreview = {
   targetSide: "deposit" | "withdrawal";
   targetIndex: number;
 } | null;
+
+type TaskDetailSnapshot = Readonly<{
+  dayId: string;
+  lineId: string;
+  text: string;
+  detailsCiphertext: string | null;
+  detailsIv: string | null;
+}>;
 
 type Suggestion = {
   id: string;
@@ -306,6 +318,26 @@ function persistShowCompleted(side: "deposit" | "withdrawal", show: boolean): vo
   }
 }
 
+function showSuggestionsStorageKey(side: "deposit" | "withdrawal"): string {
+  return `eaj-col-show-suggestions:${side}`;
+}
+
+function loadShowSuggestions(side: "deposit" | "withdrawal"): boolean {
+  try {
+    return localStorage.getItem(showSuggestionsStorageKey(side)) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function persistShowSuggestions(side: "deposit" | "withdrawal", show: boolean): void {
+  try {
+    localStorage.setItem(showSuggestionsStorageKey(side), show ? "1" : "0");
+  } catch {
+    // Preference is nicety-only; private mode should not break the column.
+  }
+}
+
 function loadDismissedGuideIds(dayId: string): Set<string> {
   try {
     const raw = localStorage.getItem(guideDismissKey(dayId));
@@ -378,8 +410,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState("");
   const [journalDirty, setJournalDirty] = useState(false);
-  const [journalSaveState, setJournalSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [journalClosePrompt, setJournalClosePrompt] = useState(false);
   // Which surface the microphone is feeding, or null when idle.
   const [listening, setListening] = useState<SpeechTarget | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -390,8 +420,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [detailActualCost, setDetailActualCost] = useState("");
   const [detailDifficulty, setDetailDifficulty] = useState<number | null>(null);
   const [detailText, setDetailText] = useState("");
-  const [detailTextDirty, setDetailTextDirty] = useState(false);
-  const [detailSaveState, setDetailSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
   const [switchingDetailColumn, setSwitchingDetailColumn] = useState(false);
   // Non-error status for the details dialog, e.g. dictation hit the cap.
@@ -410,7 +438,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const [draggingLineId, setDraggingLineId] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<LineMovePreview>(null);
   const dragPreviewRef = useRef<LineMovePreview>(null);
-  const [guideToast, setGuideToast] = useState<{ key: number; text: string } | null>(null);
+  const { showToast } = useToast();
   const [justFreed, setJustFreed] = useState<number | undefined>();
   // Rows mid exit-animation before they join the hidden/completed pool.
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
@@ -472,9 +500,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   const journalDirtyRef = useRef(false);
   const journalLoadedDayRef = useRef<string | null>(null);
   const journalSaveSeqRef = useRef(0);
-  const detailTextRef = useRef("");
-  const detailTextDirtyRef = useRef(false);
-  const detailSaveSeqRef = useRef(0);
   const loadGenerationRef = useRef(0);
 
   function setDragPreviewNow(next: LineMovePreview) {
@@ -493,10 +518,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [journal]);
 
   useEffect(() => {
-    detailTextRef.current = detailText;
-  }, [detailText]);
-
-  useEffect(() => {
     deletingDayRef.current = deletingDay;
   }, [deletingDay]);
 
@@ -512,11 +533,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setCompletionBurst(null);
     journalDirtyRef.current = false;
     setJournalDirty(false);
-    setJournalSaveState("idle");
-    setJournalClosePrompt(false);
-    detailTextDirtyRef.current = false;
-    setDetailTextDirty(false);
-    setDetailSaveState("idle");
     setOverBudgetAdd(null);
     setOverBudgetBusy(false);
     if (burstTimerRef.current != null) {
@@ -655,8 +671,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
       journalRef.current = decryptedJournal;
       journalDirtyRef.current = false;
       setJournalDirty(false);
-      setJournalSaveState("idle");
-      setJournalClosePrompt(false);
     }
 
     const sug = await api<{ suggestions: Suggestion[]; recent?: RecentActivity[] }>(
@@ -709,11 +723,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
   }, [day?.id, readOnly]);
 
-  useEffect(() => {
-    if (!guideToast) return;
-    const timeoutId = window.setTimeout(() => setGuideToast(null), 2600);
-    return () => window.clearTimeout(timeoutId);
-  }, [guideToast]);
   // Numeric history feeds the planning hint during plan and the Trends card
   // in every phase, so it loads once per day view.
   useEffect(() => {
@@ -771,59 +780,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
   }, [day?.id]);
 
   useModalFocusTrap({
-    open: confirmingDelete,
-    modalId: "delete-day-modal",
-    eventTarget: "document",
-    onEscape: () => {
-      if (!deletingDayRef.current) setConfirmingDelete(false);
-    },
-  });
-  useModalFocusTrap({
-    open: confirmingClose,
-    modalId: "close-day-modal",
-    eventTarget: "document",
-    onEscape: () => {
-      if (!phaseBusyRef.current) setConfirmingClose(false);
-    },
-  });
-  useModalFocusTrap({
-    open: !!overBudgetAdd,
-    modalId: "over-budget-modal",
-    eventTarget: "document",
-    onEscape: () => {
-      if (!overBudgetBusy) setOverBudgetAdd(null);
-    },
-  });
-  useModalFocusTrap({
-    open: !!closeCelebration,
-    modalId: "insight-modal",
-    onEscape: () => setCloseCelebration(null),
-  });
-  useModalFocusTrap({
-    open: !!draftSide,
-    modalId: "add-item-modal",
-    preferEnabledControl: true,
-    onEscape: () => {
-      setDraftSide(null);
-      setDraftLabel("");
-      setDraftCost("20");
-      setSuggestNote(null);
-      setAddingRecentId(null);
-    },
-  });
-  useModalFocusTrap({
-    open: !!detailLineId,
-    modalId: "task-detail-modal",
-    onEscape: () => {
-      stopLiveSpeech();
-      setDetailLineId(null);
-    },
-  });
-  useModalFocusTrap({
     open: guideOpen,
     modalId: "guide-sheet",
     onEscape: () => setGuideOpen(false),
   });
+  usePageScrollLock(guideOpen);
 
   useEffect(() => {
     const request = ++suggestionRequestRef.current;
@@ -1038,6 +999,72 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const detailLine = day?.lines.find((line) => line.id === detailLineId) ?? null;
 
+  const detailSnapshot: TaskDetailSnapshot = {
+    dayId: day?.id ?? "",
+    lineId: detailLine?.id ?? "",
+    text: detailText,
+    detailsCiphertext: detailLine?.detailsCiphertext ?? null,
+    detailsIv: detailLine?.detailsIv ?? null,
+  };
+  const detailSaver = useSerializedDraftSaver<TaskDetailSnapshot>({
+    initialSnapshot: detailSnapshot,
+    sessionKey: detailLineId,
+    persist: async (snapshot) => {
+      if (!snapshot.dayId || !snapshot.lineId) throw new Error("Task details are no longer available.");
+      const dek = getSessionDek();
+      if (!dek) throw new Error("Unlock your journal before saving task details.");
+      const text = snapshot.text.trim();
+      const encrypted = text
+        ? await encryptText(dek, text, "eaj-task-details")
+        : { ciphertext: null, iv: null };
+      await api(`/api/days/${snapshot.dayId}/lines/${snapshot.lineId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          detailsCiphertext: encrypted.ciphertext,
+          detailsIv: encrypted.iv,
+        }),
+      });
+      return {
+        ...snapshot,
+        text,
+        detailsCiphertext: encrypted.ciphertext,
+        detailsIv: encrypted.iv,
+      };
+    },
+    onCommitted: (snapshot) => {
+      setDay((current) =>
+        current?.id === snapshot.dayId
+          ? {
+              ...current,
+              lines: [...mergeRecordById(current.lines, snapshot.lineId, {
+                details: snapshot.text,
+                detailsCiphertext: snapshot.detailsCiphertext,
+                detailsIv: snapshot.detailsIv,
+              })],
+            }
+          : current,
+      );
+    },
+    onEffect: (effect: DraftPersistenceEffect<TaskDetailSnapshot>) => {
+      if (effect.type === "close-dialog") {
+        setDetailLineId(null);
+        return;
+      }
+      if (effect.type !== "show-toast") return;
+      if (effect.reason === "saved") return;
+      const text =
+        effect.reason === "close-blocked"
+            ? "Could not close task details until its latest note saves."
+            : "Could not save task details. Keep this task open and try Save task details again.";
+      showToast({ kind: effect.tone, text });
+    },
+  });
+
+  function requestDetailClose() {
+    stopLiveSpeech();
+    detailSaver.requestClose();
+  }
+
   useEffect(() => {
     if (!day || readOnly || !journalDirty) return;
     const timer = window.setTimeout(() => {
@@ -1046,27 +1073,21 @@ export function TodayPage({ user }: { user: UserProfile }) {
     return () => window.clearTimeout(timer);
   }, [journal, journalDirty, day?.id, readOnly]);
 
-  useEffect(() => {
-    if (!day || readOnly || !detailLine || !detailTextDirty) return;
-    const timer = window.setTimeout(() => {
-      void saveDetailTextOnly();
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [detailText, detailTextDirty, detailLine?.id, day?.id, readOnly]);
-
   function updateJournalDraft(next: string) {
     journalDirtyRef.current = true;
     setJournalDirty(true);
-    setJournalSaveState("idle");
-    setJournalClosePrompt(false);
     setJournal(next);
   }
 
   function updateDetailTextDraft(next: string) {
-    detailTextDirtyRef.current = true;
-    setDetailTextDirty(true);
-    setDetailSaveState("idle");
     setDetailText(next);
+    detailSaver.edit({
+      dayId: day?.id ?? "",
+      lineId: detailLine?.id ?? "",
+      text: next,
+      detailsCiphertext: detailLine?.detailsCiphertext ?? null,
+      detailsIv: detailLine?.detailsIv ?? null,
+    });
   }
 
   function openTaskDetails(line: Line) {
@@ -1078,10 +1099,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
     setDetailActualCost(String(line.actualCost ?? line.plannedCost));
     setDetailDifficulty(line.difficulty);
     setDetailText(line.details ?? "");
-    detailTextRef.current = line.details ?? "";
-    detailTextDirtyRef.current = false;
-    setDetailTextDirty(false);
-    setDetailSaveState("idle");
     setDetailError(null);
     setDetailNotice(null);
     setGuideOpen(false);
@@ -1264,10 +1281,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     );
     if (ok) {
       dismissGuideItem(item.id);
-      setGuideToast({
-        key: Date.now(),
-        text: `Added to ${guideSideLabel(targetSide)}.`,
-      });
+      showToast({ text: `Added to ${guideSideLabel(targetSide)}.` });
     }
     return ok;
   }
@@ -1388,10 +1402,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
     try {
       if (await moveLineToOtherSide(detailLine)) {
         setDetailSide(nextSide);
-        setGuideToast({
-          key: Date.now(),
-          text: `Switched to ${nextSide === "deposit" ? "Add energy" : "Use energy"}.`,
-        });
+        showToast({ text: `Switched to ${nextSide === "deposit" ? "Add energy" : "Use energy"}.` });
       }
     } finally {
       setSwitchingDetailColumn(false);
@@ -1537,15 +1548,12 @@ export function TodayPage({ user }: { user: UserProfile }) {
       nextActual = Math.max(0, Math.min(100, raw));
     }
     try {
-      const text = detailText.trim();
-      const encrypted = text
-        ? await encryptText(dek, text, "eaj-task-details")
-        : { ciphertext: null, iv: null };
+      // Text has its own serialized command so an older full-form save can
+      // never race and overwrite the latest encrypted draft.
+      detailSaver.save();
       const patch: Record<string, unknown> = {
         plannedCost: nextPlanned,
         difficulty: detailDifficulty,
-        detailsCiphertext: encrypted.ciphertext,
-        detailsIv: encrypted.iv,
       };
       if (nextActual !== undefined) patch.actualCost = nextActual;
       if (detailSide !== detailLine.side) {
@@ -1566,46 +1574,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-      detailTextDirtyRef.current = false;
-      setDetailTextDirty(false);
-      setDetailSaveState("saved");
-      setDetailLineId(null);
       await withPreservedScroll(() => load(undefined, { soft: true }));
+      requestDetailClose();
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : "Could not save task details.");
-      setDetailSaveState("error");
-    }
-  }
-
-  async function saveDetailTextOnly() {
-    if (!detailLine || !day || readOnly) return;
-    const dek = getSessionDek();
-    if (!dek) return;
-    const seq = ++detailSaveSeqRef.current;
-    const snapshot = detailTextRef.current;
-    setDetailSaveState("saving");
-    try {
-      const text = snapshot.trim();
-      const encrypted = text
-        ? await encryptText(dek, text, "eaj-task-details")
-        : { ciphertext: null, iv: null };
-      await api(`/api/days/${day.id}/lines/${detailLine.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          detailsCiphertext: encrypted.ciphertext,
-          detailsIv: encrypted.iv,
-        }),
+      showToast({
+        kind: "error",
+        text: e instanceof Error ? e.message : "Could not save task details.",
       });
-      if (seq === detailSaveSeqRef.current && detailTextRef.current === snapshot) {
-        detailTextDirtyRef.current = false;
-        setDetailTextDirty(false);
-        setDetailSaveState("saved");
-      }
-    } catch (e) {
-      if (seq === detailSaveSeqRef.current) {
-        setDetailSaveState("error");
-        setDetailError(e instanceof Error ? e.message : "Could not autosave task details.");
-      }
     }
   }
 
@@ -1720,12 +1696,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
     }
   }
 
-  async function saveJournal(opts: { quiet?: boolean; promptClose?: boolean } = {}) {
+  async function saveJournal(opts: { quiet?: boolean } = {}) {
     const dek = getSessionDek();
     if (!dek || !day) return;
     const seq = ++journalSaveSeqRef.current;
     const snapshot = journalRef.current;
-    setJournalSaveState("saving");
     try {
       const j = await encryptText(dek, snapshot, "eaj-journal");
       await api(`/api/days/${day.id}`, {
@@ -1739,14 +1714,11 @@ export function TodayPage({ user }: { user: UserProfile }) {
       if (seq === journalSaveSeqRef.current && journalRef.current === snapshot) {
         journalDirtyRef.current = false;
         setJournalDirty(false);
-        setJournalSaveState("saved");
-        setJournalClosePrompt(Boolean(opts.promptClose && day.phase === "audit"));
       }
     } catch (e) {
-      if (!opts.quiet) {
-        setError(e instanceof Error ? e.message : "Could not save your journal.");
-      }
-      if (seq === journalSaveSeqRef.current) setJournalSaveState("error");
+      const message = e instanceof Error ? e.message : "Could not save your journal.";
+      if (opts.quiet) showToast({ kind: "error", text: message });
+      else setError(message);
       throw e;
     }
   }
@@ -1851,23 +1823,32 @@ export function TodayPage({ user }: { user: UserProfile }) {
 
   const closeCelebrationModal =
     closeCelebration && (
-      <div
-        className="insight-scrim"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setCloseCelebration(null);
-        }}
-      >
-        <div
-          id="insight-modal"
-          className="panel insight-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="insight-title"
-        >
-          <ModalCloseButton label="Close day closed dialog" onClick={() => setCloseCelebration(null)} />
+      <DialogFrame
+        id="insight-modal"
+        ariaLabelledby="insight-title"
+        closeLabel="Close day closed dialog"
+        onClose={() => setCloseCelebration(null)}
+        header={
           <h2 id="insight-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
             Day closed
           </h2>
+        }
+        footer={
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn accent"
+              disabled={starting}
+              onClick={() => {
+                setCloseCelebration(null);
+                void startNewDay();
+              }}
+            >
+              {starting ? "Starting…" : "Start new day"}
+            </button>
+          </div>
+        }
+      >
           <p className="muted">
             Ended with {closeCelebration.closingBalance} energy remaining. Your next day starts
             fresh at 100 when you start it.
@@ -1899,21 +1880,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
               dismissLabel="Not now"
             />
           )}
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn accent"
-              disabled={starting}
-              onClick={() => {
-                setCloseCelebration(null);
-                void startNewDay();
-              }}
-            >
-              {starting ? "Starting…" : "Start new day"}
-            </button>
-          </div>
-        </div>
-      </div>
+      </DialogFrame>
     );
 
   if (loading && !closeCelebration) {
@@ -2419,36 +2386,19 @@ export function TodayPage({ user }: { user: UserProfile }) {
             {listening === "journal" && (
               <p className="listening-pill">Listening · your words appear as you talk</p>
             )}
-            {journalSaveState !== "idle" && (
-              <p className={journalSaveState === "error" ? "error" : "muted"} role="status">
-                {journalSaveState === "saving"
-                  ? "Saving journal…"
-                  : journalSaveState === "saved"
-                    ? "Journal saved."
-                    : "Journal autosave failed. Use Save journal to retry."}
-              </p>
-            )}
           </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-            <button
-              type="button"
-              className={`btn ${journalClosePrompt ? "accent" : "secondary"}`}
-              disabled={readOnly}
-              onClick={() => {
-                if (journalClosePrompt) {
-                  setConfirmingClose(true);
-                  return;
-                }
-                void saveJournal({ promptClose: true });
-              }}
-            >
-              {journalClosePrompt
-                ? "Close day?"
-                : journalSaveState === "saving"
-                  ? "Saving…"
-                  : "Save journal"}
-            </button>
-          </div>
+          {day.phase === "audit" && !readOnly && (
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="btn accent"
+                disabled={phaseBusy}
+                onClick={() => setConfirmingClose(true)}
+              >
+                Close day
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -2463,12 +2413,6 @@ export function TodayPage({ user }: { user: UserProfile }) {
           y={completionBurst.y}
           quip={completionBurst.quip}
         />
-      )}
-
-      {guideToast && (
-        <div key={guideToast.key} className="guide-toast" role="status">
-          {guideToast.text}
-        </div>
       )}
 
       </div>
@@ -2516,59 +2460,65 @@ export function TodayPage({ user }: { user: UserProfile }) {
             aria-labelledby="guide-title"
             aria-describedby="guide-privacy"
           >
-            <ModalCloseButton label="Close energy guide" onClick={() => setGuideOpen(false)} />
-            <div className="col-head">
-              <h2 id="guide-title">Energy guide</h2>
+            <div className="tips-sheet-header">
+              <ModalCloseButton label="Close energy guide" onClick={() => setGuideOpen(false)} />
+              <div className="col-head">
+                <h2 id="guide-title">Energy guide</h2>
+              </div>
             </div>
-            {guide.items.length === 0 && (
-              <p className="muted">
-                Nothing to suggest right now. Keep planning your day and completing what you can,
-                and the guide will speak up when it has something concrete.
+            <div className="tips-sheet-body">
+              {guide.items.length === 0 && (
+                <p className="muted">
+                  Nothing to suggest right now. Keep planning your day and completing what you can,
+                  and the guide will speak up when it has something concrete.
+                </p>
+              )}
+              {guide.items.map((item) => (
+                <GuideCard
+                  key={item.id}
+                  item={item}
+                  closed={readOnly}
+                  inSheet
+                  onAction={(entry, useAlt, sideOverride) => {
+                    void applyGuideAction(entry, useAlt, sideOverride);
+                  }}
+                  onDismiss={dismissGuideItem}
+                />
+              ))}
+              <p id="guide-privacy" className="muted guide-privacy">
+                Suggestions are ranked on this device from your history, capacity, and today’s
+                conditions. Numeric totals power trends; labels stay encrypted and never leave the
+                browser.
               </p>
-            )}
-            {guide.items.map((item) => (
-              <GuideCard
-                key={item.id}
-                item={item}
-                closed={readOnly}
-                inSheet
-                onAction={(entry, useAlt, sideOverride) => {
-                  void applyGuideAction(entry, useAlt, sideOverride);
-                }}
-                onDismiss={dismissGuideItem}
-              />
-            ))}
-            <p id="guide-privacy" className="muted guide-privacy">
-              Suggestions are ranked on this device from your history, capacity, and today’s
-              conditions. Numeric totals power trends; labels stay encrypted and never leave the
-              browser.
-            </p>
+            </div>
           </div>
         </div>
       )}
 
       {draftSide && !readOnly && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeDraft();
-          }}
-        >
-          <form
-            id="add-item-modal"
-            className="panel insight-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="draft-title"
-            onSubmit={(e) => {
+        <DialogFrame
+          id="add-item-modal"
+          surface="form"
+          ariaLabelledby="draft-title"
+          closeLabel="Cancel adding energy item"
+          onClose={closeDraft}
+          onSubmit={(e) => {
               e.preventDefault();
               void submitDraft();
-            }}
-          >
-            <ModalCloseButton label="Cancel adding energy item" onClick={closeDraft} />
+          }}
+          header={
             <h2 id="draft-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               {draftSide === "deposit" ? "Add energy" : "Use energy"}
             </h2>
+          }
+          footer={
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button type="submit" className="btn accent">
+                Save to day
+              </button>
+            </div>
+          }
+        >
             <p className="muted">Available to allocate · {day.availableCapacity}</p>
             {(() => {
               const recentForSide = filterUnusedRecent(
@@ -2652,43 +2602,23 @@ export function TodayPage({ user }: { user: UserProfile }) {
             </div>
             {/* Failures keep the sheet open, so the message must show here. */}
             {error && <p className="error">{error}</p>}
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button type="submit" className="btn accent">
-                Save to day
-              </button>
-            </div>
-          </form>
-        </div>
+        </DialogFrame>
       )}
 
       {detailLine && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              stopLiveSpeech();
-              setDetailLineId(null);
-            }
-          }}
-        >
-          <form
-            id="task-detail-modal"
-            className="panel insight-modal task-detail-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="task-detail-title"
-            onSubmit={(e) => {
+        <DialogFrame
+          id="task-detail-modal"
+          className="task-detail-modal"
+          surface="form"
+          ariaLabelledby="task-detail-title"
+          closeLabel="Close task details"
+          onClose={requestDetailClose}
+          onSubmit={(e) => {
               e.preventDefault();
               void saveTaskDetails();
-            }}
-          >
-            <ModalCloseButton
-              label="Close task details"
-              onClick={() => {
-                stopLiveSpeech();
-                setDetailLineId(null);
-              }}
-            />
+          }}
+          header={
+            <>
             <p className="ob-eyebrow">
               {detailSide === "deposit" ? "Add energy" : "Use energy"}
               {detailLine.completed ? " · Done" : " · Pending"}
@@ -2696,6 +2626,20 @@ export function TodayPage({ user }: { user: UserProfile }) {
             <h2 id="task-detail-title" className="sr-only">
               {detailLabel.trim() || detailLine.label || "Task details"}
             </h2>
+            </>
+          }
+          footer={!readOnly ? (
+            <div className="modal-actions">
+              <button
+                type="submit"
+                className="btn accent"
+                aria-busy={detailSaver.state.status === "saving" || undefined}
+              >
+                Save task details
+              </button>
+            </div>
+          ) : undefined}
+        >
             <div className="field">
               <label htmlFor="task-detail-label">Activity / experience</label>
               <input
@@ -2831,58 +2775,26 @@ export function TodayPage({ user }: { user: UserProfile }) {
                   {detailNotice}
                 </p>
               )}
-              {detailSaveState !== "idle" && (
-                <p className={detailSaveState === "error" ? "error" : "muted"} role="status">
-                  {detailSaveState === "saving"
-                    ? "Saving details…"
-                    : detailSaveState === "saved"
-                      ? "Details saved."
-                      : "Details autosave failed. Use Save task details to retry."}
-                </p>
-              )}
-              <p className="muted">
-                This text is encrypted before it leaves your browser.
-              </p>
             </div>
             {detailError && <p className="error">{detailError}</p>}
-            <div className="modal-actions">
-              {!readOnly && (
-                <button type="submit" className="btn accent">
-                  Save task details
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
+        </DialogFrame>
       )}
 
       {confirmingDelete && day && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !deletingDay) setConfirmingDelete(false);
-          }}
-        >
-          <div
-            id="delete-day-modal"
-            className="panel insight-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-day-title"
-            aria-describedby="delete-day-body"
-          >
-            <ModalCloseButton
-              label="Keep this day"
-              onClick={() => setConfirmingDelete(false)}
-              disabled={deletingDay}
-            />
+        <DialogFrame
+          id="delete-day-modal"
+          role="alertdialog"
+          ariaLabelledby="delete-day-title"
+          ariaDescribedby="delete-day-body"
+          closeLabel="Keep this day"
+          busy={deletingDay}
+          onClose={() => setConfirmingDelete(false)}
+          header={
             <h2 id="delete-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Delete this day?
             </h2>
-            <p id="delete-day-body" className="muted">
-              The day from {day.date} and all of its entries will be removed from Previous days
-              and Dashboard trends. This cannot be undone.
-            </p>
+          }
+          footer={
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -2893,37 +2805,30 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 {deletingDay ? "Deleting…" : "Delete this day"}
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+            <p id="delete-day-body" className="muted">
+              The day from {day.date} and all of its entries will be removed from Previous days
+              and Dashboard trends. This cannot be undone.
+            </p>
+        </DialogFrame>
       )}
 
       {confirmingClose && day && !closed && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !phaseBusy) setConfirmingClose(false);
-          }}
-        >
-          <div
-            id="close-day-modal"
-            className="panel insight-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="close-day-title"
-            aria-describedby="close-day-body"
-          >
-            <ModalCloseButton
-              label="Keep working on this day"
-              disabled={phaseBusy}
-              onClick={() => setConfirmingClose(false)}
-            />
+        <DialogFrame
+          id="close-day-modal"
+          role="alertdialog"
+          ariaLabelledby="close-day-title"
+          ariaDescribedby="close-day-body"
+          closeLabel="Keep working on this day"
+          busy={phaseBusy}
+          onClose={() => setConfirmingClose(false)}
+          header={
             <h2 id="close-day-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Close this day?
             </h2>
-            <p id="close-day-body" className="muted">
-              Closing records today’s energy remaining and moves the day to Previous days. You can
-              still amend it later from the Dashboard, but the day will not reopen.
-            </p>
+          }
+          footer={
             <div className="modal-actions">
               <button
                 type="button"
@@ -2938,38 +2843,30 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 {phaseBusy ? "Closing…" : "Close day"}
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+            <p id="close-day-body" className="muted">
+              Closing records today’s energy remaining and moves the day to Previous days. You can
+              still amend it later from the Dashboard, but the day will not reopen.
+            </p>
+        </DialogFrame>
       )}
 
       {overBudgetAdd && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !overBudgetBusy) setOverBudgetAdd(null);
-          }}
-        >
-          <div
-            id="over-budget-modal"
-            className="panel insight-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="over-budget-title"
-            aria-describedby="over-budget-body"
-          >
-            <ModalCloseButton
-              label="Keep editing"
-              disabled={overBudgetBusy}
-              onClick={() => setOverBudgetAdd(null)}
-            />
+        <DialogFrame
+          id="over-budget-modal"
+          role="alertdialog"
+          ariaLabelledby="over-budget-title"
+          ariaDescribedby="over-budget-body"
+          closeLabel="Keep editing"
+          busy={overBudgetBusy}
+          onClose={() => setOverBudgetAdd(null)}
+          header={
             <h2 id="over-budget-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Add over available energy?
             </h2>
-            <p id="over-budget-body" className="muted">
-              “{overBudgetAdd.label.trim()}” uses {overBudgetAdd.cost} points, and only{" "}
-              {overBudgetAdd.available} are currently available. Add it anyway and let the day
-              show the overage?
-            </p>
+          }
+          footer={
             <div className="modal-actions">
               <button
                 type="button"
@@ -2981,8 +2878,14 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 {overBudgetBusy ? "Adding…" : "Add anyway"}
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+            <p id="over-budget-body" className="muted">
+              “{overBudgetAdd.label.trim()}” uses {overBudgetAdd.cost} points, and only{" "}
+              {overBudgetAdd.available} are currently available. Add it anyway and let the day
+              show the overage?
+            </p>
+        </DialogFrame>
       )}
 
       {weatherOpen && parsedWeather && (
@@ -2998,23 +2901,18 @@ export function TodayPage({ user }: { user: UserProfile }) {
       )}
 
       {trendsOpen && (
-        <div
-          className="insight-scrim"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setTrendsOpen(false);
-          }}
-        >
-          <div
-            id="trends-modal"
-            className="panel insight-modal trends-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="trends-title"
-          >
-            <ModalCloseButton label="Close trends" onClick={() => setTrendsOpen(false)} />
+        <DialogFrame
+          id="trends-modal"
+          className="trends-modal"
+          ariaLabelledby="trends-title"
+          closeLabel="Close trends"
+          onClose={() => setTrendsOpen(false)}
+          header={
             <h2 id="trends-title" style={{ fontFamily: "var(--display)", marginTop: 0 }}>
               Your trends
             </h2>
+          }
+        >
             {closedStats.length >= 2 ? (
               <>
                 <button
@@ -3063,8 +2961,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
                 </p>
               </div>
             )}
-          </div>
-        </div>
+        </DialogFrame>
       )}
 
       {closeCelebrationModal}
@@ -3152,6 +3049,7 @@ function GuideCard(props: {
             type="button"
             className="guide-split-btn guide-split-btn-deposit"
             disabled={props.closed}
+            title={`Add ${action.cost} energy`}
             aria-label={`${sideVerb("deposit")}: ${action.label}, ${action.cost} points`}
             onClick={() => props.onAction(item, useAlt, "deposit")}
           >
@@ -3161,6 +3059,7 @@ function GuideCard(props: {
             type="button"
             className="guide-split-btn guide-split-btn-withdrawal"
             disabled={props.closed}
+            title={`Use ${action.cost} energy`}
             aria-label={`${sideVerb("withdrawal")}: ${action.label}, ${action.cost} points`}
             onClick={() => props.onAction(item, useAlt, "withdrawal")}
           >
@@ -3268,7 +3167,9 @@ function Column(props: {
 }) {
   const columnId = `col-${props.side}`;
   const completedListId = `${columnId}-completed`;
+  const recentListId = `${columnId}-suggestions`;
   const [showCompleted, setShowCompleted] = useState(() => loadShowCompleted(props.side));
+  const [showSuggestions, setShowSuggestions] = useState(() => loadShowSuggestions(props.side));
 
   // Exiting rows stay in the active list until the collapse finishes.
   const incomplete = props.lines.filter(
@@ -3341,6 +3242,14 @@ function Column(props: {
     setShowCompleted((prev) => {
       const next = !prev;
       persistShowCompleted(props.side, next);
+      return next;
+    });
+  }
+
+  function toggleShowSuggestions() {
+    setShowSuggestions((prev) => {
+      const next = !prev;
+      persistShowSuggestions(props.side, next);
       return next;
     });
   }
@@ -3534,76 +3443,96 @@ function Column(props: {
               </span>
               Suggested from past days
             </h3>
-            <button
-              type="button"
-              className="column-recent-add-all"
-              title="Add every suggestion that still fits today's energy"
-              aria-label={
-                batchAddable.length
-                  ? `Add all ${batchAddable.length} suggestions`
-                  : "No suggestions fit right now"
-              }
-              aria-busy={addingBusy || undefined}
-              disabled={!batchAddable.length || addingBusy || props.closed}
-              onClick={() => props.onAddAllRecent(batchAddable)}
-            >
-              {addingBusy ? "Adding…" : "Add All"}
-            </button>
-          </div>
-          <ul
-            className="recent-list"
-            aria-labelledby={`${columnId}-recent`}
-            aria-busy={addingBusy || undefined}
-          >
-            {unusedRecent.map((s) => {
-              const reason = recentDisabledReason(
-                s.typicalCost,
-                props.availableCapacity,
-                props.phase,
-                props.side,
-              );
-              const reasonId = reason ? `${columnId}-reason-${s.id}` : undefined;
-              const busy = props.addingRecentId === s.id;
-              return (
-                <li key={s.id}>
+            <div className="column-recent-actions">
+              {showSuggestions && (
+                <>
                   <button
                     type="button"
-                    className="recent-row"
-                    disabled={!reason && !!props.addingRecentId}
-                    aria-disabled={reason ? true : undefined}
-                    aria-describedby={reasonId}
+                    className="column-recent-add-all"
+                    title="Add every suggestion that still fits today's energy"
                     aria-label={
-                      reason
-                        ? `${s.label}, ${s.typicalCost} points`
-                        : props.side === "deposit"
-                          ? `Add energy: ${s.label}, ${s.typicalCost} points`
-                          : `Use energy: ${s.label}, ${s.typicalCost} points`
+                      batchAddable.length
+                        ? `Add all ${batchAddable.length} suggestions`
+                        : "No suggestions fit right now"
                     }
-                    onClick={() => {
-                      if (reason) return;
-                      props.onAddRecent(s);
-                    }}
+                    aria-busy={addingBusy || undefined}
+                    disabled={!batchAddable.length || addingBusy || props.closed}
+                    onClick={() => props.onAddAllRecent(batchAddable)}
                   >
-                    <span className="recent-label">{s.label}</span>
-                    <span
-                      className={`recent-points guide-suggest-cost-${props.side}`}
-                      aria-hidden="true"
-                    >
-                      {props.side === "deposit" ? `+${s.typicalCost}` : `−${s.typicalCost}`}
-                    </span>
-                    <span className="recent-add" aria-hidden="true">
-                      {busy ? "…" : "+"}
-                    </span>
+                    {addingBusy ? "Adding…" : "Add All"}
                   </button>
-                  {reason && (
-                    <p id={reasonId} className="recent-reason">
-                      {reason}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  <span className="column-recent-separator" aria-hidden="true">
+                    |
+                  </span>
+                </>
+              )}
+              <button
+                type="button"
+                className="column-recent-toggle"
+                aria-expanded={showSuggestions}
+                aria-controls={recentListId}
+                onClick={toggleShowSuggestions}
+              >
+                {showSuggestions ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+          <div id={recentListId} hidden={!showSuggestions}>
+            <ul
+              className="recent-list"
+              aria-labelledby={`${columnId}-recent`}
+              aria-busy={addingBusy || undefined}
+            >
+              {unusedRecent.map((s) => {
+                const reason = recentDisabledReason(
+                  s.typicalCost,
+                  props.availableCapacity,
+                  props.phase,
+                  props.side,
+                );
+                const reasonId = reason ? `${columnId}-reason-${s.id}` : undefined;
+                const busy = props.addingRecentId === s.id;
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      className="recent-row"
+                      disabled={!reason && !!props.addingRecentId}
+                      aria-disabled={reason ? true : undefined}
+                      aria-describedby={reasonId}
+                      aria-label={
+                        reason
+                          ? `${s.label}, ${s.typicalCost} points`
+                          : props.side === "deposit"
+                            ? `Add energy: ${s.label}, ${s.typicalCost} points`
+                            : `Use energy: ${s.label}, ${s.typicalCost} points`
+                      }
+                      onClick={() => {
+                        if (reason) return;
+                        props.onAddRecent(s);
+                      }}
+                    >
+                      <span className="recent-label">{s.label}</span>
+                      <span
+                        className={`recent-points guide-suggest-cost-${props.side}`}
+                        aria-hidden="true"
+                      >
+                        {props.side === "deposit" ? `+${s.typicalCost}` : `−${s.typicalCost}`}
+                      </span>
+                      <span className="recent-add" aria-hidden="true">
+                        {busy ? "…" : "+"}
+                      </span>
+                    </button>
+                    {reason && (
+                      <p id={reasonId} className="recent-reason">
+                        {reason}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       ) : (
         showEmptyCopy && (

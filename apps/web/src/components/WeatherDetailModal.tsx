@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useRef } from "react";
-import { ModalCloseButton } from "./ModalCloseButton";
+import { useId, useMemo } from "react";
+import { DialogFrame } from "./DialogFrame";
 import { WeatherGlyph } from "./WeatherGlyph";
 import {
   uvBand,
@@ -44,9 +44,6 @@ export function WeatherDetailModal({
   isHistorical = false,
   onClose,
 }: WeatherDetailModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
   const titleId = useId();
   const descriptionId = useId();
   const kind = conditions?.kind ?? "unknown";
@@ -65,58 +62,6 @@ export function WeatherDetailModal({
     [favorites, isDaylight, kind, conditions?.precip, weather.precip, uvNow],
   );
 
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const modal = modalRef.current;
-    const focusFirst = () => modal?.querySelector<HTMLElement>("button, a[href]")?.focus({ preventScroll: true });
-    focusFirst();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !modal) return;
-
-      const focusable = Array.from(
-        modal.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        modal.focus({ preventScroll: true });
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!modal.contains(document.activeElement)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus({ preventScroll: true });
-      } else if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    };
-    // Catch programmatic focus and re-entry from browser chrome, not only Tab
-    // events that begin inside the dialog.
-    const onFocusIn = (event: FocusEvent) => {
-      if (modal && event.target instanceof Node && !modal.contains(event.target)) focusFirst();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    document.addEventListener("focusin", onFocusIn);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("focusin", onFocusIn);
-      previousFocus?.focus({ preventScroll: true });
-    };
-  }, []);
-
   const temperature =
     weather.tempMin != null && weather.tempMax != null
       ? formatTempRange(weather.tempMin, weather.tempMax, tempUnit)
@@ -127,23 +72,15 @@ export function WeatherDetailModal({
           : "Unavailable";
 
   return (
-    <div
-      className="insight-scrim weather-scrim"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={modalRef}
-        className="panel insight-modal weather-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        tabIndex={-1}
-      >
-        <ModalCloseButton label="Close weather details" onClick={onClose} />
-
+    <DialogFrame
+      id={`weather-detail-${titleId}`}
+      className="weather-modal"
+      overlayClassName="weather-scrim"
+      ariaLabelledby={titleId}
+      ariaDescribedby={descriptionId}
+      closeLabel="Close weather details"
+      onClose={onClose}
+      header={
         <header className="weather-modal-hero" data-kind={kind}>
           <WeatherGlyph kind={kind} isNight={!isDaylight} />
           <p className="weather-modal-eyebrow">
@@ -163,8 +100,9 @@ export function WeatherDetailModal({
               : "Forecast for right now, plus a personal idea for planning your energy."}
           </p>
         </header>
-
-        <div className="weather-metrics" aria-label="Weather details">
+      }
+    >
+      <div className="weather-metrics" aria-label="Weather details">
           <div className="weather-metric">
             <span>High</span>
             <strong>
@@ -218,27 +156,24 @@ export function WeatherDetailModal({
             <span>Sunset</span>
             <strong>{localClock(weather.sunset)}</strong>
           </div>
-        </div>
-
-        <section className="weather-suggestion" aria-labelledby={`${titleId}-suggestion`}>
-          <span className="weather-suggestion-icon" aria-hidden="true">
-            ✦
-          </span>
-          <div>
-            <h3 id={`${titleId}-suggestion`}>{suggestion.headline}</h3>
-            <p>{suggestion.body}</p>
-          </div>
-        </section>
-
-        <footer className="weather-modal-footer">
-          <p className="muted">
-            Forecast by{" "}
-            <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
-              Open-Meteo
-            </a>
-          </p>
-        </footer>
       </div>
-    </div>
+      <section className="weather-suggestion" aria-labelledby={`${titleId}-suggestion`}>
+        <span className="weather-suggestion-icon" aria-hidden="true">
+          ✦
+        </span>
+        <div>
+          <h3 id={`${titleId}-suggestion`}>{suggestion.headline}</h3>
+          <p>{suggestion.body}</p>
+        </div>
+      </section>
+      <footer className="weather-modal-footer">
+        <p className="muted">
+          Forecast by{" "}
+          <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+            Open-Meteo
+          </a>
+        </p>
+      </footer>
+    </DialogFrame>
   );
 }
