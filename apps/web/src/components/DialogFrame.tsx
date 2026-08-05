@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useModalFocusTrap } from "../lib/useModalFocusTrap";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -77,12 +78,15 @@ export function DialogFooter({ children, className }: DialogSlotProps) {
 }
 
 type ScrollLockSnapshot = Readonly<{
-  bodyLeft: string;
+  appRootHeight: string;
+  appRootLeft: string;
+  appRootOverflow: string;
+  appRootPosition: string;
+  appRootRight: string;
+  appRootTop: string;
+  appRootWidth: string;
+  bodyMinHeight: string;
   bodyOverflow: string;
-  bodyPosition: string;
-  bodyRight: string;
-  bodyTop: string;
-  bodyWidth: string;
   rootOverflow: string;
   scrollY: number;
 }>;
@@ -94,24 +98,35 @@ function acquirePageScrollLock(): void {
   if (scrollLockDepth === 0) {
     const body = document.body;
     const root = document.documentElement;
+    const appRoot = document.getElementById("root");
+    if (!appRoot) return;
     scrollLockSnapshot = {
-      bodyLeft: body.style.left,
+      appRootHeight: appRoot.style.height,
+      appRootLeft: appRoot.style.left,
+      appRootOverflow: appRoot.style.overflow,
+      appRootPosition: appRoot.style.position,
+      appRootRight: appRoot.style.right,
+      appRootTop: appRoot.style.top,
+      appRootWidth: appRoot.style.width,
+      bodyMinHeight: body.style.minHeight,
       bodyOverflow: body.style.overflow,
-      bodyPosition: body.style.position,
-      bodyRight: body.style.right,
-      bodyTop: body.style.top,
-      bodyWidth: body.style.width,
       rootOverflow: root.style.overflow,
       scrollY: window.scrollY,
     };
-    // Fixed positioning is reliable in an iOS PWA, unlike body overflow alone.
-    body.style.position = "fixed";
-    body.style.top = `-${scrollLockSnapshot.scrollY}px`;
-    body.style.right = "0";
-    body.style.left = "0";
-    body.style.width = "100%";
+    // Keep the document's original scroll range while the app is fixed. This
+    // avoids iOS clamping scrollY to zero and preserves the view behind a dialog.
+    body.style.minHeight = `${document.documentElement.scrollHeight}px`;
     body.style.overflow = "hidden";
     root.style.overflow = "hidden";
+    // Do not fix body: iOS WebKit offsets fixed descendants of an offset body,
+    // which leaves a visible gap beneath a modal scrim in installed PWAs.
+    appRoot.style.position = "fixed";
+    appRoot.style.top = `-${scrollLockSnapshot.scrollY}px`;
+    appRoot.style.right = "0";
+    appRoot.style.left = "0";
+    appRoot.style.width = "100%";
+    appRoot.style.height = "100dvh";
+    appRoot.style.overflow = "hidden";
   }
   scrollLockDepth += 1;
 }
@@ -124,11 +139,17 @@ function releasePageScrollLock(): void {
   const body = document.body;
   const root = document.documentElement;
   const snapshot = scrollLockSnapshot;
-  body.style.position = snapshot.bodyPosition;
-  body.style.top = snapshot.bodyTop;
-  body.style.right = snapshot.bodyRight;
-  body.style.left = snapshot.bodyLeft;
-  body.style.width = snapshot.bodyWidth;
+  const appRoot = document.getElementById("root");
+  if (appRoot) {
+    appRoot.style.position = snapshot.appRootPosition;
+    appRoot.style.top = snapshot.appRootTop;
+    appRoot.style.right = snapshot.appRootRight;
+    appRoot.style.left = snapshot.appRootLeft;
+    appRoot.style.width = snapshot.appRootWidth;
+    appRoot.style.height = snapshot.appRootHeight;
+    appRoot.style.overflow = snapshot.appRootOverflow;
+  }
+  body.style.minHeight = snapshot.bodyMinHeight;
   body.style.overflow = snapshot.bodyOverflow;
   root.style.overflow = snapshot.rootOverflow;
   scrollLockSnapshot = null;
@@ -210,7 +231,7 @@ export function DialogFrame({
     tabIndex: -1,
   } as const;
 
-  return (
+  const overlay = (
     <DialogOverlay
       className={overlayClassName}
       onBackdropClick={canClose && dismissOnBackdrop ? requestClose : undefined}
@@ -224,4 +245,7 @@ export function DialogFrame({
       )}
     </DialogOverlay>
   );
+
+  // Keep the fixed scrim outside the locked application shell on iOS PWAs.
+  return typeof document === "undefined" ? overlay : createPortal(overlay, document.body);
 }

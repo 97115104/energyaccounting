@@ -4524,6 +4524,8 @@ html[data-theme="night"] .guide-suggest-btn:focus-visible {
 .insight-scrim {
   position: fixed;
   inset: 0;
+  /* A viewport overlay must cover the canvas, not inherit the app's card radius. */
+  border-radius: 0 !important;
   z-index: 60;
   display: grid;
   place-items: center;
