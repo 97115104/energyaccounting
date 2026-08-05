@@ -10,6 +10,7 @@ export type CorpusUser = Readonly<{
   temperatureUnit: "C" | "F" | null;
   greetingStyle: "classic" | "humor" | "facts" | "mix" | null;
   includePhysicalActivities: boolean;
+  revealSuggestionsWhenEmpty: boolean;
   onboardingCompleted: boolean;
   locationPrompted: boolean;
   identity: Record<string, unknown> | null;

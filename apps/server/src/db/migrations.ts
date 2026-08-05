@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS user_table (
   temperature_unit TEXT,
   greeting_style TEXT,
   include_physical_activities INTEGER NOT NULL DEFAULT 1,
+  reveal_suggestions_when_empty INTEGER NOT NULL DEFAULT 1,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   location_prompted INTEGER NOT NULL DEFAULT 0,
   identity_json TEXT,
@@ -226,6 +227,7 @@ function adoptLegacySchema(sqlite: Database, dataDir: string): void {
   addColumnIfMissing(sqlite, "user_table", "greeting_style", "TEXT");
   addColumnIfMissing(sqlite, "user_table", "identity_json", "TEXT");
   addColumnIfMissing(sqlite, "user_table", "include_physical_activities", "INTEGER NOT NULL DEFAULT 1");
+  addColumnIfMissing(sqlite, "user_table", "reveal_suggestions_when_empty", "INTEGER NOT NULL DEFAULT 1");
 
   legacyStartBackfill(sqlite);
   sqlite.exec("DROP INDEX IF EXISTS day_user_date");
@@ -253,4 +255,15 @@ export const MIGRATIONS: readonly Migration[] = [
   // Retired voice blobs are intentionally purged once, only after the caller
   // has made a verified backup. No future schema includes an audio path.
   { id: 2, name: "purge-retired-audio-storage", apply: purgeLegacyAudio },
+  {
+    id: 3,
+    name: "add-empty-column-suggestion-preference",
+    apply: (sqlite) =>
+      addColumnIfMissing(
+        sqlite,
+        "user_table",
+        "reveal_suggestions_when_empty",
+        "INTEGER NOT NULL DEFAULT 1",
+      ),
+  },
 ];

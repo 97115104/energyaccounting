@@ -51,6 +51,7 @@ import {
   collapseSimilarRecent,
   filterUnusedRecent,
   recentDisabledReason,
+  resolveSuggestionVisibility,
   shouldShowColumnRecent,
 } from "../lib/planShortcuts";
 import { withPreservedScroll } from "../lib/preserveScroll";
@@ -2264,6 +2265,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             recent={recent.filter((s) => s.side === "withdrawal" && s.label)}
             phase={day.phase}
             availableCapacity={day.availableCapacity}
+            revealSuggestionsWhenEmpty={user.revealSuggestionsWhenEmpty !== false}
             addingRecentId={addingRecentId}
             dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
@@ -2303,6 +2305,7 @@ export function TodayPage({ user }: { user: UserProfile }) {
             recent={recent.filter((s) => s.side === "deposit" && s.label)}
             phase={day.phase}
             availableCapacity={day.availableCapacity}
+            revealSuggestionsWhenEmpty={user.revealSuggestionsWhenEmpty !== false}
             addingRecentId={addingRecentId}
             dragActive={draggingLineId !== null}
             draggingLineId={draggingLineId}
@@ -3149,6 +3152,7 @@ function Column(props: {
   recent: RecentActivity[];
   phase: string;
   availableCapacity: number;
+  revealSuggestionsWhenEmpty: boolean;
   addingRecentId: string | null;
   dragActive: boolean;
   draggingLineId: string | null;
@@ -3199,6 +3203,16 @@ function Column(props: {
   const batchAddable = showRecent
     ? addableRecent(unusedRecent, props.availableCapacity, props.phase)
     : [];
+  const suggestionsVisible = resolveSuggestionVisibility({
+    requestedVisible: showSuggestions,
+    activeTaskCount: incomplete.length,
+    revealWhenEmpty: props.revealSuggestionsWhenEmpty,
+  });
+  const suggestionsForcedOpen =
+    !showSuggestions &&
+    suggestionsVisible &&
+    props.revealSuggestionsWhenEmpty &&
+    incomplete.length === 0;
   const showEmptyCopy = !incomplete.length && !completedCount && !showRecent;
   const addingBusy = !!props.addingRecentId;
   const [praise, setPraise] = useState<CompletedPraise>({
@@ -3471,7 +3485,7 @@ function Column(props: {
               Suggested from past days
             </h3>
             <div className="column-recent-actions">
-              {showSuggestions && (
+              {suggestionsVisible && (
                 <>
                   <button
                     type="button"
@@ -3493,18 +3507,20 @@ function Column(props: {
                   </span>
                 </>
               )}
-              <button
-                type="button"
-                className="column-recent-toggle"
-                aria-expanded={showSuggestions}
-                aria-controls={recentListId}
-                onClick={toggleShowSuggestions}
-              >
-                {showSuggestions ? "Hide" : "Show"}
-              </button>
+              {!suggestionsForcedOpen && (
+                <button
+                  type="button"
+                  className="column-recent-toggle"
+                  aria-expanded={suggestionsVisible}
+                  aria-controls={recentListId}
+                  onClick={toggleShowSuggestions}
+                >
+                  {suggestionsVisible ? "Hide" : "Show"}
+                </button>
+              )}
             </div>
           </div>
-          <div id={recentListId} hidden={!showSuggestions}>
+          <div id={recentListId} hidden={!suggestionsVisible}>
             <ul
               className="recent-list"
               aria-labelledby={`${columnId}-recent`}

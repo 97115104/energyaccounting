@@ -168,6 +168,7 @@ function restoreUser(displayName = "Imported person") {
     temperatureUnit: "F" as const,
     greetingStyle: "facts" as const,
     includePhysicalActivities: false,
+    revealSuggestionsWhenEmpty: false,
     onboardingCompleted: true,
     locationPrompted: true,
     identity: null,
@@ -707,6 +708,7 @@ describe("corpus restore", () => {
     const user = await db.query.userTable.findFirst({ where: (row, { eq }) => eq(row.id, userId) });
     expect(user?.displayName).toBe("Imported person");
     expect(user?.includePhysicalActivities).toBe(false);
+    expect(user?.revealSuggestionsWhenEmpty).toBe(false);
     const catalog = await db.query.taskCatalogTable.findMany({
       where: (entry, { eq }) => eq(entry.userId, userId),
     });

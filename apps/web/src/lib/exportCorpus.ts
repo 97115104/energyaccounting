@@ -229,6 +229,11 @@ function parseUser(raw: unknown, schemaVersion: 6 | 7): CorpusUser {
     temperatureUnit: (temperatureUnit ?? null) as CorpusUser["temperatureUnit"],
     greetingStyle: (greetingStyle ?? null) as CorpusUser["greetingStyle"],
     includePhysicalActivities: boolean(user.includePhysicalActivities, true, "The movement preference is invalid."),
+    revealSuggestionsWhenEmpty: boolean(
+      user.revealSuggestionsWhenEmpty,
+      true,
+      "The empty-column suggestion preference is invalid.",
+    ),
     // v6 predates these settings. A journal export is already a returning
     // account, so preserve a smooth restore rather than replay onboarding.
     onboardingCompleted: boolean(user.onboardingCompleted, schemaVersion === 6, "The onboarding preference is invalid."),
@@ -455,6 +460,7 @@ export async function prepareCorpusRestore(
       temperatureUnit: corpus.user.temperatureUnit,
       greetingStyle: corpus.user.greetingStyle,
       includePhysicalActivities: corpus.user.includePhysicalActivities,
+      revealSuggestionsWhenEmpty: corpus.user.revealSuggestionsWhenEmpty,
       onboardingCompleted: corpus.user.onboardingCompleted,
       locationPrompted: corpus.user.locationPrompted,
       identity: corpus.user.identity,

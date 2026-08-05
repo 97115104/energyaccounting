@@ -47,6 +47,9 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
   const [includePhysicalActivities, setIncludePhysicalActivities] = useState(
     user.includePhysicalActivities !== false,
   );
+  const [revealSuggestionsWhenEmpty, setRevealSuggestionsWhenEmpty] = useState(
+    user.revealSuggestionsWhenEmpty !== false,
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; qr: string } | null>(null);
@@ -194,6 +197,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
           temperatureUnit: tempUnit,
           greetingStyle,
           includePhysicalActivities,
+          revealSuggestionsWhenEmpty,
           timezone,
           locationPrompted: true,
         }),
@@ -207,6 +211,7 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
         temperatureUnit: tempUnit,
         greetingStyle,
         includePhysicalActivities,
+        revealSuggestionsWhenEmpty,
         timezone,
         locationPrompted: true,
       });
@@ -541,6 +546,18 @@ export function SettingsPage({ user, onUser, onDeleted }: Props) {
             {includePhysicalActivities
               ? "Suggestions may include walks, movement, and stretch breaks."
               : "Suggestions focus on mindfulness, reading, journaling, writing, and connecting with people you care about."}
+          </p>
+          <label className="check-row" htmlFor="reveal-empty-suggestions">
+            <input
+              id="reveal-empty-suggestions"
+              type="checkbox"
+              checked={revealSuggestionsWhenEmpty}
+              onChange={(e) => setRevealSuggestionsWhenEmpty(e.target.checked)}
+            />
+            <span>Show suggestions when a column is empty</span>
+          </label>
+          <p className="muted" style={{ marginTop: "0.35rem" }}>
+            Temporarily reveals that column’s suggestions even if you hid them. Audit stays focused on tasks.
           </p>
         </fieldset>
         <button type="button" className="btn accent" onClick={() => void saveProfile()}>

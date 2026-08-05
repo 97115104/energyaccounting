@@ -50,6 +50,8 @@ export type UserProfile = {
   greetingStyle?: GreetingStyle | null;
   /** Default true. When false, Energy Guide prefers seated/social/creative suggestions. */
   includePhysicalActivities?: boolean;
+  /** Default true. Empty columns temporarily reveal their own suggestions. */
+  revealSuggestionsWhenEmpty?: boolean;
   onboardingCompleted?: boolean;
   locationPrompted?: boolean;
   /** Raw NeuroMe identity config from the server; normalize before rendering. */

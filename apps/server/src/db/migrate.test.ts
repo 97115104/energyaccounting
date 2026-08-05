@@ -40,9 +40,9 @@ describe("versioned database migration", () => {
       mkdirSync(join(directory, "audio"));
       writeFileSync(join(directory, "audio", "old.webm"), "retired");
 
-      expect(migrateDatabase(directory)).toHaveLength(2);
+      expect(migrateDatabase(directory)).toHaveLength(3);
       expect(migrateDatabase(directory)).toEqual([]);
-      expect(assertDatabaseCurrent(directory).currentMigration).toBe(2);
+      expect(assertDatabaseCurrent(directory).currentMigration).toBe(3);
 
       const sqlite = new Database(join(directory, "eaj.sqlite"), { readonly: true });
       const day = sqlite.query("SELECT opening_balance, closing_balance, phase, source_id, started_at, closed_at FROM day_table").get() as Record<string, unknown>;
@@ -56,6 +56,10 @@ describe("versioned database migration", () => {
       expect(line.source_id).toBe("line");
       expect(line.completed_at).not.toBeNull();
       expect((sqlite.query("PRAGMA table_info(day_table)").all() as Array<{ name: string }>).some((row) => row.name === "audio_path")).toBe(false);
+      expect(
+        (sqlite.query("PRAGMA table_info(user_table)").all() as Array<{ name: string }>)
+          .some((row) => row.name === "reveal_suggestions_when_empty"),
+      ).toBe(true);
       sqlite.close();
       expect(existsSync(join(directory, "audio"))).toBe(false);
 

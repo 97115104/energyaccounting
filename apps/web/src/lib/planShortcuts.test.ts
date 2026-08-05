@@ -4,6 +4,7 @@ import {
   collapseSimilarRecent,
   filterUnusedRecent,
   recentDisabledReason,
+  resolveSuggestionVisibility,
   shouldShowColumnRecent,
 } from "./planShortcuts";
 
@@ -89,6 +90,35 @@ describe("collapseSimilarRecent", () => {
       "review",
       "call",
     ]);
+  });
+});
+
+describe("resolveSuggestionVisibility", () => {
+  test("reveals only the empty column when the preference is enabled", () => {
+    expect(
+      resolveSuggestionVisibility({
+        requestedVisible: false,
+        activeTaskCount: 0,
+        revealWhenEmpty: true,
+      }),
+    ).toBe(true);
+    expect(
+      resolveSuggestionVisibility({
+        requestedVisible: false,
+        activeTaskCount: 1,
+        revealWhenEmpty: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("respects a disabled empty-column reveal preference", () => {
+    expect(
+      resolveSuggestionVisibility({
+        requestedVisible: false,
+        activeTaskCount: 0,
+        revealWhenEmpty: false,
+      }),
+    ).toBe(false);
   });
 });
 

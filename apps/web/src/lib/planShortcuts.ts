@@ -17,6 +17,18 @@ export type LineLike = {
   labelHash?: string;
 };
 
+/**
+ * An empty column is an invitation to plan, even when its normal suggestions
+ * are hidden. Completed rows do not count as active work here.
+ */
+export function resolveSuggestionVisibility(opts: Readonly<{
+  requestedVisible: boolean;
+  activeTaskCount: number;
+  revealWhenEmpty: boolean;
+}>): boolean {
+  return opts.requestedVisible || (opts.revealWhenEmpty && opts.activeTaskCount === 0);
+}
+
 const SUGGESTION_FILLER_WORDS = new Set(["a", "an", "the", "few", "some"]);
 
 function singularSuggestionWord(word: string): string {
